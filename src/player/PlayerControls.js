@@ -3,8 +3,10 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { PLAYER } from '../config.js'
 
 // First-person controls: pointer-lock mouse look + WASD movement with
-// delta-time integration and velocity damping. Phase 1 has no gravity,
-// jumping, or block collision — the camera glides at fixed eye height.
+// delta-time integration and velocity damping. The camera follows the
+// terrain surface at eye height (smoothed, so steps read as steps rather
+// than pops). Still no gravity/jumping or lateral block collision — those
+// come with the physics pass in a later phase.
 export class PlayerControls {
   constructor(camera, domElement, world) {
     this.camera = camera
@@ -14,7 +16,7 @@ export class PlayerControls {
     this.velocity = new THREE.Vector3()
     this.keys = { forward: false, back: false, left: false, right: false, sprint: false }
 
-    camera.position.set(0, world.groundY + PLAYER.eyeHeight, 8)
+    camera.position.set(0.5, world.surfaceY(0.5, 8.5) + PLAYER.eyeHeight, 8.5)
 
     document.addEventListener('keydown', (e) => this.#onKey(e.code, true))
     document.addEventListener('keyup', (e) => this.#onKey(e.code, false))
@@ -78,11 +80,11 @@ export class PlayerControls {
     this.controls.moveRight(this.velocity.x * delta)
     this.controls.moveForward(-this.velocity.z * delta)
 
-    // Keep the player inside the test world at fixed eye height.
-    const bound = this.world.halfExtent
+    // Follow the terrain surface at eye height, eased so single-block steps
+    // feel like steps instead of teleports. The world is unbounded — chunks
+    // stream in around the player — so there is no more edge clamp.
     const pos = this.camera.position
-    pos.x = THREE.MathUtils.clamp(pos.x, -bound, bound)
-    pos.z = THREE.MathUtils.clamp(pos.z, -bound, bound)
-    pos.y = this.world.groundY + PLAYER.eyeHeight
+    const targetY = this.world.surfaceY(pos.x, pos.z) + PLAYER.eyeHeight
+    pos.y = THREE.MathUtils.damp(pos.y, targetY, PLAYER.stepSmoothing, delta)
   }
 }

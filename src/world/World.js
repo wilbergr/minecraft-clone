@@ -1,78 +1,225 @@
 import * as THREE from 'three'
 import { WORLD } from '../config.js'
+import { BLOCK_AIR, isSolid } from './blocks.js'
+import { createFBM2D } from './noise.js'
+import { Chunk } from './Chunk.js'
 
-// Phase 1: a flat test world — a grid of placeholder ground blocks plus a few
-// landmark blocks for depth reference. Later phases replace this with chunked
-// terrain (see Chunk.js).
+// Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
+// player are generated on demand (a few per frame, nearest first) and dropped
+// again once the player moves away; player edits are kept in an overlay map so
+// they survive unload/reload. Terrain is a deterministic function of
+// (WORLD.seed, x, z), so any block can be answered without its chunk existing.
 export class World {
   constructor(scene) {
     this.scene = scene
-    this.groundY = 0 // top surface of the ground blocks
-    this.#buildGround()
-    this.#buildLandmarks()
+    this.chunks = new Map() // "cx,cz" -> Chunk
+    this.edits = new Map() // "cx,cz" -> Map(blockIndex -> blockId)
+    this.material = new THREE.MeshLambertMaterial({ vertexColors: true })
+    this.fbm = createFBM2D(WORLD.seed, WORLD.terrain)
+    this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
     this.#buildLights()
   }
 
-  // Half-extent of the walkable area, in world units.
-  get halfExtent() {
-    return (WORLD.size * WORLD.blockSize) / 2 + WORLD.boundsPadding
+  #key(cx, cz) {
+    return `${cx},${cz}`
   }
 
-  #buildGround() {
-    const { size, blockSize } = WORLD
-    const geometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize)
-    const material = new THREE.MeshLambertMaterial()
-    const mesh = new THREE.InstancedMesh(geometry, material, size * size)
+  // --- Terrain generator (pure functions of world position) ---------------
 
-    const matrix = new THREE.Matrix4()
-    const color = new THREE.Color()
-    const grassA = new THREE.Color(0x5d9c3f)
-    const grassB = new THREE.Color(0x4f8a34)
-    const half = (size * blockSize) / 2
+  // Surface height (number of solid blocks) of the column at (wx, wz).
+  terrainHeight(wx, wz) {
+    const { baseHeight, amplitude, frequency } = WORLD.terrain
+    const n = this.fbm(wx * frequency, wz * frequency)
+    const h = Math.round(baseHeight + n * amplitude)
+    return Math.max(2, Math.min(h, WORLD.chunkHeight - 8))
+  }
 
-    let i = 0
-    for (let x = 0; x < size; x++) {
-      for (let z = 0; z < size; z++) {
-        matrix.setPosition(
-          x * blockSize - half + blockSize / 2,
-          this.groundY - blockSize / 2,
-          z * blockSize - half + blockSize / 2,
-        )
-        mesh.setMatrixAt(i, matrix)
-        // Checkerboard tint so motion is visible on a flat plane.
-        mesh.setColorAt(i, color.copy((x + z) % 2 === 0 ? grassA : grassB))
-        i++
+  // Block id at height y of an untouched column with surface height h:
+  // grass (or sand near "sea level") on top, dirt below, stone deeper.
+  blockForDepth(y, h) {
+    if (y >= h) return BLOCK_AIR
+    const { dirtDepth, sandLevel } = WORLD.terrain
+    const beach = h - 1 <= sandLevel
+    if (y === h - 1) return beach ? 4 : 1 // sand : grass
+    if (y >= h - 1 - dirtDepth) return beach ? 4 : 2 // sand : dirt
+    return 3 // stone
+  }
+
+  // --- Block access (world coordinates) ------------------------------------
+
+  blockAt(wx, wy, wz) {
+    if (wy < 0 || wy >= WORLD.chunkHeight) return BLOCK_AIR
+    const cx = Math.floor(wx / WORLD.chunkSize)
+    const cz = Math.floor(wz / WORLD.chunkSize)
+    const lx = wx - cx * WORLD.chunkSize
+    const lz = wz - cz * WORLD.chunkSize
+    const chunk = this.chunks.get(this.#key(cx, cz))
+    if (chunk) return chunk.getBlock(lx, wy, lz)
+    // Chunk not loaded: recorded edit, else the deterministic generator.
+    const chunkEdits = this.edits.get(this.#key(cx, cz))
+    if (chunkEdits) {
+      const idx = (lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy
+      const edited = chunkEdits.get(idx)
+      if (edited !== undefined) return edited
+    }
+    return this.blockForDepth(wy, this.terrainHeight(wx, wz))
+  }
+
+  // Set a block and remesh the affected chunk (and neighbors when the block
+  // sits on a chunk border, so their culled faces update too). This is the
+  // single entry point for all world edits — later phases (inventory,
+  // treasure digging) go through here.
+  setBlock(wx, wy, wz, id) {
+    if (wy < 0 || wy >= WORLD.chunkHeight) return false
+    const cx = Math.floor(wx / WORLD.chunkSize)
+    const cz = Math.floor(wz / WORLD.chunkSize)
+    const lx = wx - cx * WORLD.chunkSize
+    const lz = wz - cz * WORLD.chunkSize
+    const key = this.#key(cx, cz)
+
+    let chunkEdits = this.edits.get(key)
+    if (!chunkEdits) {
+      chunkEdits = new Map()
+      this.edits.set(key, chunkEdits)
+    }
+    chunkEdits.set((lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy, id)
+
+    const chunk = this.chunks.get(key)
+    if (chunk) {
+      chunk.setBlock(lx, wy, lz, id)
+      chunk.buildMesh(this.material)
+      // Border blocks also change the face culling of the adjacent chunk.
+      if (lx === 0) this.#remesh(cx - 1, cz)
+      if (lx === WORLD.chunkSize - 1) this.#remesh(cx + 1, cz)
+      if (lz === 0) this.#remesh(cx, cz - 1)
+      if (lz === WORLD.chunkSize - 1) this.#remesh(cx, cz + 1)
+    }
+    return true
+  }
+
+  #remesh(cx, cz) {
+    const chunk = this.chunks.get(this.#key(cx, cz))
+    if (chunk) chunk.buildMesh(this.material)
+  }
+
+  // y of the walkable surface (top solid block + 1) at world (x, z) floats.
+  surfaceY(x, z) {
+    const wx = Math.floor(x)
+    const wz = Math.floor(z)
+    for (let y = WORLD.chunkHeight - 1; y >= 0; y--) {
+      if (isSolid(this.blockAt(wx, y, wz))) return y + 1
+    }
+    return 0
+  }
+
+  // --- Chunk streaming ------------------------------------------------------
+
+  // Ensure chunks around the player exist (budgeted per frame, nearest
+  // first) and unload chunks that fell out of range.
+  update(playerPos) {
+    const pcx = Math.floor(playerPos.x / WORLD.chunkSize)
+    const pcz = Math.floor(playerPos.z / WORLD.chunkSize)
+    const rd = WORLD.renderDistance
+
+    // Rebuild the pending queue when the player enters a new chunk.
+    if (pcx !== this.lastPcx || pcz !== this.lastPcz) {
+      this.lastPcx = pcx
+      this.lastPcz = pcz
+      this.genQueue = []
+      for (let dx = -rd; dx <= rd; dx++) {
+        for (let dz = -rd; dz <= rd; dz++) {
+          const cx = pcx + dx
+          const cz = pcz + dz
+          if (!this.chunks.has(this.#key(cx, cz))) this.genQueue.push([cx, cz])
+        }
+      }
+      this.genQueue.sort(
+        (a, b) =>
+          Math.max(Math.abs(a[0] - pcx), Math.abs(a[1] - pcz)) -
+          Math.max(Math.abs(b[0] - pcx), Math.abs(b[1] - pcz)),
+      )
+
+      for (const [key, chunk] of this.chunks) {
+        const dist = Math.max(Math.abs(chunk.cx - pcx), Math.abs(chunk.cz - pcz))
+        if (dist > rd + 1) {
+          this.scene.remove(chunk.mesh)
+          chunk.dispose()
+          this.chunks.delete(key)
+        }
       }
     }
 
-    this.scene.add(mesh)
+    let budget = WORLD.chunkGenBudgetPerFrame
+    while (budget > 0 && this.genQueue.length > 0) {
+      const [cx, cz] = this.genQueue.shift()
+      const key = this.#key(cx, cz)
+      if (this.chunks.has(key)) continue
+      const chunk = new Chunk(this, cx, cz)
+      chunk.generate(this.edits.get(key))
+      this.chunks.set(key, chunk)
+      this.scene.add(chunk.buildMesh(this.material))
+      budget--
+    }
   }
 
-  #buildLandmarks() {
-    // A few scattered "stone" blocks so the player has parallax references.
-    const geometry = new THREE.BoxGeometry(
-      WORLD.blockSize,
-      WORLD.blockSize,
-      WORLD.blockSize,
-    )
-    const material = new THREE.MeshLambertMaterial({ color: 0x8a8a8a })
-    const positions = [
-      [4, 0, -6],
-      [-7, 0, 3],
-      [10, 0, 8],
-      [-12, 0, -10],
-      [0, 0, 14],
-      [0, 1, 14], // one two-block stack
-    ]
-    for (const [x, y, z] of positions) {
-      const block = new THREE.Mesh(geometry, material)
-      block.position.set(
-        x + WORLD.blockSize / 2,
-        this.groundY + y + WORLD.blockSize / 2,
-        z + WORLD.blockSize / 2,
-      )
-      this.scene.add(block)
+  // --- Voxel raycast (Amanatides & Woo grid traversal) ----------------------
+
+  // Walk the block grid along `dir` (normalized) from `origin` up to
+  // `maxDist`. Returns { x, y, z, normal: [nx, ny, nz] } for the first solid
+  // block hit (normal = the face entered, i.e. where a placed block goes),
+  // or null. Pure data traversal — no mesh intersection tests.
+  raycast(origin, dir, maxDist) {
+    let x = Math.floor(origin.x)
+    let y = Math.floor(origin.y)
+    let z = Math.floor(origin.z)
+
+    const stepX = dir.x >= 0 ? 1 : -1
+    const stepY = dir.y >= 0 ? 1 : -1
+    const stepZ = dir.z >= 0 ? 1 : -1
+
+    const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity
+    const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity
+    const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity
+
+    let tMaxX =
+      dir.x !== 0 ? (x + (stepX > 0 ? 1 : 0) - origin.x) / dir.x : Infinity
+    let tMaxY =
+      dir.y !== 0 ? (y + (stepY > 0 ? 1 : 0) - origin.y) / dir.y : Infinity
+    let tMaxZ =
+      dir.z !== 0 ? (z + (stepZ > 0 ? 1 : 0) - origin.z) / dir.z : Infinity
+
+    // The origin cell has no entry face, so traversal starts by stepping out
+    // of it; the camera being inside a solid block simply yields no target.
+    for (;;) {
+      let normal
+      if (tMaxX <= tMaxY && tMaxX <= tMaxZ) {
+        if (tMaxX > maxDist) return null
+        x += stepX
+        tMaxX += tDeltaX
+        normal = [-stepX, 0, 0]
+      } else if (tMaxY <= tMaxZ) {
+        if (tMaxY > maxDist) return null
+        y += stepY
+        tMaxY += tDeltaY
+        normal = [0, -stepY, 0]
+      } else {
+        if (tMaxZ > maxDist) return null
+        z += stepZ
+        tMaxZ += tDeltaZ
+        normal = [0, 0, -stepZ]
+      }
+      if (isSolid(this.blockAt(x, y, z))) return { x, y, z, normal }
     }
+  }
+
+  // Informational perf counters (used by verification and debugging).
+  stats() {
+    let triangles = 0
+    for (const chunk of this.chunks.values()) {
+      const index = chunk.mesh?.geometry.index
+      if (index) triangles += index.count / 3
+    }
+    return { chunks: this.chunks.size, triangles }
   }
 
   #buildLights() {
