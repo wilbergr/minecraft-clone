@@ -1,8 +1,7 @@
 # Minecraft Clone
 
 A browser-based voxel "Minecraft-style" game built with Three.js. 100% client-side
-static — no backend, no API calls; all state lives in the browser. Served from
-GitHub Pages at <https://wilbergr.github.io/minecraft-clone/>.
+static — no backend, no API calls; all state lives in the browser.
 
 **Status: Phase 2 of ~7** — procedural chunked voxel terrain with block
 breaking/placing. Inventory, combat, save/load, and the treasure hunt land in
@@ -11,9 +10,8 @@ subsequent PRs.
 ## Run locally
 
 ```bash
-cd minecraft-clone
 npm install
-npm run dev        # http://localhost:5173/minecraft-clone/
+npm run dev        # http://localhost:5173/
 ```
 
 ## Controls
@@ -32,21 +30,20 @@ npm run dev        # http://localhost:5173/minecraft-clone/
 ## Build & deploy
 
 ```bash
-npm run build      # produces dist/ with base '/minecraft-clone/'
+npm run build      # produces dist/ with base '/'
 npm run preview    # serve the production build locally
-npm run deploy     # build + publish dist/ to gh-pages under /minecraft-clone/
 ```
 
-Deployment uses the repo-wide `gh-pages --add` convention so publishing this app
-preserves the other apps on the Pages branch. From the repo root,
-`npm run deploy:minecraft` does the same thing.
+Deploys to **minecraft.gwilber.com** via Cloudflare Pages. Cloudflare builds
+with `npm run build` and serves the `dist` output directory; there is no
+manual deploy step in this repo.
 
 ## Project structure
 
 ```
-minecraft-clone/
+.
 ├── index.html            # Entry page: overlay, crosshair, canvas mount
-├── vite.config.js        # base: '/minecraft-clone/' (subpath deploy)
+├── vite.config.js        # base: '/' (domain-root deploy)
 └── src/
     ├── main.js           # Bootstrap: renderer, scene, camera, game loop
     ├── config.js         # All tunables + TREASURE_MESSAGE (see below)
