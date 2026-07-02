@@ -1,0 +1,81 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0b0e14;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#app canvas {
+  display: block;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.65);
+  cursor: pointer;
+  z-index: 10;
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+#overlay-panel {
+  text-align: center;
+  color: #eef2f7;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.8);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+}
+
+#overlay-panel h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+}
+
+#overlay-panel p {
+  margin: 0.25rem 0;
+}
+
+.controls-hint {
+  font-size: 0.85rem;
+  color: #9aa7b8;
+}
+
+.controls-hint kbd {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  margin: 0 0.1em;
+  border: 1px solid #9aa7b8;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.25rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+}
