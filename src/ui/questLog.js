@@ -1,10 +1,11 @@
 import { TREASURE_MESSAGE } from '../config.js'
 
-// Quest log (J to toggle): a non-modal panel — it never touches pointer
-// lock, so the game keeps running while it's open — listing every token in
-// hunt order: found ones checked off, the active one showing its clue, later
-// ones still sealed. Once the hunt completes it shows TREASURE_MESSAGE, so
-// the reward stays readable after the reveal overlay is dismissed.
+// Quest log (J to toggle; 🗺 button on touch): a non-modal panel — it never
+// touches pointer lock, so the game keeps running while it's open — listing
+// every token in hunt order: found ones checked off, the active one showing
+// its clue, later ones still sealed. Once the hunt completes it shows
+// TREASURE_MESSAGE, so the reward stays readable after the reveal overlay
+// is dismissed. Returns a toggle function for the touch menu button.
 export function bindQuestLog(hunt) {
   const root = document.getElementById('quest-log')
   root.innerHTML = `
@@ -44,9 +45,11 @@ export function bindQuestLog(hunt) {
     }
   }
 
+  const toggle = () => root.classList.toggle('hidden')
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyJ') root.classList.toggle('hidden')
+    if (e.code === 'KeyJ') toggle()
   })
   hunt.onChange(render)
   render()
+  return toggle
 }

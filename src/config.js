@@ -136,6 +136,21 @@ export const SAVE = {
   warnPayloadChars: 4_000_000,
 }
 
+// Touch controls (Phase 7): virtual joystick + drag-look, shown only on
+// coarse-pointer (phone/tablet) devices — see src/player/TouchControls.js.
+export const TOUCH = {
+  lookSensitivity: 0.0045, // radians of camera rotation per pixel dragged
+  joystick: {
+    radius: 56, // px the nub can travel from center (also sizes the base)
+    deadZone: 0.15, // deflection below this fraction is ignored
+    sprintAt: 0.92, // deflection at or past this fraction sprints
+  },
+  tap: {
+    maxSeconds: 0.3, // press longer than this is a look-drag, not a tap
+    maxDrift: 12, // px of movement past which a press stops being a tap
+  },
+}
+
 // Rendering / atmosphere tunables.
 export const GRAPHICS = {
   skyColor: 0x87ceeb,

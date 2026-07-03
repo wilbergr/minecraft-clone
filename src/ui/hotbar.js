@@ -4,12 +4,16 @@ import { createSlotEl, renderSlot } from './slots.js'
 // The always-visible hotbar: the first INVENTORY.hotbarSlots inventory slots,
 // with the selected slot highlighted. Number keys 1-9 and the mouse wheel
 // change the selection (only while playing, so typing with the inventory
-// screen open never switches slots).
+// screen open never switches slots). In touch mode the bar is tappable
+// (CSS re-enables pointer events) and a tap selects the slot.
 export function bindHotbar(inventory, player) {
   const bar = document.getElementById('hotbar')
   const slotEls = []
   for (let i = 0; i < INVENTORY.hotbarSlots; i++) {
     const el = createSlotEl()
+    el.addEventListener('click', () => {
+      if (player.isLocked) inventory.select(i)
+    })
     bar.appendChild(el)
     slotEls.push(el)
   }

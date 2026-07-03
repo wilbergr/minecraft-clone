@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='10' y='6' fill='%235d9c3f'/%3E%3Crect width='16' height='6' fill='%2387ceeb'/%3E%3C/svg%3E"
@@ -15,23 +18,26 @@
       <div id="overlay">
         <div id="overlay-panel">
           <h1>Minecraft Clone</h1>
-          <p>Click to play</p>
-          <p class="controls-hint">
+          <p class="desktop-only">Click to play</p>
+          <p class="touch-only">Tap to play</p>
+          <p class="controls-hint desktop-only">
             Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &middot;
-            Look: mouse &middot; Sprint: <kbd>Shift</kbd> &middot;
-            Release mouse: <kbd>Esc</kbd>
+            Look: mouse &middot; Break / attack: left click &middot;
+            Place: right click &middot; Inventory: <kbd>E</kbd> &middot;
+            Quest log: <kbd>J</kbd>
+          </p>
+          <p class="controls-hint touch-only">
+            Left stick moves &middot; drag to look &middot; tap to break
+            &middot; hold ⛏ to mine &middot; ▦ places
           </p>
           <p class="controls-hint">
-            Break / attack: left click &middot; Place: right click &middot;
-            Hotbar: <kbd>1</kbd>&ndash;<kbd>9</kbd> / wheel &middot;
-            Inventory: <kbd>E</kbd>
+            Three lost tokens are hidden out there &mdash; follow the compass.
+            Progress saves automatically.
           </p>
-          <p class="controls-hint">
-            Quest log: <kbd>J</kbd> &middot; three lost tokens are hidden out
-            there &mdash; follow the compass.
-          </p>
-          <p class="controls-hint">Progress saves automatically.</p>
-          <button id="reset-world-btn">Reset world</button>
+          <div id="overlay-buttons">
+            <button id="help-btn" type="button">Controls</button>
+            <button id="reset-world-btn" type="button">Reset world</button>
+          </div>
         </div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
@@ -40,8 +46,10 @@
       <div id="treasure-toast" aria-hidden="true"></div>
       <div id="health-bar"></div>
       <div id="hotbar"></div>
+      <div id="touch-ui" class="hidden"></div>
       <div id="quest-log" class="hidden"></div>
       <div id="inventory-screen" class="hidden"></div>
+      <div id="help-screen" class="hidden"></div>
       <div id="death-screen" class="hidden"></div>
       <div id="treasure-reveal" class="hidden"></div>
     </div>

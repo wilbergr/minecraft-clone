@@ -70,6 +70,37 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Token height uses pristine `terrainHeight`, not `surfaceY`: player edits
   never move a token, so positions stay save-stable.
 
+## Touch controls & HUD layout (Phase 7)
+
+- The "is the player in control" flag is `player.isLocked` — pointer lock on
+  desktop OR `player.touchActive` on coarse-pointer devices (decided once at
+  startup by `isTouchDevice()` in `src/player/TouchControls.js`, which checks
+  `(pointer: coarse)`). `player.lock()/unlock()` flip the touch flag and
+  dispatch the same lock/unlock events, so ALL game/menu wiring is shared —
+  never branch game logic on input scheme, only on `isLocked`.
+- Unlike real pointer lock, `touchActive` is updated BEFORE the lock/unlock
+  event fires, so touch-path handlers may read it directly (overlay.js does).
+- TouchControls is input plumbing only: joystick → `player.touchMove`
+  (analog vector, full deflection = sprint), look-drag rotates the camera via
+  the same YXZ euler as PointerLockControls, taps/buttons call the existing
+  `interaction.attackHook`/`breakTargeted`/`placeAtTargeted`/`mining` seams.
+  Tunables in `TOUCH` (src/config.js).
+- Browsers synthesize mouse events after taps: `BlockInteraction`'s mousedown
+  handler early-returns in touch mode, and touch buttons that open panels
+  must use `click` (not pointerdown) so the ghost click is spent on the
+  button, not on whatever the panel rendered under the finger.
+- HUD layout system: the z-index scale, safe-area convention, and shared
+  `.hidden` class are documented in the banner comment at the top of
+  `src/style.css` — keep new layers on that scale, pad screen-edge elements
+  with `env(safe-area-inset-*)`, and put phone-width fixes in the existing
+  `@media (max-width: 600px)` block (the 9-slot hotbar/inv grids must fit
+  360px). `body.touch-mode` gates touch-only styling; `.desktop-only` /
+  `.touch-only` swap hint text.
+- Headless touch testing: emulate with viewport `{width: 390, hasTouch:
+  true, isMobile: true}` — `(pointer: coarse)` then matches. Drive input via
+  `page.touchscreen` or synthesized PointerEvents on `#touch-look` /
+  `#touch-joystick`; `__mc.touch` exposes the TouchControls instance.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

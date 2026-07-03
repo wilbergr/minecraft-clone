@@ -1,3 +1,23 @@
+/*
+ * HUD layout system (Phase 7 polish):
+ *
+ * z-index scale (keep new layers on it):
+ *   0  canvas
+ *   4  #touch-ui (joystick / look zone / touch buttons)
+ *   5  passive HUD (crosshair, hotbar, hearts, compass, quest log)
+ *   6  transient feedback (damage flash, treasure toast)
+ *   8  inventory screen
+ *   9  modals (death, treasure reveal, help)
+ *   10 start overlay
+ *
+ * Safe areas: anything anchored to a screen edge pads by the matching
+ * env(safe-area-inset-*) so phone notches/home bars never cover it.
+ *
+ * Visibility: every toggleable layer uses the shared .hidden class.
+ * Touch mode: main.js puts .touch-mode on <body>; .desktop-only /
+ * .touch-only swap hint text, and the hotbar becomes tappable.
+ */
+
 * {
   box-sizing: border-box;
 }
@@ -20,6 +40,24 @@ body {
   display: block;
 }
 
+#app .hidden {
+  display: none;
+}
+
+.touch-only {
+  display: none;
+}
+
+body.touch-mode .touch-only {
+  display: block;
+}
+
+body.touch-mode .desktop-only {
+  display: none;
+}
+
+/* --- Start overlay -------------------------------------------------------- */
+
 #overlay {
   position: absolute;
   inset: 0;
@@ -31,17 +69,14 @@ body {
   z-index: 10;
 }
 
-#overlay.hidden {
-  display: none;
-}
-
 #overlay-panel {
   text-align: center;
   color: #eef2f7;
-  padding: 2rem 3rem;
+  padding: 1.75rem 2.5rem;
   border-radius: 12px;
   background: rgba(11, 14, 20, 0.8);
   border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: min(560px, calc(100vw - 2rem));
 }
 
 #overlay-panel h1 {
@@ -58,11 +93,28 @@ body {
   color: #9aa7b8;
 }
 
+.controls-hint kbd {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  margin: 0 0.1em;
+  border: 1px solid #9aa7b8;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+#overlay-buttons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+#help-btn,
 #reset-world-btn {
   font: inherit;
   font-size: 0.85rem;
   color: #9aa7b8;
-  margin-top: 1rem;
   padding: 0.35rem 1rem;
   border-radius: 8px;
   border: 1px solid rgba(154, 167, 184, 0.4);
@@ -70,6 +122,7 @@ body {
   cursor: pointer;
 }
 
+#help-btn:hover,
 #reset-world-btn:hover {
   color: #eef2f7;
   border-color: rgba(238, 242, 247, 0.5);
@@ -81,21 +134,32 @@ body {
   background: rgba(224, 75, 58, 0.35);
 }
 
-.controls-hint kbd {
-  display: inline-block;
-  padding: 0.1em 0.4em;
-  margin: 0 0.1em;
-  border: 1px solid #9aa7b8;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: 0.9em;
+/* --- Shared panel bits ---------------------------------------------------- */
+
+.panel-close-btn {
+  float: right;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #9aa7b8;
+  padding: 0.3rem 0.55rem;
+  margin-left: 1rem;
+  border-radius: 6px;
+  border: 1px solid rgba(154, 167, 184, 0.4);
+  background: transparent;
+  cursor: pointer;
 }
 
-/* --- Hotbar + item slots ------------------------------------------------ */
+.panel-close-btn:hover {
+  color: #eef2f7;
+  border-color: rgba(238, 242, 247, 0.5);
+}
+
+/* --- Hotbar + item slots -------------------------------------------------- */
 
 #hotbar {
   position: absolute;
-  bottom: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -106,6 +170,12 @@ body {
   user-select: none;
   pointer-events: none;
   z-index: 5;
+}
+
+/* Tappable on touch: taps select the slot (see ui/hotbar.js). */
+body.touch-mode #hotbar {
+  pointer-events: auto;
+  touch-action: none;
 }
 
 .slot {
@@ -161,7 +231,7 @@ body {
 
 #health-bar {
   position: absolute;
-  bottom: 4.25rem;
+  bottom: calc(4.25rem + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -211,10 +281,6 @@ body {
   z-index: 9;
 }
 
-#death-screen.hidden {
-  display: none;
-}
-
 #death-panel {
   text-align: center;
   color: #eef2f7;
@@ -222,6 +288,7 @@ body {
   border-radius: 12px;
   background: rgba(11, 14, 20, 0.85);
   border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: calc(100vw - 2rem);
 }
 
 #death-panel h1 {
@@ -245,7 +312,7 @@ body {
   background: rgba(238, 242, 247, 0.25);
 }
 
-/* --- Inventory / crafting screen ----------------------------------------- */
+/* --- Inventory / crafting screen ------------------------------------------ */
 
 #inventory-screen {
   position: absolute;
@@ -257,17 +324,14 @@ body {
   z-index: 8;
 }
 
-#inventory-screen.hidden {
-  display: none;
-}
-
 #inventory-panel {
   color: #eef2f7;
   padding: 1.25rem 1.5rem;
   border-radius: 12px;
   background: rgba(11, 14, 20, 0.92);
   border: 1px solid rgba(238, 242, 247, 0.15);
-  max-height: 90vh;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
@@ -375,11 +439,92 @@ body {
   cursor: default;
 }
 
-/* --- Treasure hunt: compass, toast, quest log, reveal --------------------- */
+/* --- Help / controls panel ------------------------------------------------- */
+
+#help-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.7);
+  z-index: 9;
+}
+
+#help-panel {
+  color: #eef2f7;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: min(640px, calc(100vw - 1rem));
+  max-height: calc(100vh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+#help-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.help-goal {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: #cdd6e2;
+}
+
+#help-columns {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.help-scheme {
+  flex: 1 1 240px;
+}
+
+.help-scheme h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: #ffd75e;
+}
+
+.help-scheme ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #cdd6e2;
+}
+
+.help-scheme kbd {
+  display: inline-block;
+  padding: 0.05em 0.35em;
+  margin: 0 0.05em;
+  border: 1px solid #9aa7b8;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+
+/* Lead with the scheme the player is actually using. */
+body.touch-mode .help-touch {
+  order: -1;
+}
+
+#help-panel .controls-hint {
+  margin: 0.9rem 0 0;
+}
+
+/* --- Treasure hunt: compass, toast, quest log, reveal ---------------------- */
 
 #compass {
   position: absolute;
-  top: 0.75rem;
+  top: calc(0.75rem + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -391,13 +536,10 @@ body {
   border: 1px solid rgba(255, 215, 94, 0.35);
   color: #ffd75e;
   font-size: 0.85rem;
+  white-space: nowrap;
   user-select: none;
   pointer-events: none;
   z-index: 5;
-}
-
-#compass.hidden {
-  display: none;
 }
 
 #compass-arrow {
@@ -408,7 +550,7 @@ body {
 
 #treasure-toast {
   position: absolute;
-  top: 3.25rem;
+  top: calc(3.25rem + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   padding: 0.5rem 1.25rem;
@@ -417,6 +559,8 @@ body {
   border: 1px solid rgba(255, 215, 94, 0.6);
   color: #ffd75e;
   font-size: 1rem;
+  max-width: calc(100vw - 2rem);
+  text-align: center;
   user-select: none;
   pointer-events: none;
   z-index: 6;
@@ -431,15 +575,11 @@ body {
 
 #quest-log {
   position: absolute;
-  top: 3rem;
-  left: 0.75rem;
+  top: calc(3rem + env(safe-area-inset-top));
+  left: calc(0.75rem + env(safe-area-inset-left));
   z-index: 5;
   user-select: none;
   pointer-events: none;
-}
-
-#quest-log.hidden {
-  display: none;
 }
 
 #quest-log-panel {
@@ -448,7 +588,8 @@ body {
   border-radius: 12px;
   background: rgba(11, 14, 20, 0.8);
   border: 1px solid rgba(238, 242, 247, 0.15);
-  max-width: 340px;
+  /* Leave room for the touch menu column on the right edge. */
+  max-width: min(340px, calc(100vw - 5.5rem));
 }
 
 #quest-log-panel h2 {
@@ -512,10 +653,6 @@ body {
   z-index: 9;
 }
 
-#treasure-reveal.hidden {
-  display: none;
-}
-
 #treasure-panel {
   text-align: center;
   color: #eef2f7;
@@ -524,7 +661,7 @@ body {
   background: rgba(11, 14, 20, 0.9);
   border: 1px solid rgba(255, 215, 94, 0.55);
   box-shadow: 0 0 60px rgba(255, 215, 94, 0.25);
-  max-width: 480px;
+  max-width: min(480px, calc(100vw - 2rem));
 }
 
 #treasure-panel h1 {
@@ -582,4 +719,175 @@ body {
   user-select: none;
   pointer-events: none;
   z-index: 5;
+}
+
+/* --- Touch controls (only built on coarse-pointer devices) ----------------- */
+
+#touch-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#touch-ui > * {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* The look/tap surface: everything that isn't a control. Sits under the
+   joystick, buttons, and HUD so those win their taps. */
+#touch-look {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+#touch-joystick {
+  position: absolute;
+  left: calc(1.5rem + env(safe-area-inset-left));
+  bottom: calc(7rem + env(safe-area-inset-bottom));
+  z-index: 1;
+  border-radius: 50%;
+  background: rgba(11, 14, 20, 0.35);
+  border: 2px solid rgba(238, 242, 247, 0.25);
+}
+
+#touch-joystick-nub {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 44%;
+  height: 44%;
+  border-radius: 50%;
+  background: rgba(238, 242, 247, 0.4);
+  border: 2px solid rgba(238, 242, 247, 0.55);
+  pointer-events: none;
+}
+
+#touch-actions {
+  position: absolute;
+  right: calc(1.25rem + env(safe-area-inset-right));
+  bottom: calc(7rem + env(safe-area-inset-bottom));
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.touch-action-btn {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(238, 242, 247, 0.35);
+  background: rgba(11, 14, 20, 0.45);
+  color: #eef2f7;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.touch-action-btn:active {
+  background: rgba(238, 242, 247, 0.25);
+}
+
+#touch-menu {
+  position: absolute;
+  top: calc(0.75rem + env(safe-area-inset-top));
+  right: calc(0.75rem + env(safe-area-inset-right));
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.touch-menu-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(238, 242, 247, 0.3);
+  background: rgba(11, 14, 20, 0.55);
+  color: #eef2f7;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.touch-menu-btn:active {
+  background: rgba(238, 242, 247, 0.25);
+}
+
+/* --- Small viewports (phones) ---------------------------------------------- */
+
+@media (max-width: 600px) {
+  /* 9 hotbar slots must fit 360px-wide screens: 9×34 + 8×3 + 2×3 = 336. */
+  #hotbar {
+    gap: 3px;
+    padding: 3px;
+  }
+
+  #hotbar .slot {
+    width: 34px;
+    height: 34px;
+  }
+
+  #hotbar .slot-icon {
+    inset: 4px;
+    font-size: 1.05rem;
+  }
+
+  #health-bar {
+    bottom: calc(3.6rem + env(safe-area-inset-bottom));
+    font-size: 1rem;
+  }
+
+  #overlay-panel,
+  #death-panel,
+  #treasure-panel {
+    padding: 1.25rem 1.25rem;
+  }
+
+  /* Inventory: grids and crafting stack vertically; the panel scrolls. */
+  #inventory-columns {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  #inventory-panel {
+    padding: 1rem;
+  }
+
+  .inv-grid {
+    grid-template-columns: repeat(9, 34px);
+    gap: 3px;
+  }
+
+  .inv-grid .slot {
+    width: 34px;
+    height: 34px;
+  }
+
+  .inv-grid .slot-icon {
+    inset: 4px;
+    font-size: 1.05rem;
+  }
+
+  #crafting-panel {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #recipe-list {
+    max-height: none; /* the panel itself is the scroll container */
+  }
+
+  #compass {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.7rem;
+    max-width: calc(100vw - 7rem); /* clear the touch menu column */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

@@ -36,8 +36,11 @@ export class BlockInteraction {
     this.highlight.visible = false
     scene.add(this.highlight)
 
+    // Touch mode has its own tap/button input (TouchControls) — ignore the
+    // compatibility mouse events browsers synthesize after taps, or every
+    // tap would fire twice.
     document.addEventListener('mousedown', (e) => {
-      if (!this.player.isLocked) return
+      if (this.player.touchMode || !this.player.isLocked) return
       if (e.button === 0) {
         if (this.attackHook?.()) return // swung at a mob — click is spent
         this.mining = true
