@@ -1,4 +1,4 @@
-import { COMBAT } from '../config.js'
+import { COMBAT, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
 
 // Owns the live mob population: periodically tops it up to COMBAT.mobs.maxCount
@@ -38,7 +38,14 @@ export class MobManager {
       mob.update(delta, playerPos, damagePlayer)
       const dx = mob.group.position.x - playerPos.x
       const dz = mob.group.position.z - playerPos.z
-      if (dx * dx + dz * dz > COMBAT.mobs.despawnRadius ** 2) this.#remove(i)
+      // Too far behind a travelling player, or fallen out of a mined-open
+      // world floor (Phase 8: mobs fall for real) — either way, gone.
+      if (
+        dx * dx + dz * dz > COMBAT.mobs.despawnRadius ** 2 ||
+        mob.group.position.y < PHYSICS.voidY
+      ) {
+        this.#remove(i)
+      }
     }
   }
 

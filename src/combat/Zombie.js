@@ -1,12 +1,14 @@
 import * as THREE from 'three'
-import { COMBAT, PLAYER } from '../config.js'
+import { COMBAT, PHYSICS, PLAYER } from '../config.js'
+import { PhysicsBody } from '../physics/PhysicsBody.js'
 
 // A hostile zombie: a group of box meshes (head/body/arms/legs) that wanders
 // until the player comes within aggro range, then chases and melees on a
-// cooldown. Locomotion matches the player's current model — glide toward the
-// target and follow the terrain surface (world.surfaceY) with smoothing — so
-// mobs step up hills exactly like the player does and can't get stuck; real
-// gravity/collision is the later physics pass.
+// cooldown. Locomotion matches the player's (Phase 8): a PhysicsBody drives
+// the group position with gravity and AABB block collision, so zombies fall
+// off cliffs instead of gliding down them; when a horizontal move is blocked
+// while grounded (body.hitWall) they hop a jump, which carries them up
+// 1-block steps and keeps straight-line chases working over terrain.
 //
 // Geometry is shared across all zombies; materials are cloned per mob so the
 // red hurt-flash (emissive) doesn't light up the whole horde. Mob count is
@@ -41,6 +43,8 @@ export class Zombie {
     }
     this.group = this.#buildBody()
     this.group.position.set(x, world.surfaceY(x, z), z)
+    // The body drives the group's position directly (feet-origin, like the mesh).
+    this.body = new PhysicsBody(world, PHYSICS.mobAABB, this.group.position)
   }
 
   // Group origin sits at the feet; parts stack up from there. Arms reach
@@ -105,13 +109,17 @@ export class Zombie {
       }
     }
 
-    if (moveDir) pos.addScaledVector(moveDir, speed * delta)
-    pos.addScaledVector(this.knock, delta)
+    // AI intent + decaying knockback become the horizontal velocity; gravity
+    // and collision are the body's. hitWall is last step's result, so a
+    // blocked chase hops on the following frame — enough to climb a step.
+    const body = this.body
+    body.velocity.x = (moveDir ? moveDir.x * speed : 0) + this.knock.x
+    body.velocity.z = (moveDir ? moveDir.z * speed : 0) + this.knock.z
     this.knock.multiplyScalar(Math.exp(-8 * delta))
-
-    // Follow the terrain surface, eased like the player's step smoothing.
-    const targetY = this.world.surfaceY(pos.x, pos.z)
-    pos.y = THREE.MathUtils.damp(pos.y, targetY, PLAYER.stepSmoothing, delta)
+    if (moveDir && body.grounded && body.hitWall) {
+      body.velocity.y = PHYSICS.jumpVelocity
+    }
+    body.step(delta)
 
     if (this.flashTimer > 0) {
       this.flashTimer -= delta

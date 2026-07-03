@@ -186,6 +186,17 @@ export class World {
     return 0
   }
 
+  // True once the chunk containing world column (x, z) has been generated.
+  // Physics gates on this so bodies never move while their ground might not
+  // be meshed yet (blockAt would still answer correctly, but landing on
+  // invisible terrain reads as a bug). Center column only — a box straddling
+  // a border still collides correctly via blockAt's generator fallback.
+  chunkReadyAt(x, z) {
+    const cx = Math.floor(x / WORLD.chunkSize)
+    const cz = Math.floor(z / WORLD.chunkSize)
+    return this.chunks.has(this.#key(cx, cz))
+  }
+
   // --- Chunk streaming ------------------------------------------------------
 
   // Ensure chunks around the player exist (budgeted per frame, nearest

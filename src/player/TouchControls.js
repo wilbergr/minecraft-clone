@@ -16,8 +16,9 @@ export function isTouchDevice() {
 //     through the same YXZ euler PointerLockControls uses)
 //   - a quick tap on the look area = one attack-or-break, exactly like a
 //     desktop left click
-//   - action buttons: hold ⛏ to mine continuously (or tap to attack),
-//     tap ▦ to place — both reuse BlockInteraction/Combat entry points
+//   - action buttons: tap/hold ⬆ to jump, hold ⛏ to mine continuously (or
+//     tap to attack), tap ▦ to place — all reuse the existing player /
+//     BlockInteraction / Combat entry points
 //   - top-right buttons: pause, inventory, quest log, help
 //
 // The whole UI lives in #touch-ui, shown only while the player is in
@@ -50,6 +51,7 @@ export class TouchControls {
 
   #releaseAll() {
     this.player.touchMove.set(0, 0)
+    this.player.keys.jump = false
     this.interaction.mining = false
     this.lookId = null
     this.stickId = null
@@ -190,7 +192,19 @@ export class TouchControls {
     const place = this.#button('▦', 'Place selected block', 'touch-action-btn')
     place.addEventListener('pointerdown', () => this.interaction.placeAtTargeted())
 
-    cluster.append(place, mine)
+    // Jump (Phase 8): a tap buffers one jump (so it still fires when the
+    // ground arrives a frame late) and holding keeps hopping, like Space.
+    const jump = this.#button('⬆', 'Jump (hold to keep hopping)', 'touch-action-btn')
+    jump.addEventListener('pointerdown', (e) => {
+      jump.setPointerCapture(e.pointerId)
+      this.player.keys.jump = true
+      this.player.queueJump()
+    })
+    const stopJumping = () => (this.player.keys.jump = false)
+    jump.addEventListener('pointerup', stopJumping)
+    jump.addEventListener('pointercancel', stopJumping)
+
+    cluster.append(jump, place, mine)
     this.root.appendChild(cluster)
   }
 

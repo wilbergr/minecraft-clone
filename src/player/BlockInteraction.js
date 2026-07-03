@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { COMBAT, PLAYER, WORLD } from '../config.js'
+import { COMBAT, PHYSICS, PLAYER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR } from '../world/blocks.js'
 
 // Aiming at, breaking, and placing blocks. Left click attacks a mob when the
@@ -135,12 +135,19 @@ export class BlockInteraction {
     return true
   }
 
-  // Don't place a block into the cells the player's body occupies.
+  // Don't place a block into the player's collision box (Phase 8: the exact
+  // AABB — a block that overlapped it would wedge the physics sweeps). Jump
+  // first to pillar up: at the apex the feet clear the target cell.
   #overlapsPlayer(x, y, z) {
-    const pos = this.camera.position
-    if (x !== Math.floor(pos.x) || z !== Math.floor(pos.z)) return false
-    const feetY = Math.floor(pos.y - PLAYER.eyeHeight)
-    const headY = Math.floor(pos.y)
-    return y >= feetY && y <= headY
+    const { position } = this.player.body
+    const half = PHYSICS.playerAABB.width / 2
+    return (
+      x + 1 > position.x - half &&
+      x < position.x + half &&
+      z + 1 > position.z - half &&
+      z < position.z + half &&
+      y + 1 > position.y &&
+      y < position.y + PHYSICS.playerAABB.height
+    )
   }
 }

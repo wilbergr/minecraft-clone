@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { COMBAT } from '../config.js'
+import { COMBAT, PHYSICS } from '../config.js'
 import { Health } from './Health.js'
 import { MobManager } from './MobManager.js'
 
@@ -28,12 +28,23 @@ export class Combat {
     // Kill drops go straight into the inventory (no ground items yet).
     this.mobs.onMobKilled = (mob) => this.inventory.add(mob.cfg.drop, 1)
 
+    // Fall damage (Phase 8): landings past the grace cost health per block.
+    player.body.onLand = (blocksFallen) => {
+      const over = Math.floor(blocksFallen - PHYSICS.fall.graceBlocks)
+      if (over > 0) this.health.damage(over * PHYSICS.fall.damagePerBlock)
+    }
+
     this.health.onDeath = () => this.#die()
   }
 
   update(delta) {
     // Dead: the death screen owns the moment. Unlocked: game is "paused".
     if (this.health.isDead || !this.player.isLocked) return
+    // Fell out through a mined-open world floor: the void is lethal.
+    if (this.player.body.position.y < PHYSICS.voidY) {
+      this.health.damage(this.health.max)
+      return
+    }
     this.health.update(delta)
     this.mobs.update(delta, this.camera.position, (amount) =>
       this.health.damage(amount),
