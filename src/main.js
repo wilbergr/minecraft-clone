@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { GRAPHICS } from './config.js'
+import { GRAPHICS, HUNGER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
@@ -26,6 +26,10 @@ import { GroundItems } from './fx/GroundItems.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
 import { isLiquid } from './world/blocks.js'
+import { Hunger } from './survival/Hunger.js'
+import { Furnaces } from './crafting/Furnaces.js'
+import { FurnaceScreen } from './ui/furnaceScreen.js'
+import { bindHungerHud } from './ui/hungerHud.js'
 
 const app = document.getElementById('app')
 
@@ -61,7 +65,7 @@ scene.add(camera) // the viewmodel is a camera child; children need the camera i
 const sounds = new SoundEngine()
 const particles = new Particles(scene)
 const drops = new GroundItems(scene, world, inventory, sounds)
-const fx = { sounds, particles, drops, viewmodel: null, health: null }
+const fx = { sounds, particles, drops, viewmodel: null, health: null, hunger: null }
 
 const interaction = new BlockInteraction(camera, world, player, scene, inventory, fx)
 
@@ -71,6 +75,17 @@ combat.mobs.daynight = daynight // hostile spawns are night-gated (Phase 10)
 fx.viewmodel = new Viewmodel(camera, inventory, player)
 const hunt = new TreasureHunt(world, scene)
 
+// Survival loop (Phase 12): hunger gates health regen and starves down to a
+// floor; furnaces smelt ore/meat over time and spill their contents when
+// their block is broken.
+const hunger = new Hunger()
+fx.hunger = hunger
+combat.health.regenGate = () => hunger.value >= HUNGER.regenThreshold
+hunger.onStarve = () => {
+  if (combat.health.value > HUNGER.starve.minHealth) combat.health.damage(HUNGER.starve.damage)
+}
+const furnaces = new Furnaces()
+
 // Restore a saved game before anything renders: block edits must be in the
 // overlay before the first chunks generate, and the UI binders below pick up
 // the restored inventory/health through their initial renders.
@@ -78,18 +93,37 @@ const save = new SaveManager({ world, player, inventory, health: combat.health }
 save.load()
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
+save.attachHunger(hunger)
+save.attachFurnaces(furnaces)
 
 const screen = new InventoryScreen(inventory, player)
+const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
+// Right click on a furnace block opens its UI; breaking one spills its slots.
+interaction.useBlockHook = (block, x, y, z) => {
+  furnaceScreen.openAt(x, y, z)
+  return true
+}
+interaction.onBlockBroken = (x, y, z, block) => {
+  if (!block.interactive) return
+  furnaces.onBroken(x, y, z, (stack) =>
+    drops.spawn(x + 0.5, y + 0.7, z + 0.5, stack.id, stack.count),
+  )
+}
 const reveal = bindTreasureReveal(hunt, player)
 const help = bindHelp(player)
-// The death screen, treasure reveal, and help panel count as open UI so
-// "click to play" stays out of their way.
+// The death screen, treasure reveal, furnace, and help panel count as open UI
+// so "click to play" stays out of their way.
 const refreshOverlay = bindOverlay(
   player,
-  () => screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen,
+  () =>
+    screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen || furnaceScreen.isOpen,
 )
 bindHotbar(inventory, player)
-bindHud(combat.health, () => combat.respawn())
+bindHud(combat.health, () => {
+  combat.respawn()
+  hunger.reset() // fresh spawn, fresh appetite
+})
+bindHungerHud(hunger)
 bindResetButton(save)
 const toggleQuestLog = bindQuestLog(hunt)
 const updateTreasureHud = bindTreasureHud(hunt, camera)
@@ -98,6 +132,7 @@ const updateTreasureHud = bindTreasureHud(hunt, camera)
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+furnaceScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 
 // Audio wiring: browsers require a user gesture before audio starts, so the
 // context unlocks on the first pointer/key input (the click-to-play overlay
@@ -152,6 +187,15 @@ renderer.setAnimationLoop(() => {
   player.update(delta)
   interaction.update(delta)
   combat.update(delta)
+  // Hunger drains only while actually playing; furnaces also run while their
+  // UI is open (so you can watch the smelt), pausing in every other menu.
+  if (player.isLocked && !combat.health.isDead) {
+    hunger.update(delta, {
+      sprinting: player.isSprinting,
+      mining: interaction.mining && !!interaction.target,
+    })
+  }
+  if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
   hunt.update(delta, camera.position)
   particles.update(delta)
   drops.update(delta, camera.position)
@@ -190,4 +234,7 @@ window.__mc = {
   viewmodel: fx.viewmodel,
   daynight,
   clouds,
+  hunger,
+  furnaces,
+  furnaceScreen,
 }

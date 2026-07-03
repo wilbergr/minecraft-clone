@@ -1,9 +1,13 @@
-import { AUDIO, COMBAT, DAYNIGHT, PHYSICS } from '../config.js'
+import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
+import { PassiveMob } from './PassiveMob.js'
 
 // Owns the live mob population: periodically tops it up to COMBAT.mobs.maxCount
 // by spawning zombies on a ring around the player, updates their AI each
 // frame, and removes mobs that die or fall too far behind a travelling player.
+// Passive mobs (Phase 12) share the same list — one update/attack/despawn
+// path — but spawn on their own timer against their own cap (mobs with
+// `passive: true` never count toward the hostile population).
 //
 // Mob state is intentionally not persisted (Phase 5 note): mobs are ambient
 // spawns, so a reload simply starts with a fresh population.
@@ -15,6 +19,7 @@ export class MobManager {
     this.mobs = []
     // Full interval before the first spawn — no zombie the instant you click in.
     this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
+    this.passiveSpawnTimer = PASSIVE_MOBS.spawnIntervalSeconds
     this.groanTimer = AUDIO.zombie.groanIntervalSeconds / 2
     this.onMobKilled = null // callback(mob) — Combat awards the drop
     // Day/night clock (Phase 10), attached by main.js. When present, hostile
@@ -45,32 +50,51 @@ export class MobManager {
         night && this.daynight
           ? DAYNIGHT.hostiles.nightMaxCount
           : COMBAT.mobs.maxCount
-      if (night && this.mobs.length < cap) this.#spawnNear(playerPos)
+      // Hostiles only — passive mobs must not eat into the zombie cap.
+      const hostiles = this.mobs.filter((m) => !m.passive).length
+      if (night && hostiles < cap) this.#spawnNear(playerPos)
     }
 
     // Dawn burn (Phase 10): daylight ignites the night's zombies one at a
     // time — an ember burst each (reusing the pooled particles), staggered so
     // sunrise reads as a wave of little pyres rather than a mass vanish.
-    if (this.daynight && !night && this.mobs.length > 0) {
+    // Hostiles only: farm animals (Phase 12) graze on through the day.
+    if (this.daynight && !night) {
       this.burnTimer -= delta
       if (this.burnTimer <= 0) {
-        this.burnTimer = DAYNIGHT.hostiles.burnStaggerSeconds
-        const { burnColor, burnParticles } = DAYNIGHT.hostiles
-        const p = this.mobs[this.mobs.length - 1].group.position
-        this.fx.particles?.burst(p.x, p.y + 1, p.z, burnColor, burnParticles)
-        this.#remove(this.mobs.length - 1)
+        const i = this.mobs.findLastIndex((m) => !m.passive)
+        if (i !== -1) {
+          this.burnTimer = DAYNIGHT.hostiles.burnStaggerSeconds
+          const { burnColor, burnParticles } = DAYNIGHT.hostiles
+          const p = this.mobs[i].group.position
+          this.fx.particles?.burst(p.x, p.y + 1, p.z, burnColor, burnParticles)
+          this.#remove(i)
+        }
       }
+    }
+
+    // Passive population (Phase 12): its own timer and cap (day or night), so
+    // pigs appearing never changes when or how many zombies spawn.
+    this.passiveSpawnTimer -= delta
+    if (this.passiveSpawnTimer <= 0) {
+      this.passiveSpawnTimer = PASSIVE_MOBS.spawnIntervalSeconds
+      const passives = this.mobs.filter((m) => m.passive).length
+      if (passives < PASSIVE_MOBS.maxCount) this.#spawnPassiveNear(playerPos)
     }
 
     // Ambient groans (Phase 9): every so often one random live mob groans,
     // volume fading with distance, so the horde is audible offscreen. Lives
-    // here (not in Zombie) so mob AI stays sound-agnostic.
+    // here (not in Zombie) so mob AI stays sound-agnostic. Hostiles only —
+    // pigs don't groan like zombies.
     this.groanTimer -= delta
-    if (this.groanTimer <= 0 && this.mobs.length > 0) {
-      this.groanTimer = AUDIO.zombie.groanIntervalSeconds * (0.6 + Math.random() * 0.8)
-      const mob = this.mobs[Math.floor(Math.random() * this.mobs.length)]
-      const gain = 1 - mob.group.position.distanceTo(playerPos) / AUDIO.zombie.hearRadius
-      if (gain > 0) this.fx.sounds?.play('zombie', { gain })
+    if (this.groanTimer <= 0) {
+      const hostiles = this.mobs.filter((m) => !m.passive)
+      if (hostiles.length > 0) {
+        this.groanTimer = AUDIO.zombie.groanIntervalSeconds * (0.6 + Math.random() * 0.8)
+        const mob = hostiles[Math.floor(Math.random() * hostiles.length)]
+        const gain = 1 - mob.group.position.distanceTo(playerPos) / AUDIO.zombie.hearRadius
+        if (gain > 0) this.fx.sounds?.play('zombie', { gain })
+      }
     }
 
     for (let i = this.mobs.length - 1; i >= 0; i--) {
@@ -100,6 +124,32 @@ export class MobManager {
   // Direct spawn (also the browser-verification hook: __mc.mobs.spawnAt).
   spawnAt(x, z) {
     const mob = new Zombie(this.world, x, z)
+    this.mobs.push(mob)
+    this.scene.add(mob.group)
+    return mob
+  }
+
+  // Passive spawn attempt (Phase 12): try a few ring spots and take the first
+  // grass column — farm animals belong on grass, not beaches or tree canopies.
+  #spawnPassiveNear(playerPos) {
+    const { spawnRadiusMin, spawnRadiusMax } = COMBAT.mobs
+    const kinds = Object.keys(PASSIVE_MOBS.kinds)
+    for (let i = 0; i < PASSIVE_MOBS.spawnAttempts; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
+      const x = playerPos.x + Math.sin(angle) * dist
+      const z = playerPos.z + Math.cos(angle) * dist
+      const y = this.world.surfaceY(x, z)
+      if (this.world.blockAt(Math.floor(x), y - 1, Math.floor(z)) !== 1) continue // grass only
+      const kind = kinds[Math.floor(Math.random() * kinds.length)]
+      this.spawnPassiveAt(x, z, kind)
+      return
+    }
+  }
+
+  // Direct passive spawn (also the test hook: __mc.mobs.spawnPassiveAt).
+  spawnPassiveAt(x, z, kind = 'pig') {
+    const mob = new PassiveMob(this.world, x, z, kind)
     this.mobs.push(mob)
     this.scene.add(mob.group)
     return mob

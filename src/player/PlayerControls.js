@@ -45,6 +45,7 @@ export class PlayerControls {
     }
     this.jumpBuffer = 0 // seconds a tapped (touch) jump keeps waiting for ground
     this.eyeOffset = 0 // smoothed sneak crouch, subtracted from eye height
+    this.isSprinting = false // sprint input while actually moving (hunger drain reads this)
 
     this.respawn()
 
@@ -171,7 +172,10 @@ export class PlayerControls {
 
   update(delta) {
     this.jumpBuffer = Math.max(0, this.jumpBuffer - delta)
-    if (!this.isLocked) return
+    if (!this.isLocked) {
+      this.isSprinting = false
+      return
+    }
 
     // Exponential damping so movement stops smoothly when keys release.
     const damp = Math.exp(-PLAYER.damping * delta)
@@ -224,6 +228,9 @@ export class PlayerControls {
         this.jumpBuffer = 0
       }
     }
+
+    // Sprint that actually covers ground (same "moving" test as the FOV cue).
+    this.isSprinting = sprinting && this.velocity.lengthSq() > 1
 
     this.body.step(delta, { sneak: sneaking })
     this.#syncCamera(delta)

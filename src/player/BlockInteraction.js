@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { COMBAT, FEEDBACK, PHYSICS, PLAYER, WORLD } from '../config.js'
+import { COMBAT, FEEDBACK, HUNGER, PHYSICS, PLAYER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR, BLOCK_WATER } from '../world/blocks.js'
 import { CrackOverlay } from '../fx/CrackOverlay.js'
 
@@ -31,6 +31,12 @@ export class BlockInteraction {
     this.fx = fx
     this.target = null
     this.attackHook = null // set by Combat: () => true if a mob took the click
+    // Phase 12 seams (both optional): useBlockHook(block, x, y, z) handles a
+    // right click on an `interactive` block (the furnace UI) — sneaking
+    // bypasses it so you can still place against one; onBlockBroken fires
+    // after any block breaks (the furnace spills its contents).
+    this.useBlockHook = null
+    this.onBlockBroken = null
     this.mining = false // left button held — accumulate break progress
     this.progress = 0 // 0..1 toward breaking the current mining target
     this.miningKey = null // target block + hotbar slot the progress belongs to
@@ -160,6 +166,7 @@ export class BlockInteraction {
     this.#resetMining()
     this.fx.sounds?.stopDig()
     if (!this.world.setBlock(x, y, z, BLOCK_AIR)) return false
+    this.onBlockBroken?.(x, y, z, block)
     if (block.drop) {
       // Ground item drop; straight to the inventory only when running bare.
       if (this.fx.drops) this.fx.drops.spawn(x + 0.5, y + 0.7, z + 0.5, block.drop)
@@ -177,9 +184,16 @@ export class BlockInteraction {
     this.crack.hide()
   }
 
-  // The "use" verb for the held item (right click / touch ▦): consumables
-  // are eaten, placeable blocks are placed, tools do nothing on use.
+  // The "use" verb for the held item (right click / touch ▦): interactive
+  // blocks (furnace) open first (sneak to bypass, MC-style), consumables are
+  // eaten, placeable blocks are placed, tools do nothing on use.
   useSelected() {
+    if (this.target && this.useBlockHook && !this.player.keys?.sneak) {
+      const block = BLOCKS[this.world.blockAt(this.target.x, this.target.y, this.target.z)]
+      if (block.interactive && this.useBlockHook(block, this.target.x, this.target.y, this.target.z)) {
+        return true
+      }
+    }
     const item = this.inventory.selectedItem
     if (item?.consumable) return this.#consumeSelected()
     const placed = this.placeAtTargeted()
@@ -187,13 +201,18 @@ export class BlockInteraction {
     return placed
   }
 
-  // Eat the held consumable. Hunger doesn't exist yet, so the effect is a
-  // token FEEDBACK.consume.healAmount — the point is that "use" is a real,
-  // animated verb; the payoff grows when hunger lands.
+  // Eat the held consumable. With the hunger system attached (fx.hunger,
+  // Phase 12) food restores its `food` points — and is refused on a full bar;
+  // running bare, it falls back to the Phase 9 token heal.
   #consumeSelected() {
+    const item = this.inventory.selectedItem
+    if (this.fx.hunger) {
+      if (!this.fx.hunger.eat(item.food ?? HUNGER.fallbackFoodValue)) return false
+    } else {
+      this.fx.health?.heal(FEEDBACK.consume.healAmount)
+    }
     this.fx.viewmodel?.use()
     this.fx.sounds?.play('eat')
-    this.fx.health?.heal(FEEDBACK.consume.healAmount)
     this.inventory.consumeSelected()
     return true
   }

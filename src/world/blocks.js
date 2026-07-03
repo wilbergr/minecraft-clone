@@ -108,6 +108,20 @@ export const BLOCKS = {
     color: { top: 0x3d7fdc, side: 0x2a6fd4, bottom: 0x2a6fd4 },
     drop: null, // can't be mined (raycast skips non-solid blocks anyway)
   },
+  10: {
+    id: 10,
+    name: 'Furnace',
+    solid: true,
+    // Darker than stone with a charcoal top — reads as a worked block.
+    color: { top: 0x4a4a4a, side: 0x5f5f5f, bottom: 0x424242 },
+    drop: 'furnace',
+    hardness: 2.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+    // `interactive` (Phase 12): right click / touch ▦ on this block routes to
+    // BlockInteraction.useBlockHook (opens the smelting UI) instead of placing.
+    interactive: true,
+  },
 }
 
 export const BLOCK_WATER = 9
