@@ -1,4 +1,4 @@
-import { AUDIO, COMBAT, PHYSICS } from '../config.js'
+import { AUDIO, COMBAT, DAYNIGHT, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
 
 // Owns the live mob population: periodically tops it up to COMBAT.mobs.maxCount
@@ -17,6 +17,11 @@ export class MobManager {
     this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
     this.groanTimer = AUDIO.zombie.groanIntervalSeconds / 2
     this.onMobKilled = null // callback(mob) — Combat awards the drop
+    // Day/night clock (Phase 10), attached by main.js. When present, hostile
+    // spawns are night-only (with a raised cap) and daylight burns the
+    // stragglers; when absent (bare/test runs) spawning behaves as before.
+    this.daynight = null
+    this.burnTimer = 0
   }
 
   get count() {
@@ -29,10 +34,32 @@ export class MobManager {
   }
 
   update(delta, playerPos, damagePlayer) {
+    // Night-gated spawning (Phase 10): zombies only rise after dark, and the
+    // dark ring holds more of them. Kept modest — each body part is a draw
+    // call, which is why the day cap is low in the first place.
+    const night = this.daynight ? this.daynight.isNight : true
     this.spawnTimer -= delta
     if (this.spawnTimer <= 0) {
       this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
-      if (this.mobs.length < COMBAT.mobs.maxCount) this.#spawnNear(playerPos)
+      const cap =
+        night && this.daynight
+          ? DAYNIGHT.hostiles.nightMaxCount
+          : COMBAT.mobs.maxCount
+      if (night && this.mobs.length < cap) this.#spawnNear(playerPos)
+    }
+
+    // Dawn burn (Phase 10): daylight ignites the night's zombies one at a
+    // time — an ember burst each (reusing the pooled particles), staggered so
+    // sunrise reads as a wave of little pyres rather than a mass vanish.
+    if (this.daynight && !night && this.mobs.length > 0) {
+      this.burnTimer -= delta
+      if (this.burnTimer <= 0) {
+        this.burnTimer = DAYNIGHT.hostiles.burnStaggerSeconds
+        const { burnColor, burnParticles } = DAYNIGHT.hostiles
+        const p = this.mobs[this.mobs.length - 1].group.position
+        this.fx.particles?.burst(p.x, p.y + 1, p.z, burnColor, burnParticles)
+        this.#remove(this.mobs.length - 1)
+      }
     }
 
     // Ambient groans (Phase 9): every so often one random live mob groans,

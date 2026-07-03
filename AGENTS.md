@@ -178,6 +178,45 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   AI stays sound-agnostic; footsteps watch camera movement
   (`src/audio/Footsteps.js`) without touching PlayerControls.
 
+## Day/night, sea water & swimming (Phase 10)
+
+- The clock is `src/sky/DayNight.js`: `time` in [0,1) — 0 sunrise, 0.25 noon,
+  0.5 sunset, 0.75 midnight — advancing only while `player.isLocked` (menus
+  pause time like they pause physics). All sky visuals lerp through
+  `DAYNIGHT.keyframes`; `World.#buildLights` now exposes `world.sun` /
+  `world.ambient` for it to drive. Test seam: `__mc.daynight.setTime(t)`
+  applies instantly. Clock persists via `SaveManager.attachDayNight` (the
+  `daynight` save slot); unlike treasure it is NOT dirty-flagged — serialize()
+  reads the live clock and the while-playing autosave interval picks it up.
+- Hostile spawns are night-gated in `MobManager.update`: no spawns while
+  `daynight.isNight` is false, night cap is `DAYNIGHT.hostiles.nightMaxCount`,
+  and daylight burns remaining zombies one per `burnStaggerSeconds` (ember
+  particle burst). `mobs.daynight` is attached by main.js — when it's null
+  (bare/test runs) spawning is ungated, so old tests keep working.
+- Water is block id 9 (`BLOCK_WATER`, `liquid: true`, NOT solid): generation
+  fills air at `y <= WATER.level` in both `Chunk.generate` and the
+  `World.blockAt` unloaded-chunk path (keep the two in sync — purity rule
+  below). Not solid ⇒ raycasts pass through (can't be mined/targeted),
+  collision ignores it, and `surfaceY` answers the SEABED for sea columns.
+  Placement replaces water (BlockInteraction allows air OR water); broken
+  blocks leave air, not water — there is no flow simulation.
+- Water renders as a second translucent double-sided mesh per chunk
+  (`chunk.waterMesh`, materialized from `world.waterMaterial`), parented as a
+  CHILD of the solid `chunk.mesh` so scene add/remove/position stay
+  one-object; only water-vs-air faces are emitted (water-vs-water and
+  water-vs-solid cull), open tops drop `WATER.surfaceDrop` for a waterline.
+- Swimming: `PhysicsBody` sets `body.inWater` from the block at the body's
+  midsection and swaps in `WATER.physics` (gentle gravity, sink cap, vertical
+  drag, fallDistance cleared — water landings never hurt). Space held in
+  water swims up (`PlayerControls`), with a `breachBoost` jump when against a
+  wall so you can climb the 1-block shore lip. The camera-submerged blue wash
+  is the `#water-tint` DOM overlay (z-index 3), toggled in main.js.
+- Clouds are ONE merged mesh (`src/sky/Clouds.js`) — a 3×3 tile repeat that
+  snaps to the tile grid around the camera; keep it a single draw call.
+- Headless note: to test night behavior, `__mc.daynight.setTime(0.7)` then
+  `__mc.mobs.spawnTimer = 0.1` (the 5s spawn interval is ~17s real time at
+  headless speed); dawn burn: `setTime(0.2)` and wait for `mobs.count === 0`.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
-import { GRAPHICS, PHYSICS, PLAYER } from '../config.js'
+import { GRAPHICS, PHYSICS, PLAYER, WATER } from '../config.js'
 import { PhysicsBody } from '../physics/PhysicsBody.js'
 import { isTouchDevice } from './TouchControls.js'
 
@@ -187,7 +187,8 @@ export class PlayerControls {
         ? PLAYER.sprintMultiplier
         : sneaking
           ? PHYSICS.sneak.speedMultiplier
-          : 1)
+          : 1) *
+      (this.body.inWater ? WATER.physics.moveMultiplier : 1) // swimming is slower
     const accel = speed * PLAYER.damping * delta
 
     if (this.keys.forward) this.velocity.z -= accel
@@ -209,10 +210,19 @@ export class PlayerControls {
     this.body.velocity.z = -this.velocity.x * sin + this.velocity.z * cos
 
     // Jump when grounded: held Space keeps hopping (handy when every full
-    // block takes a jump); a buffered touch tap is spent once.
-    if ((this.keys.jump || this.jumpBuffer > 0) && this.body.grounded) {
-      this.body.velocity.y = PHYSICS.jumpVelocity
-      this.jumpBuffer = 0
+    // block takes a jump); a buffered touch tap is spent once. In water
+    // (Phase 10) Space swims up instead — with a stronger boost against a
+    // wall, so the shore's 1-block lip can be climbed straight out of the sea.
+    if (this.keys.jump || this.jumpBuffer > 0) {
+      if (this.body.grounded && !this.body.inWater) {
+        this.body.velocity.y = PHYSICS.jumpVelocity
+        this.jumpBuffer = 0
+      } else if (this.body.inWater) {
+        this.body.velocity.y = this.body.hitWall
+          ? PHYSICS.jumpVelocity * WATER.physics.breachBoost
+          : WATER.physics.swimUpSpeed
+        this.jumpBuffer = 0
+      }
     }
 
     this.body.step(delta, { sneak: sneaking })

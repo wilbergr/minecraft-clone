@@ -10,6 +10,7 @@ import { SAVE, WORLD } from '../config.js'
 //     inventory: { slots, selectedSlot },   // Inventory.serialize()
 //     edits: { "cx,cz": [[blockIndex, blockId], ...] },  // sparse deltas only
 //     treasure: { found: [bool per token], celebrated },  // TreasureHunt.serialize()
+//     daynight: { time },       // DayNight.serialize() — clock, fraction of a day (Phase 10)
 //   }
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
@@ -28,6 +29,8 @@ export class SaveManager {
     this.inventory = inventory
     this.health = health
     this.treasure = null // Phase 6 writes hunt progress here; it round-trips
+    this.daynightData = null // loaded clock slot, applied by attachDayNight (Phase 10)
+    this.daynight = null // live DayNight ref — serialize() reads the clock from it
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -41,6 +44,18 @@ export class SaveManager {
     window.addEventListener('beforeunload', () => {
       if (this.enabled) this.save()
     })
+  }
+
+  // Wire the day/night clock into the `daynight` slot (Phase 10), mirroring
+  // attachTreasure. Unlike treasure the clock changes every frame, so instead
+  // of dirty-flagging (which would flush constantly) serialize() reads it
+  // live — the regular while-playing autosave interval keeps it fresh. Saves
+  // predating the slot (or without the clock attached) just start at the
+  // default morning time; the schemaVersion guard in load() covers any
+  // future incompatible reshape.
+  attachDayNight(daynight) {
+    daynight.deserialize(this.daynightData)
+    this.daynight = daynight
   }
 
   // Wire the treasure hunt into the reserved `treasure` slot (Phase 6).
@@ -78,6 +93,7 @@ export class SaveManager {
       this.health.deserialize(data.health)
       this.player.deserialize(data.player)
       this.treasure = data.treasure ?? null
+      this.daynightData = data.daynight ?? null
       this.dirty = false
       return true
     } catch (err) {
@@ -96,6 +112,7 @@ export class SaveManager {
       inventory: this.inventory.serialize(),
       edits: this.world.serializeEdits(),
       treasure: this.treasure,
+      daynight: this.daynight ? this.daynight.serialize() : this.daynightData,
     }
   }
 

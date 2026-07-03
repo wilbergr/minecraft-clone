@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { WORLD } from '../config.js'
-import { BLOCK_AIR, isSolid } from './blocks.js'
+import { WATER, WORLD } from '../config.js'
+import { BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
 import { createFBM2D, hash2D, hash3D } from './noise.js'
 import { Chunk } from './Chunk.js'
 
@@ -15,6 +15,16 @@ export class World {
     this.chunks = new Map() // "cx,cz" -> Chunk
     this.edits = new Map() // "cx,cz" -> Map(blockIndex -> blockId)
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true })
+    // Sea water pass (Phase 10): translucent and double-sided so the surface
+    // reads from below too; depthWrite off keeps chunk-to-chunk transparency
+    // sorting artifact-free. Chunks build their water mesh with this.
+    this.waterMaterial = new THREE.MeshLambertMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: WATER.opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
     this.fbm = createFBM2D(WORLD.seed, WORLD.terrain)
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
     this.onEdit = null // callback() — set by SaveManager to mark the save dirty
@@ -111,6 +121,9 @@ export class World {
     }
     const h = this.terrainHeight(wx, wz)
     if (wy < h) return this.terrainBlock(wx, wy, wz, h)
+    // Sea water fills the air below the waterline (mirrors Chunk.generate,
+    // so the answer for an unloaded chunk matches what it would mesh as).
+    if (wy <= WATER.level) return BLOCK_WATER
     return this.#treeBlockAt(wx, wy, wz)
   }
 
@@ -308,9 +321,11 @@ export class World {
   }
 
   #buildLights() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6)
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2)
-    sun.position.set(30, 50, 20)
-    this.scene.add(ambient, sun)
+    // Kept as instance fields so the day/night cycle (src/sky/DayNight.js)
+    // can animate direction, intensity, and color each frame.
+    this.ambient = new THREE.AmbientLight(0xffffff, 0.6)
+    this.sun = new THREE.DirectionalLight(0xffffff, 1.2)
+    this.sun.position.set(30, 50, 20)
+    this.scene.add(this.ambient, this.sun)
   }
 }

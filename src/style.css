@@ -254,6 +254,16 @@ body.touch-mode #hotbar {
   opacity: 0.15;
 }
 
+/* Underwater wash (Phase 10): shown while the camera is inside a water
+   block. Sits below the touch UI / HUD so controls stay fully readable. */
+#water-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: rgba(20, 70, 150, 0.35);
+}
+
 #damage-flash {
   position: absolute;
   inset: 0;

@@ -17,6 +17,7 @@ export function createFootsteps(sounds, player, camera, world) {
     lastZ = camera.position.z
     if (!player.isLocked) return
     if (player.body?.grounded === false) return // airborne (Phase 8): no steps
+    if (player.body?.inWater) return // swimming (Phase 10): no steps
     const dist = Math.hypot(dx, dz)
     if (dist > 1) return // teleport (respawn/load), not a step
     travelled += dist
