@@ -1,20 +1,26 @@
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
-import { PLAYER } from '../config.js'
+import { GRAPHICS, PHYSICS, PLAYER } from '../config.js'
+import { PhysicsBody } from '../physics/PhysicsBody.js'
 import { isTouchDevice } from './TouchControls.js'
 
 // First-person controls: pointer-lock mouse look + WASD movement with
-// delta-time integration and velocity damping. The camera follows the
-// terrain surface at eye height (smoothed, so steps read as steps rather
-// than pops). Still no gravity/jumping or lateral block collision — those
-// come with the physics pass in a later phase.
+// delta-time integration and velocity damping, driving a real physics body
+// (Phase 8). The body owns the feet position; the camera rides at eye height
+// above it. Gravity, jumping (Space, held = auto-hop), sneaking (C — slower,
+// won't walk off edges), and AABB block collision all live in PhysicsBody;
+// this class turns input into a desired horizontal velocity and hands it
+// over each frame.
 //
 // Touch devices (Phase 7) have no pointer lock, so `isLocked` — the flag
 // every game system gates on, meaning "the player is actively in control" —
 // is also satisfied by `touchActive`, toggled by the same lock()/unlock()
 // calls. TouchControls drives the camera directly for look and feeds
-// `touchMove` (an analog stick vector) into update() for movement.
+// `touchMove` (an analog stick vector) into update() for movement; its jump
+// button holds keys.jump and buffers a tap via queueJump().
 export class PlayerControls {
+  #euler = new THREE.Euler(0, 0, 0, 'YXZ')
+
   constructor(camera, domElement, world) {
     this.camera = camera
     this.world = world
@@ -24,20 +30,50 @@ export class PlayerControls {
     this.touchActive = false // touch-mode stand-in for pointer lock
     this.touchMove = new THREE.Vector2() // joystick: x = strafe right, y = forward
 
+    // Camera-local control velocity (x = strafe, z = back); the body gets
+    // the world-space rotation of it every frame.
     this.velocity = new THREE.Vector3()
-    this.keys = { forward: false, back: false, left: false, right: false, sprint: false }
+    this.body = new PhysicsBody(world, PHYSICS.playerAABB)
+    this.keys = {
+      forward: false,
+      back: false,
+      left: false,
+      right: false,
+      sprint: false,
+      sneak: false,
+      jump: false,
+    }
+    this.jumpBuffer = 0 // seconds a tapped (touch) jump keeps waiting for ground
+    this.eyeOffset = 0 // smoothed sneak crouch, subtracted from eye height
 
     this.respawn()
 
-    document.addEventListener('keydown', (e) => this.#onKey(e.code, true))
-    document.addEventListener('keyup', (e) => this.#onKey(e.code, false))
+    document.addEventListener('keydown', (e) => {
+      // Space scrolls / re-activates focused buttons; it's ours while playing.
+      if (e.code === 'Space' && this.isLocked) e.preventDefault()
+      this.#onKey(e.code, true)
+    })
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && this.isLocked) e.preventDefault()
+      this.#onKey(e.code, false)
+    })
   }
 
   // Put the player at the spawn point (initial spawn and death respawn).
   respawn() {
     const { x, z } = PLAYER.spawnPoint
+    this.teleport(x, this.world.surfaceY(x, z), z)
+  }
+
+  // Move the player's feet to (x, y, z), clearing motion so no stale fall
+  // distance lands after the warp. The one sanctioned way to relocate the
+  // player — writing camera.position directly gets overwritten by the body.
+  teleport(x, y, z) {
     this.velocity.set(0, 0, 0)
-    this.camera.position.set(x, this.world.surfaceY(x, z) + PLAYER.eyeHeight, z)
+    this.body.velocity.set(0, 0, 0)
+    this.body.fallDistance = 0
+    this.body.position.set(x, y, z)
+    this.#syncCamera(0)
   }
 
   get isLocked() {
@@ -72,6 +108,13 @@ export class PlayerControls {
     this.controls.addEventListener(type, listener)
   }
 
+  // Touch jump button: remember the tap briefly so pressing a hair before
+  // landing still jumps (touch taps are too short to rely on being grounded
+  // the exact frame they arrive).
+  queueJump() {
+    this.jumpBuffer = PHYSICS.touchJumpBufferSeconds
+  }
+
   #onKey(code, down) {
     switch (code) {
       case 'KeyW':
@@ -94,6 +137,14 @@ export class PlayerControls {
       case 'ShiftRight':
         this.keys.sprint = down
         break
+      case 'Space':
+        this.keys.jump = down
+        break
+      // C, not Ctrl: pointer lock doesn't intercept Ctrl+W / Ctrl+S, so a
+      // Ctrl sneak while moving would be closing tabs and saving pages.
+      case 'KeyC':
+        this.keys.sneak = down
+        break
     }
   }
 
@@ -111,14 +162,14 @@ export class PlayerControls {
   deserialize(data) {
     const [x, y, z] = Array.isArray(data?.position) ? data.position : []
     if (![x, y, z].every(Number.isFinite)) return
-    this.velocity.set(0, 0, 0)
-    this.camera.position.set(x, y, z)
+    this.teleport(x, y - PLAYER.eyeHeight, z)
     this.camera.quaternion.setFromEuler(
       new THREE.Euler(data.pitch ?? 0, data.yaw ?? 0, 0, 'YXZ'),
     )
   }
 
   update(delta) {
+    this.jumpBuffer = Math.max(0, this.jumpBuffer - delta)
     if (!this.isLocked) return
 
     // Exponential damping so movement stops smoothly when keys release.
@@ -126,9 +177,16 @@ export class PlayerControls {
     this.velocity.multiplyScalar(damp)
 
     // Full joystick deflection sprints, mirroring Shift on the keyboard.
-    const sprinting = this.keys.sprint || this.touchMove.length() >= 0.999
+    const sneaking = this.keys.sneak
+    const sprinting =
+      !sneaking && (this.keys.sprint || this.touchMove.length() >= 0.999)
     const speed =
-      PLAYER.moveSpeed * (sprinting ? PLAYER.sprintMultiplier : 1)
+      PLAYER.moveSpeed *
+      (sprinting
+        ? PLAYER.sprintMultiplier
+        : sneaking
+          ? PHYSICS.sneak.speedMultiplier
+          : 1)
     const accel = speed * PLAYER.damping * delta
 
     if (this.keys.forward) this.velocity.z -= accel
@@ -140,16 +198,50 @@ export class PlayerControls {
     this.velocity.x += this.touchMove.x * accel
     this.velocity.z -= this.touchMove.y * accel
 
-    // PointerLockControls moves along the camera's local axes, projected
-    // onto the ground plane.
-    this.controls.moveRight(this.velocity.x * delta)
-    this.controls.moveForward(-this.velocity.z * delta)
+    // Rotate the camera-local control velocity by the camera yaw into the
+    // body's world-space horizontal velocity (vertical stays the body's —
+    // that's gravity and jumps).
+    const yaw = this.#euler.setFromQuaternion(this.camera.quaternion).y
+    const sin = Math.sin(yaw)
+    const cos = Math.cos(yaw)
+    this.body.velocity.x = this.velocity.x * cos + this.velocity.z * sin
+    this.body.velocity.z = -this.velocity.x * sin + this.velocity.z * cos
 
-    // Follow the terrain surface at eye height, eased so single-block steps
-    // feel like steps instead of teleports. The world is unbounded — chunks
-    // stream in around the player — so there is no more edge clamp.
-    const pos = this.camera.position
-    const targetY = this.world.surfaceY(pos.x, pos.z) + PLAYER.eyeHeight
-    pos.y = THREE.MathUtils.damp(pos.y, targetY, PLAYER.stepSmoothing, delta)
+    // Jump when grounded: held Space keeps hopping (handy when every full
+    // block takes a jump); a buffered touch tap is spent once.
+    if ((this.keys.jump || this.jumpBuffer > 0) && this.body.grounded) {
+      this.body.velocity.y = PHYSICS.jumpVelocity
+      this.jumpBuffer = 0
+    }
+
+    this.body.step(delta, { sneak: sneaking })
+    this.#syncCamera(delta)
+    this.#updateFov(delta, sprinting)
+  }
+
+  // Camera rides at eye height over the feet, dipping while sneaking.
+  #syncCamera(delta) {
+    this.eyeOffset = THREE.MathUtils.damp(
+      this.eyeOffset,
+      this.keys.sneak ? PHYSICS.sneak.eyeDrop : 0,
+      20,
+      delta,
+    )
+    const p = this.body.position
+    this.camera.position.set(p.x, p.y + PLAYER.eyeHeight - this.eyeOffset, p.z)
+  }
+
+  // Sprint speed cue: widen the FOV a touch while actually moving fast.
+  #updateFov(delta, sprinting) {
+    const moving = this.velocity.lengthSq() > 1
+    const target = GRAPHICS.fov + (sprinting && moving ? PHYSICS.sprintFov.boost : 0)
+    if (Math.abs(this.camera.fov - target) < 0.01) return
+    this.camera.fov = THREE.MathUtils.damp(
+      this.camera.fov,
+      target,
+      PHYSICS.sprintFov.lerp,
+      delta,
+    )
+    this.camera.updateProjectionMatrix()
   }
 }

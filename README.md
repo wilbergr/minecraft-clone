@@ -3,8 +3,9 @@
 A browser-based voxel "Minecraft-style" game built with Three.js. 100% client-side
 static — no backend, no API calls; all state lives in the browser.
 
-**Status: complete (7/7 phases).** Playable on desktop (keyboard + mouse) and
-on phones/tablets (touch controls). Live at **https://minecraft.gwilber.com**.
+**Status: complete (original 7 phases + physics pass).** Playable on desktop
+(keyboard + mouse) and on phones/tablets (touch controls). Live at
+**https://minecraft.gwilber.com**.
 
 ## Features
 
@@ -29,6 +30,11 @@ on phones/tablets (touch controls). Live at **https://minecraft.gwilber.com**.
 - **Mobile & polish** — virtual joystick + drag-look touch controls on
   coarse-pointer devices, tap-friendly HUD, safe-area-aware layout, and an
   in-game controls/help panel.
+- **Physics & movement** — gravity, jumping, and swept AABB block collision
+  for the player and mobs (walls stop you, cliffs drop you, zombies hop
+  1-block steps while chasing), plus sneaking with edge-stop, fall damage
+  past a 3-block grace, and a sprint FOV kick. All tunables in
+  `PHYSICS` (`src/config.js`).
 
 ## Run locally
 
@@ -47,6 +53,8 @@ npm run dev        # http://localhost:5173/
 | Mouse | Look around |
 | `W` `A` `S` `D` / arrow keys | Move |
 | `Shift` | Sprint |
+| `Space` | Jump (hold to keep hopping up hills) |
+| `C` | Sneak — slower, and you can't walk off an edge |
 | Left click | Attack a mob / break the targeted block (hold to keep mining) |
 | Right click | Place the selected hotbar block on the targeted face |
 | `1`–`9` / mouse wheel | Select the active hotbar slot |
@@ -65,6 +73,7 @@ unchanged.
 | Left virtual joystick | Move (push to the edge to sprint) |
 | Drag anywhere else | Look around |
 | Tap the world | Attack / break one block |
+| Tap ⬆ | Jump (hold to keep hopping) |
 | Hold ⛏ | Mine continuously |
 | Tap ▦ | Place the selected block |
 | Tap a hotbar slot | Select it |

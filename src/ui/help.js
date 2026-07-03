@@ -22,6 +22,7 @@ export function bindHelp(player) {
           <h3>Keyboard &amp; mouse</h3>
           <ul>
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · <kbd>Shift</kbd> — sprint</li>
+            <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>C</kbd> — sneak</li>
             <li>Mouse — look around</li>
             <li>Left click — attack / break (hold to keep mining)</li>
             <li>Right click — place the selected block</li>
@@ -36,7 +37,7 @@ export function bindHelp(player) {
             <li>Left stick — move (push to the edge to sprint)</li>
             <li>Drag anywhere else — look around</li>
             <li>Tap the world — attack / break one block</li>
-            <li>Hold ⛏ — keep mining · tap ▦ — place a block</li>
+            <li>Tap ⬆ — jump · hold ⛏ — keep mining · tap ▦ — place a block</li>
             <li>Tap a hotbar slot to select it</li>
             <li>Top right: ⏸ pause · 🎒 inventory · 🗺 quest log · ? help</li>
           </ul>

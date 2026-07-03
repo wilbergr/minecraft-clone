@@ -73,13 +73,38 @@ export const INVENTORY = {
 
 // Player movement tunables.
 export const PLAYER = {
-  eyeHeight: 1.7, // camera height above the ground surface, in blocks
+  eyeHeight: 1.7, // camera height above the player's feet, in blocks
   moveSpeed: 5, // walk speed, blocks per second
   sprintMultiplier: 1.8, // Shift-to-sprint speed factor
   damping: 12, // higher = snappier stop (velocity decay per second)
-  stepSmoothing: 10, // eye-height follow rate over terrain (higher = snappier)
   reach: 5, // max distance for breaking/placing blocks, in blocks
   spawnPoint: { x: 0.5, z: 8.5 }, // initial spawn AND respawn-on-death column
+}
+
+// Physics & movement feel (Phase 8): gravity, jumping, and AABB voxel
+// collision, shared by the player and mobs — see src/physics/PhysicsBody.js.
+export const PHYSICS = {
+  gravity: 32, // blocks/s² (Minecraft-ish; higher = heavier feel)
+  terminalVelocity: 50, // max fall speed, blocks/s
+  jumpVelocity: 9, // initial jump speed; apex = v²/2g ≈ 1.27 blocks (clears a 1-block step)
+  playerAABB: { width: 0.6, height: 1.8 }, // player collision box, in blocks
+  mobAABB: { width: 0.6, height: 1.9 }, // zombie collision box
+  // Tallest ledge climbed automatically while walking. 0.6 is Minecraft's
+  // value: full blocks take a jump (zombies hop them on their own); raise
+  // past 1.0 to auto-step whole blocks instead.
+  stepHeight: 0.6,
+  sneak: {
+    speedMultiplier: 0.3, // sneak (C) walk-speed factor
+    eyeDrop: 0.15, // camera crouches this far while sneaking
+  },
+  fall: {
+    graceBlocks: 3, // falls up to this many blocks are free (Minecraft's grace)
+    damagePerBlock: 1, // health lost per whole block fallen beyond the grace
+  },
+  voidY: -12, // below this y (out the world floor) the fall is lethal
+  ejectSpeed: 4, // upward self-heal speed when embedded in solid blocks, blocks/s
+  touchJumpBufferSeconds: 0.25, // a tapped touch jump waits this long to be grounded
+  sprintFov: { boost: 8, lerp: 8 }, // extra FOV degrees while sprint-moving + follow rate
 }
 
 // Combat / mobs / tools (Phase 4). Health units: 1 heart = 2 health.

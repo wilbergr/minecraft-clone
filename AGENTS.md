@@ -66,7 +66,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   once after `load()`. `schemaVersion` stayed 1 — the slot was reserved.
 - Collection is proximity-based, driven by `hunt.update(delta,
   camera.position)` every frame with NO pointer-lock gate — headless tests
-  can teleport the camera onto `__mc.hunt.tokens[i].position` to collect.
+  teleport onto `__mc.hunt.tokens[i].position` to collect (since Phase 8 use
+  `__mc.player.teleport(x, y, z)`, NOT `camera.position.set` — physics resyncs
+  the camera from the body every locked frame).
 - Token height uses pristine `terrainHeight`, not `surfaceY`: player edits
   never move a token, so positions stay save-stable.
 
@@ -100,6 +102,39 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   true, isMobile: true}` — `(pointer: coarse)` then matches. Drive input via
   `page.touchscreen` or synthesized PointerEvents on `#touch-look` /
   `#touch-joystick`; `__mc.touch` exposes the TouchControls instance.
+
+## Physics & movement (Phase 8)
+
+- One shared model: `src/physics/PhysicsBody.js` — an AABB (feet-center
+  `position`, `width`/`height` from `PHYSICS.playerAABB` / `PHYSICS.mobAABB`)
+  swept axis-by-axis X → Z → Y against `world.blockAt()` each `step(delta)`,
+  sub-stepped so no axis moves > 0.4 blocks per sweep (the 0.1s delta clamp +
+  terminal velocity would tunnel otherwise). Downward block sets `grounded`;
+  horizontal block sets `hitWall` (zombies read it to hop 1-block steps).
+  All tunables in `PHYSICS` (src/config.js).
+- Traversal is MC-style: `stepHeight: 0.6` means full blocks take a jump
+  (`jumpVelocity: 9` / `gravity: 32` ⇒ ~1.27-block apex); holding Space (or
+  the touch ⬆ button) auto-hops each landing. Raise `stepHeight` past 1.0 to
+  get auto-step instead — the step-up path is already implemented.
+- Sneak is **KeyC**, not Ctrl (pointer lock doesn't intercept Ctrl+W/Ctrl+S —
+  Ctrl-sneak while moving would close the tab). Sneak slows via
+  `PHYSICS.sneak.speedMultiplier` and edge-stops (per axis, so you can slide
+  along a ledge).
+- The player body owns the feet position; the camera is resynced to
+  `feet + eyeHeight` every locked frame. To move the player programmatically
+  (tests, warps) call `player.teleport(x, y, z)` — it clears velocity and
+  fall distance so no stale fall damage lands. `player.respawn()` and
+  `deserialize()` route through it.
+- Fall damage: PhysicsBody tracks `fallDistance`, fires `onLand(blocks)`;
+  Combat wires it to `health.damage((blocks - grace) * damagePerBlock)`.
+  Falling below `PHYSICS.voidY` (mined-out world floor) is lethal for the
+  player and despawns mobs.
+- Physics freezes until `world.chunkReadyAt(x, z)` (gen queue is nearest-
+  first, so ~1 frame after load/respawn) and while the pointer is unlocked —
+  menus pause falling too. A body embedded in solid blocks (e.g. a block
+  placed into a mob) self-heals by rising at `PHYSICS.ejectSpeed`; block
+  placement into the player's exact AABB is refused
+  (`BlockInteraction.#overlapsPlayer`).
 
 ## Sharp edges
 
