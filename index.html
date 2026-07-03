@@ -26,16 +26,24 @@
             Hotbar: <kbd>1</kbd>&ndash;<kbd>9</kbd> / wheel &middot;
             Inventory: <kbd>E</kbd>
           </p>
+          <p class="controls-hint">
+            Quest log: <kbd>J</kbd> &middot; three lost tokens are hidden out
+            there &mdash; follow the compass.
+          </p>
           <p class="controls-hint">Progress saves automatically.</p>
           <button id="reset-world-btn">Reset world</button>
         </div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
       <div id="damage-flash" aria-hidden="true"></div>
+      <div id="compass" class="hidden"></div>
+      <div id="treasure-toast" aria-hidden="true"></div>
       <div id="health-bar"></div>
       <div id="hotbar"></div>
+      <div id="quest-log" class="hidden"></div>
       <div id="inventory-screen" class="hidden"></div>
       <div id="death-screen" class="hidden"></div>
+      <div id="treasure-reveal" class="hidden"></div>
     </div>
     <script type="module" src="./src/main.js"></script>
   </body>

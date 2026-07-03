@@ -1,10 +1,39 @@
 // ---------------------------------------------------------------------------
-// TREASURE_MESSAGE — the final message revealed at the end of the treasure
-// hunt (treasure system lands in a later phase). Captain: personalize this
-// text before release. Keep it a plain string; the treasure UI will render it.
+// TREASURE_MESSAGE — the final message revealed when all three treasure
+// tokens are collected. Captain: personalize this text before release. Keep
+// it a plain string; the reveal overlay (src/ui/treasureReveal.js) and the
+// completed quest log render it verbatim.
 // ---------------------------------------------------------------------------
 export const TREASURE_MESSAGE =
   'Congratulations, adventurer! You found the hidden treasure!'
+
+// Treasure hunt tunables (Phase 6). Three glowing tokens sit at
+// seed-deterministic spots: the first a ring-distance from spawn, each next
+// one a ring-distance from the previous token, at seed-chosen bearings — so
+// clues chain into a journey. To extend the hunt, add a ring + name + clue
+// (the three arrays are matched by index). {dist}, {dir}, and {name} in a
+// clue are filled from the generated positions.
+export const TREASURE = {
+  seedSalt: 0x7e5a, // mixed into WORLD.seed so spots don't correlate with terrain features
+  rings: [
+    { minDist: 60, maxDist: 90 }, // token 1: this far from spawn, in blocks
+    { minDist: 70, maxDist: 110 }, // token 2: this far from token 1
+    { minDist: 80, maxDist: 130 }, // token 3: this far from token 2
+  ],
+  names: ['Sunstone', 'Moonstone', 'Heart of the World'],
+  clues: [
+    'A weathered map margin reads: “From where you first awoke, journey {dist} blocks {dir}. The {name} hums beneath the open sky.”',
+    'Etched on the Sunstone: “My sibling, the {name}, rests {dist} blocks {dir} of where you found me.”',
+    'Etched on the Moonstone: “{dist} blocks {dir} lies the {name} — claim it, and the treasure is yours.”',
+  ],
+  collectRadius: 2.25, // walk within this many blocks (horizontal) to collect
+  hoverHeight: 1.6, // token center floats this far above the terrain surface
+  spinSpeed: 1.5, // token rotation, radians per second
+  bob: { amplitude: 0.2, speed: 2 }, // gentle vertical float
+  tokenColor: 0xffd75e, // unlit gold — reads as glowing against lit terrain
+  beam: { color: 0xffe9a0, radius: 0.2, opacity: 0.35 }, // sky-beam marker
+  toastSeconds: 4, // how long the "found it" banner lingers
+}
 
 // World layout (Phase 2: chunked procedural terrain).
 export const WORLD = {
