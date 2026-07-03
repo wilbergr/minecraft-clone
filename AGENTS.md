@@ -25,6 +25,27 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   pointer is locked): pin the mob object itself — `__mc.mobs.spawnAt(x, z)`
   returns it — instead of reading `mobs.mobs[0]`.
 
+## Save format (Phase 5)
+
+- One versioned localStorage key (`SAVE.storageKey` in `src/config.js`);
+  schema documented at the top of `src/save/SaveManager.js`. Load rejects on
+  `schemaVersion` OR `seed` mismatch and starts fresh — when the shape
+  changes, bump `SAVE.schemaVersion` and migrate in `SaveManager.load()`.
+- Only the sparse edit overlay persists (`World.serializeEdits()` →
+  `{"cx,cz": [[blockIndex, blockId], ...]}`); terrain regenerates from the
+  seed. ~12 chars per edit ⇒ roughly 300–400k edited blocks fit the ~5MB
+  localStorage cap; past `SAVE.warnPayloadChars` saving warns (once) instead
+  of throwing.
+- `save.treasure` is the reserved Phase 6 slot: write any JSON-serializable
+  hunt progress there and it round-trips automatically.
+- Live mobs are NOT saved (the ambient spawner repopulates after load), and
+  saves are skipped while dead, so a load can never land on the death screen
+  (`Health.deserialize` also clamps to >= 1).
+- Dirty-flag batching: `World.onEdit` / `inventory.onChange` /
+  `health.onChange` mark the save dirty; SaveManager flushes every
+  `SAVE.autosaveSeconds` plus once on `beforeunload`. Never serialize per
+  frame.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

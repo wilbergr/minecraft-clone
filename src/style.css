@@ -58,6 +58,29 @@ body {
   color: #9aa7b8;
 }
 
+#reset-world-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  color: #9aa7b8;
+  margin-top: 1rem;
+  padding: 0.35rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(154, 167, 184, 0.4);
+  background: transparent;
+  cursor: pointer;
+}
+
+#reset-world-btn:hover {
+  color: #eef2f7;
+  border-color: rgba(238, 242, 247, 0.5);
+}
+
+#reset-world-btn.armed {
+  color: #eef2f7;
+  border-color: #e04b3a;
+  background: rgba(224, 75, 58, 0.35);
+}
+
 .controls-hint kbd {
   display: inline-block;
   padding: 0.1em 0.4em;

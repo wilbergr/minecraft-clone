@@ -17,6 +17,7 @@ export class World {
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true })
     this.fbm = createFBM2D(WORLD.seed, WORLD.terrain)
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
+    this.onEdit = null // callback() — set by SaveManager to mark the save dirty
     this.#buildLights()
   }
 
@@ -142,7 +143,32 @@ export class World {
       if (lz === 0) this.#remesh(cx, cz - 1)
       if (lz === WORLD.chunkSize - 1) this.#remesh(cx, cz + 1)
     }
+    this.onEdit?.()
     return true
+  }
+
+  // --- Persistence seam (Phase 5) -------------------------------------------
+  // Only the edit overlay is saved — terrain regenerates from the seed, so a
+  // world of any size costs storage proportional to player changes only.
+
+  serializeEdits() {
+    const out = {}
+    for (const [key, chunkEdits] of this.edits) out[key] = [...chunkEdits]
+    return out // { "cx,cz": [[blockIndex, blockId], ...], ... }
+  }
+
+  deserializeEdits(data) {
+    this.edits = new Map()
+    for (const [key, entries] of Object.entries(data)) {
+      if (!Array.isArray(entries)) continue
+      this.edits.set(key, new Map(entries))
+    }
+  }
+
+  editCount() {
+    let n = 0
+    for (const chunkEdits of this.edits.values()) n += chunkEdits.size
+    return n
   }
 
   #remesh(cx, cz) {

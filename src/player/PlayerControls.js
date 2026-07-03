@@ -70,6 +70,27 @@ export class PlayerControls {
     }
   }
 
+  // --- Persistence seam (Phase 5) -------------------------------------------
+  // PointerLockControls drives the camera through a YXZ euler, so pitch/yaw
+  // round-trip through the quaternion the same way its mouse handler does.
+
+  serialize() {
+    const e = new THREE.Euler(0, 0, 0, 'YXZ').setFromQuaternion(this.camera.quaternion)
+    const p = this.camera.position
+    return { position: [p.x, p.y, p.z], pitch: e.x, yaw: e.y }
+  }
+
+  // Defensive: anything malformed leaves the player at the spawn point.
+  deserialize(data) {
+    const [x, y, z] = Array.isArray(data?.position) ? data.position : []
+    if (![x, y, z].every(Number.isFinite)) return
+    this.velocity.set(0, 0, 0)
+    this.camera.position.set(x, y, z)
+    this.camera.quaternion.setFromEuler(
+      new THREE.Euler(data.pitch ?? 0, data.yaw ?? 0, 0, 'YXZ'),
+    )
+  }
+
   update(delta) {
     if (!this.controls.isLocked) return
 

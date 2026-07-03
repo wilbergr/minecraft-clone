@@ -4,8 +4,8 @@ import { COMBAT } from '../config.js'
 // regeneration. UI layers subscribe via onChange (same pattern as Inventory);
 // hitting zero fires onDeath once — respawning calls reset().
 //
-// State is plain data but is NOT persisted yet — the save/load phase (5) can
-// serialize `value` if death should survive a reload.
+// `value` round-trips through serialize()/deserialize() for the save system
+// (SaveManager skips saving while dead, so a loaded value is always >= 1).
 export class Health {
   constructor() {
     this.max = COMBAT.maxHealth
@@ -43,6 +43,21 @@ export class Health {
 
   reset() {
     this.value = this.max
+    this.sinceDamage = Infinity
+    this.#emit()
+  }
+
+  // --- Persistence seam (Phase 5) -------------------------------------------
+
+  serialize() {
+    return this.value
+  }
+
+  // Clamped to [1, max] so a corrupt (or somehow dead) save can never load
+  // straight into the death screen.
+  deserialize(value) {
+    const v = Number(value)
+    this.value = Number.isFinite(v) ? Math.min(this.max, Math.max(1, v)) : this.max
     this.sinceDamage = Infinity
     this.#emit()
   }
