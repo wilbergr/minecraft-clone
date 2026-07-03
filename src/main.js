@@ -3,6 +3,7 @@ import { GRAPHICS } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
+import { TouchControls } from './player/TouchControls.js'
 import { Inventory } from './inventory/Inventory.js'
 import { Combat } from './combat/Combat.js'
 import { SaveManager } from './save/SaveManager.js'
@@ -15,6 +16,7 @@ import { InventoryScreen } from './ui/inventoryScreen.js'
 import { bindQuestLog } from './ui/questLog.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
+import { bindHelp } from './ui/help.js'
 
 const app = document.getElementById('app')
 
@@ -51,21 +53,33 @@ save.attachTreasure(hunt)
 
 const screen = new InventoryScreen(inventory, player)
 const reveal = bindTreasureReveal(hunt, player)
-// The death screen and treasure reveal count as open UI so "click to play"
-// stays out of their way.
+const help = bindHelp(player)
+// The death screen, treasure reveal, and help panel count as open UI so
+// "click to play" stays out of their way.
 const refreshOverlay = bindOverlay(
   player,
-  () => screen.isOpen || combat.health.isDead || reveal.isOpen,
+  () => screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen,
 )
 bindHotbar(inventory, player)
 bindHud(combat.health, () => combat.respawn())
 bindResetButton(save)
-bindQuestLog(hunt)
+const toggleQuestLog = bindQuestLog(hunt)
 const updateTreasureHud = bindTreasureHud(hunt, camera)
 // Closing the screen re-locks the pointer; give the lock a beat to land
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+
+// Coarse-pointer devices get the joystick/touch scheme instead of pointer
+// lock; on desktop this is a no-op and the touch UI never exists.
+const touch = player.touchMode
+  ? new TouchControls(player, interaction, camera, {
+      toggleInventory: () => screen.toggle(),
+      toggleQuestLog,
+      toggleHelp: () => help.toggle(),
+    })
+  : null
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
@@ -103,4 +117,6 @@ window.__mc = {
   mobs: combat.mobs,
   save,
   hunt,
+  touch,
+  help,
 }

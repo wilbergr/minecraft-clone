@@ -34,6 +34,12 @@ export class InventoryScreen {
     })
   }
 
+  // One entry point for the touch 🎒 button (keyboard stays on E/Escape).
+  toggle() {
+    if (this.isOpen) this.close()
+    else this.open()
+  }
+
   open() {
     this.isOpen = true
     this.pendingSlot = null
@@ -53,7 +59,12 @@ export class InventoryScreen {
   #build() {
     const panel = document.createElement('div')
     panel.id = 'inventory-panel'
-    panel.innerHTML = '<h2>Inventory</h2>'
+    // The ✕ matters on touch (no Esc key), but is welcome on desktop too.
+    panel.innerHTML =
+      '<h2>Inventory <button id="inventory-close-btn" class="panel-close-btn" type="button" aria-label="Close">✕</button></h2>'
+    panel
+      .querySelector('#inventory-close-btn')
+      .addEventListener('click', () => this.close())
 
     const columns = document.createElement('div')
     columns.id = 'inventory-columns'
@@ -78,7 +89,7 @@ export class InventoryScreen {
     const hint = document.createElement('p')
     hint.className = 'inv-hint'
     hint.textContent =
-      'Click a slot, then another, to move items. Bottom row is the hotbar.'
+      'Tap a slot, then another, to move items. Bottom row is the hotbar.'
     slotsCol.appendChild(hint)
     columns.appendChild(slotsCol)
 

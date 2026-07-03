@@ -1,17 +1,28 @@
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { PLAYER } from '../config.js'
+import { isTouchDevice } from './TouchControls.js'
 
 // First-person controls: pointer-lock mouse look + WASD movement with
 // delta-time integration and velocity damping. The camera follows the
 // terrain surface at eye height (smoothed, so steps read as steps rather
 // than pops). Still no gravity/jumping or lateral block collision — those
 // come with the physics pass in a later phase.
+//
+// Touch devices (Phase 7) have no pointer lock, so `isLocked` — the flag
+// every game system gates on, meaning "the player is actively in control" —
+// is also satisfied by `touchActive`, toggled by the same lock()/unlock()
+// calls. TouchControls drives the camera directly for look and feeds
+// `touchMove` (an analog stick vector) into update() for movement.
 export class PlayerControls {
   constructor(camera, domElement, world) {
     this.camera = camera
     this.world = world
     this.controls = new PointerLockControls(camera, domElement)
+
+    this.touchMode = isTouchDevice()
+    this.touchActive = false // touch-mode stand-in for pointer lock
+    this.touchMove = new THREE.Vector2() // joystick: x = strafe right, y = forward
 
     this.velocity = new THREE.Vector3()
     this.keys = { forward: false, back: false, left: false, right: false, sprint: false }
@@ -30,15 +41,31 @@ export class PlayerControls {
   }
 
   get isLocked() {
-    return this.controls.isLocked
+    return this.controls.isLocked || this.touchActive
   }
 
+  // In touch mode lock()/unlock() flip touchActive and dispatch the same
+  // lock/unlock events pointer lock would, so overlay/menu wiring is shared.
+  // Unlike real pointer lock, the flag is updated BEFORE the event fires, so
+  // handlers may read it directly (see src/ui/overlay.js).
   lock() {
-    this.controls.lock()
+    if (this.touchMode) {
+      if (this.touchActive) return
+      this.touchActive = true
+      this.controls.dispatchEvent({ type: 'lock' })
+    } else {
+      this.controls.lock()
+    }
   }
 
   unlock() {
-    this.controls.unlock()
+    if (this.touchMode) {
+      if (!this.touchActive) return
+      this.touchActive = false
+      this.controls.dispatchEvent({ type: 'unlock' })
+    } else {
+      this.controls.unlock()
+    }
   }
 
   addEventListener(type, listener) {
@@ -92,20 +119,26 @@ export class PlayerControls {
   }
 
   update(delta) {
-    if (!this.controls.isLocked) return
+    if (!this.isLocked) return
 
     // Exponential damping so movement stops smoothly when keys release.
     const damp = Math.exp(-PLAYER.damping * delta)
     this.velocity.multiplyScalar(damp)
 
+    // Full joystick deflection sprints, mirroring Shift on the keyboard.
+    const sprinting = this.keys.sprint || this.touchMove.length() >= 0.999
     const speed =
-      PLAYER.moveSpeed * (this.keys.sprint ? PLAYER.sprintMultiplier : 1)
+      PLAYER.moveSpeed * (sprinting ? PLAYER.sprintMultiplier : 1)
     const accel = speed * PLAYER.damping * delta
 
     if (this.keys.forward) this.velocity.z -= accel
     if (this.keys.back) this.velocity.z += accel
     if (this.keys.left) this.velocity.x -= accel
     if (this.keys.right) this.velocity.x += accel
+
+    // Analog joystick input (touch mode; zero vector otherwise).
+    this.velocity.x += this.touchMove.x * accel
+    this.velocity.z -= this.touchMove.y * accel
 
     // PointerLockControls moves along the camera's local axes, projected
     // onto the ground plane.
