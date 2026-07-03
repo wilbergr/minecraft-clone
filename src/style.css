@@ -124,6 +124,104 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
+.slot-durability {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  height: 3px;
+  max-width: calc(100% - 8px);
+  border-radius: 2px;
+  display: none;
+}
+
+/* --- Combat HUD: hearts, damage flash, death screen ----------------------- */
+
+#health-bar {
+  position: absolute;
+  bottom: 4.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  font-size: 1.15rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+  color: #e04b3a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.heart.half {
+  opacity: 0.45;
+}
+
+.heart.empty {
+  opacity: 0.15;
+}
+
+#damage-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.25s ease-out;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(200, 30, 20, 0) 55%,
+    rgba(200, 30, 20, 0.45) 100%
+  );
+}
+
+#damage-flash.active {
+  opacity: 1;
+  transition: none;
+}
+
+#death-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(90, 12, 8, 0.6);
+  z-index: 9;
+}
+
+#death-screen.hidden {
+  display: none;
+}
+
+#death-panel {
+  text-align: center;
+  color: #eef2f7;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.85);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+}
+
+#death-panel h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2rem;
+}
+
+#respawn-btn {
+  font: inherit;
+  font-size: 1rem;
+  color: #eef2f7;
+  margin-top: 1rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(238, 242, 247, 0.3);
+  background: rgba(238, 242, 247, 0.12);
+  cursor: pointer;
+}
+
+#respawn-btn:hover {
+  background: rgba(238, 242, 247, 0.25);
+}
+
 /* --- Inventory / crafting screen ----------------------------------------- */
 
 #inventory-screen {

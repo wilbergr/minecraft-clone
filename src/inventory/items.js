@@ -1,13 +1,14 @@
-import { INVENTORY } from '../config.js'
+import { COMBAT, INVENTORY } from '../config.js'
 import { BLOCKS } from '../world/blocks.js'
 
 // Item type registry. Items are what live in inventory slots; blocks are what
 // live in the world. Placeable items carry a `blockId` (placing puts that
 // block down); block drops point back here via BLOCKS[id].drop.
 //
-// Tools carry `tool: { kind, tier, durability }` as data only for now — the
-// combat/tools phase wires tier-gated breaking, mining speed, and durability
-// loss onto it. Until then tools are just craftable, holdable items.
+// Tools carry `tool: { kind, tier, durability }`. `durability` here is the
+// item TYPE's maximum; each crafted tool tracks its remaining uses on its
+// inventory stack (see Inventory.add / damageSelected). Kind + tier drive
+// mining gating/speed (BlockInteraction) and attack damage (Combat).
 //
 // Icons: placeable items render as a swatch of their block's face colors;
 // non-block items render a `glyph` (tinted, so tool tiers read at a glance).
@@ -23,7 +24,7 @@ function tool(id, name, kind, tier, tint, glyph) {
     maxStack: 1,
     glyph,
     tint,
-    tool: { kind, tier, durability: 64 * tier },
+    tool: { kind, tier, durability: COMBAT.toolDurability[tier] },
   }
 }
 
@@ -37,6 +38,14 @@ export const ITEMS = {
   planks: blockItem('planks', 7, 'Planks'),
   iron_ore: blockItem('iron_ore', 8, 'Iron Ore'),
   stick: { id: 'stick', name: 'Stick', maxStack: INVENTORY.maxStack, glyph: '/', tint: '#a5814e' },
+  // Zombie drop. No use yet — food/eating is a later-phase candidate.
+  rotten_flesh: {
+    id: 'rotten_flesh',
+    name: 'Rotten Flesh',
+    maxStack: INVENTORY.maxStack,
+    glyph: '♨',
+    tint: '#7d8a3f',
+  },
   iron_ingot: {
     id: 'iron_ingot',
     name: 'Iron Ingot',

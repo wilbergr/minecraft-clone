@@ -5,6 +5,10 @@ import { ITEMS } from './items.js'
 // INVENTORY.hotbarSlots slots are the hotbar; `selectedSlot` indexes into
 // those and drives block placement. UI layers subscribe via onChange.
 //
+// Tool stacks additionally carry `durability` (remaining uses — tools never
+// stack, so per-stack state is per-tool state). Using a tool goes through
+// damageSelected(); at zero the tool breaks and vanishes from its slot.
+//
 // The whole state is plain serializable data — serialize()/deserialize() are
 // the seam for the persistence phase (localStorage save/load, Phase 5).
 export class Inventory {
@@ -53,6 +57,9 @@ export class Inventory {
       if (!this.slots[i]) {
         const take = Math.min(left, item.maxStack)
         this.slots[i] = { id: itemId, count: take }
+        // Fresh tools start at full durability (tools never stack, so a new
+        // stack is always a single new tool).
+        if (item.tool) this.slots[i].durability = item.tool.durability
         left -= take
       }
     }
@@ -83,6 +90,19 @@ export class Inventory {
     }
     this.#emit()
     return true
+  }
+
+  // Spend one use of the selected tool; at zero durability it breaks and is
+  // removed. No-op when the selected item isn't a tool. Returns true if the
+  // tool broke.
+  damageSelected(amount = 1) {
+    const stack = this.slots[this.selectedSlot]
+    if (!stack || !ITEMS[stack.id].tool) return false
+    stack.durability -= amount
+    const broke = stack.durability <= 0
+    if (broke) this.slots[this.selectedSlot] = null
+    this.#emit()
+    return broke
   }
 
   // Remove one item from the selected hotbar stack (placement cost).
@@ -118,7 +138,7 @@ export class Inventory {
 
   serialize() {
     return {
-      slots: this.slots.map((s) => (s ? { id: s.id, count: s.count } : null)),
+      slots: this.slots.map((s) => (s ? { ...s } : null)),
       selectedSlot: this.selectedSlot,
     }
   }
@@ -127,7 +147,10 @@ export class Inventory {
     this.slots = new Array(this.size).fill(null)
     for (let i = 0; i < this.size; i++) {
       const s = data.slots?.[i]
-      if (s && ITEMS[s.id]) this.slots[i] = { id: s.id, count: s.count }
+      if (!s || !ITEMS[s.id]) continue
+      this.slots[i] = { id: s.id, count: s.count }
+      const tool = ITEMS[s.id].tool
+      if (tool) this.slots[i].durability = s.durability ?? tool.durability
     }
     this.selectedSlot = data.selectedSlot ?? 0
     this.#emit()
