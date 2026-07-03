@@ -17,6 +17,12 @@ import { bindQuestLog } from './ui/questLog.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
 import { bindHelp } from './ui/help.js'
+import { bindMuteButton } from './ui/muteButton.js'
+import { SoundEngine } from './audio/SoundEngine.js'
+import { createFootsteps } from './audio/Footsteps.js'
+import { Particles } from './fx/Particles.js'
+import { Viewmodel } from './fx/Viewmodel.js'
+import { GroundItems } from './fx/GroundItems.js'
 
 const app = document.getElementById('app')
 
@@ -39,9 +45,21 @@ const camera = new THREE.PerspectiveCamera(
 const world = new World(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
-const interaction = new BlockInteraction(camera, world, player, scene, inventory)
 
-const combat = new Combat(camera, world, player, inventory, interaction, scene)
+// Feedback layer (Phase 9): synthesized sound, break particles, ground item
+// drops, and the held-item viewmodel, bundled into the `fx` object the game
+// systems hook into (every hook optional).
+scene.add(camera) // the viewmodel is a camera child; children need the camera in-scene
+const sounds = new SoundEngine()
+const particles = new Particles(scene)
+const drops = new GroundItems(scene, world, inventory, sounds)
+const fx = { sounds, particles, drops, viewmodel: null, health: null }
+
+const interaction = new BlockInteraction(camera, world, player, scene, inventory, fx)
+
+const combat = new Combat(camera, world, player, inventory, interaction, scene, fx)
+fx.health = combat.health
+fx.viewmodel = new Viewmodel(camera, inventory, player)
 const hunt = new TreasureHunt(world, scene)
 
 // Restore a saved game before anything renders: block edits must be in the
@@ -71,6 +89,24 @@ screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 
+// Audio wiring: browsers require a user gesture before audio starts, so the
+// context unlocks on the first pointer/key input (the click-to-play overlay
+// counts). Hurt plays on any health drop; every UI button clicks.
+const unlockAudio = () => sounds.unlock()
+document.addEventListener('pointerdown', unlockAudio)
+document.addEventListener('keydown', unlockAudio)
+player.addEventListener('lock', unlockAudio)
+bindMuteButton(sounds)
+let lastHealth = combat.health.value
+combat.health.onChange((h) => {
+  if (h.value < lastHealth) sounds.play('hurt')
+  lastHealth = h.value
+})
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('button')) sounds.play('click')
+})
+const updateFootsteps = createFootsteps(sounds, player, camera, world)
+
 // Coarse-pointer devices get the joystick/touch scheme instead of pointer
 // lock; on desktop this is a no-op and the touch UI never exists.
 const touch = player.touchMode
@@ -94,9 +130,13 @@ renderer.setAnimationLoop(() => {
   const delta = Math.min(clock.getDelta(), 0.1)
   world.update(camera.position)
   player.update(delta)
-  interaction.update()
+  interaction.update(delta)
   combat.update(delta)
   hunt.update(delta, camera.position)
+  particles.update(delta)
+  drops.update(delta, camera.position)
+  fx.viewmodel.update(delta)
+  updateFootsteps()
   updateTreasureHud()
   save.update(delta)
   renderer.render(scene, camera)
@@ -119,4 +159,8 @@ window.__mc = {
   hunt,
   touch,
   help,
+  sounds,
+  particles,
+  drops,
+  viewmodel: fx.viewmodel,
 }

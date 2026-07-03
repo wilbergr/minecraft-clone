@@ -186,3 +186,68 @@ export const GRAPHICS = {
   fov: 75,
   maxPixelRatio: 2, // cap devicePixelRatio for consistent framerate
 }
+
+// Feedback & game-feel (Phase 9): hold-to-break mining, break particles, the
+// held-item viewmodel, and ground item drops. Sound knobs live in AUDIO.
+export const FEEDBACK = {
+  mining: {
+    // A single tap / legacy breakTargeted() call advances mining by this many
+    // seconds of held-button progress (so touch taps still chip at blocks).
+    tapSeconds: 0.3,
+    // Progress survives this long after the button releases, so repeated
+    // taps accumulate; past it (or on target change) the cracks reset.
+    tapGraceSeconds: 0.6,
+    crackStages: 5, // distinct crack textures from first chip to shatter
+  },
+  particles: {
+    poolSize: 256, // one THREE.Points holds every live particle (1 draw call)
+    perBreak: 14, // particles per block break
+    lifetimeSeconds: 0.55,
+    speed: 3.2, // initial scatter velocity, blocks/sec
+    gravity: 14, // downward acceleration, blocks/sec^2
+    size: 0.12, // point size, world units
+  },
+  viewmodel: {
+    position: [0.34, -0.3, -0.58], // camera-space anchor (bottom right)
+    swingSeconds: 0.22, // one mine/attack swing arc
+    useSeconds: 0.3, // one place/eat animation
+    bob: { amount: 0.012, speed: 5.5 }, // idle sway
+  },
+  drops: {
+    maxEntities: 32, // oldest drop despawns past this
+    size: 0.24, // ground item cube edge, blocks
+    // Spawn "pop": a short self-contained arc (NOT the physics pass — the
+    // tween integrates its own gravity so drops work without it).
+    pop: { horizontal: 1.6, up: 4.5, gravity: 13 },
+    spinSpeed: 2.6, // radians/sec while on the ground
+    pickupDelaySeconds: 0.5, // can't be vacuumed until the pop finishes
+    magnetRadius: 1.5, // starts homing to the player within this distance
+    magnetSpeed: 9, // homing speed, blocks/sec
+    collectRadius: 0.6, // absorbed into the inventory at this distance
+    inventoryFullRetrySeconds: 1.5, // back-off when the drop didn't fit
+    despawnSeconds: 120,
+  },
+  consume: {
+    // Hunger doesn't exist yet, so "eating" a consumable restores a token
+    // half-heart — enough to make the use verb real. Revisit with hunger.
+    healAmount: 1,
+  },
+}
+
+// Sound layer (Phase 9): everything is synthesized WebAudio (noise bursts and
+// oscillator blips — no bundled samples), created lazily after the first user
+// gesture. Per-block-material voices come from BLOCKS[id].material; the mute
+// flag persists in its own localStorage key (audio preference outlives saves).
+export const AUDIO = {
+  storageKey: 'minecraft-clone-muted',
+  masterVolume: 0.5,
+  pitchVariance: 0.1, // every play is detuned ±this fraction
+  footstep: {
+    strideBlocks: 2.1, // one step sound per this much ground covered
+    gain: 0.16,
+  },
+  zombie: {
+    groanIntervalSeconds: 6, // one random live mob groans about this often
+    hearRadius: 20, // groan volume fades to zero at this distance
+  },
+}

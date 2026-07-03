@@ -24,11 +24,12 @@ export function bindHelp(player) {
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · <kbd>Shift</kbd> — sprint</li>
             <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>C</kbd> — sneak</li>
             <li>Mouse — look around</li>
-            <li>Left click — attack / break (hold to keep mining)</li>
-            <li>Right click — place the selected block</li>
+            <li>Left click — attack / hold to mine (cracks show progress)</li>
+            <li>Right click — use the held item: place a block, eat food</li>
             <li><kbd>1</kbd>–<kbd>9</kbd> / wheel — pick a hotbar slot</li>
             <li><kbd>E</kbd> — inventory &amp; crafting · <kbd>J</kbd> — quest log</li>
             <li><kbd>H</kbd> — this panel · <kbd>Esc</kbd> — release the mouse</li>
+            <li><kbd>M</kbd> — mute / unmute sound</li>
           </ul>
         </section>
         <section class="help-scheme help-touch">
@@ -37,15 +38,17 @@ export function bindHelp(player) {
             <li>Left stick — move (push to the edge to sprint)</li>
             <li>Drag anywhere else — look around</li>
             <li>Tap the world — attack / break one block</li>
-            <li>Tap ⬆ — jump · hold ⛏ — keep mining · tap ▦ — place a block</li>
+            <li>Tap ⬆ — jump · hold ⛏ — keep mining · tap ▦ — place / use item</li>
             <li>Tap a hotbar slot to select it</li>
             <li>Top right: ⏸ pause · 🎒 inventory · 🗺 quest log · ? help</li>
           </ul>
         </section>
       </div>
       <p class="controls-hint">
-        Better tools mine faster; some blocks need the right tool. Watch your
-        hearts after dark&hellip; zombies hit back.
+        Better tools mine faster; some blocks need the right tool. Broken
+        blocks drop items — walk near to scoop them up. Watch your hearts
+        after dark&hellip; zombies hit back. Sound toggles on the pause
+        screen (or <kbd>M</kbd>).
       </p>
     </div>`
 

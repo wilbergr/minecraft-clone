@@ -38,13 +38,15 @@ export const ITEMS = {
   planks: blockItem('planks', 7, 'Planks'),
   iron_ore: blockItem('iron_ore', 8, 'Iron Ore'),
   stick: { id: 'stick', name: 'Stick', maxStack: INVENTORY.maxStack, glyph: '/', tint: '#a5814e' },
-  // Zombie drop. No use yet — food/eating is a later-phase candidate.
+  // Zombie drop. `consumable` (Phase 9) makes right-click eat it — a token
+  // half-heart heal until a real hunger system lands (FEEDBACK.consume).
   rotten_flesh: {
     id: 'rotten_flesh',
     name: 'Rotten Flesh',
     maxStack: INVENTORY.maxStack,
     glyph: '♨',
     tint: '#7d8a3f',
+    consumable: true,
   },
   iron_ingot: {
     id: 'iron_ingot',

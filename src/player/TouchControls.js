@@ -189,8 +189,9 @@ export class TouchControls {
     mine.addEventListener('pointerup', stopMining)
     mine.addEventListener('pointercancel', stopMining)
 
-    const place = this.#button('▦', 'Place selected block', 'touch-action-btn')
-    place.addEventListener('pointerdown', () => this.interaction.placeAtTargeted())
+    // "Use" rather than raw place (Phase 9): consumables eat, blocks place.
+    const place = this.#button('▦', 'Use / place selected item', 'touch-action-btn')
+    place.addEventListener('pointerdown', () => this.interaction.useSelected())
 
     // Jump (Phase 8): a tap buffers one jump (so it still fires when the
     // ground arrives a frame late) and holding keeps hopping, like Space.
