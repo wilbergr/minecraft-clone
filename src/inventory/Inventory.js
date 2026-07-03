@@ -115,6 +115,15 @@ export class Inventory {
     return true
   }
 
+  // Replace a slot's stack outright (Phase 12: the furnace screen moves
+  // stacks between the inventory and furnace slots). `stack` is
+  // { id, count, durability? } or null; listeners are notified.
+  setSlot(index, stack) {
+    if (index < 0 || index >= this.size) return
+    this.slots[index] = stack
+    this.#emit()
+  }
+
   // Swap two slots; if both hold the same item, merge b into a instead (up
   // to max stack). Inventory-screen click interaction.
   swap(a, b) {

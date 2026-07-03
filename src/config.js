@@ -228,8 +228,9 @@ export const FEEDBACK = {
     despawnSeconds: 120,
   },
   consume: {
-    // Hunger doesn't exist yet, so "eating" a consumable restores a token
-    // half-heart — enough to make the use verb real. Revisit with hunger.
+    // Bare-mode fallback (no hunger system attached): "eating" a consumable
+    // restores a token half-heart. With hunger (Phase 12) food restores its
+    // `food` points instead — see BlockInteraction.#consumeSelected.
     healAmount: 1,
   },
 }
@@ -291,6 +292,61 @@ export const WATER = {
     swimUpSpeed: 4.2, // held Space rises at this rate, blocks/s
     breachBoost: 0.85, // jump-out-of-water impulse, fraction of jumpVelocity
     moveMultiplier: 0.55, // horizontal speed factor while submerged
+  },
+}
+
+// Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as
+// health) drained by time, sprinting, and mining. Health regen is gated on
+// being well-fed (Health.regenGate, wired in main.js); at zero hunger the
+// player starves down to a health floor but is never killed by hunger alone.
+export const HUNGER = {
+  max: 20,
+  drainPerSecond: 1 / 25, // idle metabolism — a full bar lasts ~8 minutes
+  sprintExtraPerSecond: 1 / 8, // sprinting burns roughly 4x on top of idle
+  miningExtraPerSecond: 1 / 12, // held-button digging costs a bit too
+  regenThreshold: 14, // health regen only at/above this many points (7 drumsticks)
+  starve: {
+    damage: 1, // health lost per starvation tick at zero hunger
+    intervalSeconds: 4,
+    minHealth: 2, // starvation stops at one heart — it weakens, never kills
+  },
+  fallbackFoodValue: 2, // consumables without a `food` field restore this
+}
+
+// Passive mobs (Phase 12): pig/cow/sheep amble around, never aggro, and drop
+// raw meat on death (cooked in the furnace for the farm → cook → eat loop).
+// They share the mob list with zombies but have their own population cap and
+// spawn cadence so hostile spawn scheduling is untouched.
+export const PASSIVE_MOBS = {
+  maxCount: 4, // cap on live passive mobs (each body part is a draw call)
+  spawnIntervalSeconds: 8, // try to top the passive population up this often
+  spawnAttempts: 6, // ring spots tried per attempt (grass columns only)
+  aabb: { width: 0.7, height: 0.95 }, // collision box before per-kind scale
+  wanderSpeed: 0.8, // blocks/sec while ambling
+  wanderSeconds: 4, // re-roll the wander direction about this often
+  panic: { seconds: 4, speedMultiplier: 2.5 }, // hit mobs bolt away briefly
+  kinds: {
+    pig: {
+      health: 8,
+      scale: 0.9,
+      drop: 'raw_porkchop',
+      dropCount: [1, 2],
+      colors: { body: 0xe8a2a2, head: 0xefb0ac, legs: 0xd88f8f },
+    },
+    cow: {
+      health: 10,
+      scale: 1.15,
+      drop: 'raw_beef',
+      dropCount: [1, 2],
+      colors: { body: 0x6b4a33, head: 0x7a5640, legs: 0x54402e },
+    },
+    sheep: {
+      health: 8,
+      scale: 1.0,
+      drop: 'raw_mutton',
+      dropCount: [1, 2],
+      colors: { body: 0xe8e6df, head: 0xcbb9a4, legs: 0xbfae99 },
+    },
   },
 }
 

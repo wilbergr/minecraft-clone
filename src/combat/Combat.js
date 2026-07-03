@@ -27,11 +27,14 @@ export class Combat {
     interaction.attackHook = () => this.tryAttack()
 
     // Kill drops pop out as ground items (Phase 9); straight to the
-    // inventory only when running without the fx layer.
+    // inventory only when running without the fx layer. Mobs may roll a
+    // `dropCount: [min, max]` range (Phase 12 passive mobs); default is 1.
     this.mobs.onMobKilled = (mob) => {
       const p = mob.group.position
-      if (this.fx.drops) this.fx.drops.spawn(p.x, p.y + 1, p.z, mob.cfg.drop)
-      else this.inventory.add(mob.cfg.drop, 1)
+      const [min, max] = mob.cfg.dropCount ?? [1, 1]
+      const count = min + Math.floor(Math.random() * (max - min + 1))
+      if (this.fx.drops) this.fx.drops.spawn(p.x, p.y + 1, p.z, mob.cfg.drop, count)
+      else this.inventory.add(mob.cfg.drop, count)
     }
 
     // Fall damage (Phase 8): landings past the grace cost health per block.

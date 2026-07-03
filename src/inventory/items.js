@@ -28,6 +28,13 @@ function tool(id, name, kind, tier, tint, glyph) {
   }
 }
 
+// Food (Phase 12): `consumable` makes right-click eat it (the Phase 9 use
+// verb); `food` is the hunger points restored (1 drumstick = 2 points).
+// Raw ◗ / cooked ◖ glyph pairs so furnace output reads at a glance.
+function food(id, name, hunger, glyph, tint) {
+  return { id, name, maxStack: INVENTORY.maxStack, glyph, tint, consumable: true, food: hunger }
+}
+
 const TIER_TINT = { 1: '#a5814e', 2: '#9a9a9a', 3: '#d8dde2' } // wood/stone/iron
 
 export const ITEMS = {
@@ -37,9 +44,9 @@ export const ITEMS = {
   wood: blockItem('wood', 5, 'Wood'),
   planks: blockItem('planks', 7, 'Planks'),
   iron_ore: blockItem('iron_ore', 8, 'Iron Ore'),
+  furnace: blockItem('furnace', 10, 'Furnace'),
   stick: { id: 'stick', name: 'Stick', maxStack: INVENTORY.maxStack, glyph: '/', tint: '#a5814e' },
-  // Zombie drop. `consumable` (Phase 9) makes right-click eat it — a token
-  // half-heart heal until a real hunger system lands (FEEDBACK.consume).
+  // Zombie drop. Real food since Phase 12 (barely: it's zombie).
   rotten_flesh: {
     id: 'rotten_flesh',
     name: 'Rotten Flesh',
@@ -47,7 +54,15 @@ export const ITEMS = {
     glyph: '♨',
     tint: '#7d8a3f',
     consumable: true,
+    food: 4,
   },
+  // Passive mob drops (Phase 12) — cooked in the furnace for more hunger.
+  raw_porkchop: food('raw_porkchop', 'Raw Porkchop', 3, '◗', '#e8918d'),
+  cooked_porkchop: food('cooked_porkchop', 'Cooked Porkchop', 8, '◖', '#b06a3a'),
+  raw_beef: food('raw_beef', 'Raw Beef', 3, '◗', '#c94d3d'),
+  cooked_beef: food('cooked_beef', 'Steak', 8, '◖', '#8a5228'),
+  raw_mutton: food('raw_mutton', 'Raw Mutton', 3, '◗', '#d98880'),
+  cooked_mutton: food('cooked_mutton', 'Cooked Mutton', 6, '◖', '#9c6030'),
   iron_ingot: {
     id: 'iron_ingot',
     name: 'Iron Ingot',

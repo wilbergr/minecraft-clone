@@ -13,6 +13,9 @@ export class Health {
     this.sinceDamage = Infinity // seconds since the player last took a hit
     this.listeners = []
     this.onDeath = null // callback() — fired once when health reaches zero
+    // Optional () => bool checked before each regen tick (Phase 12 gates
+    // regeneration on the hunger bar being well-fed). Unset = always regen.
+    this.regenGate = null
   }
 
   onChange(fn) {
@@ -66,7 +69,7 @@ export class Health {
   update(delta) {
     if (this.isDead) return
     this.sinceDamage += delta
-    if (this.sinceDamage >= COMBAT.regen.delaySeconds) {
+    if (this.sinceDamage >= COMBAT.regen.delaySeconds && (this.regenGate?.() ?? true)) {
       this.heal(COMBAT.regen.perSecond * delta)
     }
   }

@@ -231,11 +231,12 @@ body.touch-mode #hotbar {
 
 /* --- Combat HUD: hearts, damage flash, death screen ----------------------- */
 
+/* Hearts left of center, hunger right (Phase 12) — MC's split survival bar. */
 #health-bar {
   position: absolute;
   bottom: calc(4.25rem + env(safe-area-inset-bottom));
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(calc(-100% - 6px));
   display: flex;
   gap: 2px;
   font-size: 1.15rem;
@@ -262,6 +263,29 @@ body.touch-mode #hotbar {
   pointer-events: none;
   z-index: 3;
   background: rgba(20, 70, 150, 0.35);
+}
+
+/* --- Hunger bar (Phase 12): drumsticks mirroring the hearts row ----------- */
+
+#hunger-bar {
+  position: absolute;
+  bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  left: calc(50% + 6px);
+  display: flex;
+  gap: 2px;
+  font-size: 1rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.drumstick.half {
+  opacity: 0.45;
+}
+
+.drumstick.empty {
+  opacity: 0.15;
 }
 
 #damage-flash {
@@ -449,6 +473,91 @@ body.touch-mode #hotbar {
 .craft-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* --- Furnace / smelting screen (Phase 12) ---------------------------------- */
+
+#furnace-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.65);
+  z-index: 8;
+}
+
+#furnace-panel {
+  color: #eef2f7;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+#furnace-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+#furnace-panel .inv-hint {
+  margin: 0.5rem 0 0.9rem;
+}
+
+#furnace-rig {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(238, 242, 247, 0.05);
+  width: fit-content;
+}
+
+#furnace-rig .slot {
+  cursor: pointer;
+}
+
+#furnace-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+#furnace-flame {
+  font-size: 1.2rem;
+  line-height: 1.3;
+  opacity: 0.12; /* render() drives this with the burn fraction */
+  user-select: none;
+}
+
+#furnace-arrow {
+  position: relative;
+  width: 72px;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(238, 242, 247, 0.12);
+  overflow: hidden;
+}
+
+#furnace-arrow-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: #f5c542;
+}
+
+.furnace-slot.invalid-fuel {
+  border-color: #e07a6b;
+}
+
+.furnace-output {
+  width: 54px;
+  height: 54px;
 }
 
 /* --- Help / controls panel ------------------------------------------------- */
@@ -853,6 +962,15 @@ body.touch-mode .help-touch {
   #health-bar {
     bottom: calc(3.6rem + env(safe-area-inset-bottom));
     font-size: 1rem;
+  }
+
+  #hunger-bar {
+    bottom: calc(3.6rem + env(safe-area-inset-bottom));
+    font-size: 0.85rem;
+  }
+
+  #furnace-panel {
+    padding: 1rem;
   }
 
   #overlay-panel,

@@ -217,6 +217,43 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `__mc.mobs.spawnTimer = 0.1` (the 5s spawn interval is ~17s real time at
   headless speed); dawn burn: `setTime(0.2)` and wait for `mobs.count === 0`.
 
+## Survival loop (Phase 12): furnace, hunger, passive mobs
+
+- Furnace: block 10 (`interactive: true` in blocks.js) — right click routes
+  through `BlockInteraction.useBlockHook` (sneak bypasses, so placing against
+  a furnace still works). Smelt recipes + fuel burn times live in
+  `src/inventory/recipes.js` (`SMELT_RECIPES` / `FUEL_SECONDS` — `coal` is
+  pre-listed so a future coal item just works). Per-furnace state is keyed by
+  world position in `src/crafting/Furnaces.js`; it ticks while the pointer is
+  locked OR the furnace UI is open (watchable smelt, paused in other menus),
+  and a lit flame keeps burning MC-style even if the input empties. Breaking
+  the block fires `BlockInteraction.onBlockBroken` → contents spill as ground
+  drops. Smelting can't start while the output slot holds a different item.
+- Hunger (`src/survival/Hunger.js`, tunables in `HUNGER`): drains by
+  time/sprint/mining (main.js feeds `player.isSprinting` +
+  `interaction.mining`), gates health regen via `Health.regenGate`, and at
+  zero starves the player down to `starve.minHealth` (never kills). Eating
+  goes through the Phase 9 use verb: items with `consumable: true` restore
+  their `food` points and are REFUSED on a full bar (`__mc.hunger` in tests).
+  The drumstick HUD (`ui/hungerHud.js`) mirrors hearts: hearts sit left of
+  center, hunger right.
+- Passive mobs (`src/combat/PassiveMob.js`, tunables in `PASSIVE_MOBS`):
+  pig/cow/sheep quadrupeds sharing the Zombie interface (`group`/`cfg`/
+  `update`/`hurt`/`dispose` + `passive: true`), so MobManager keeps ONE mob
+  list. They spawn on their own timer/cap onto grass columns only, never
+  aggro, panic-flee when hit, and drop `cfg.drop` × `dropCount: [min, max]`
+  raw meat (Combat's kill path rolls the range). Anything counting or
+  spawning hostiles must filter `!m.passive` — the hostile cap and groan
+  picker already do. Test hook: `__mc.mobs.spawnPassiveAt(x, z, kind)`.
+- Save schema: `hunger` (number) and `furnaces` (Furnaces.serialize()) are
+  OPTIONAL keys wired via `save.attachHunger/attachFurnaces` after load();
+  older saves lack them and load fine, so `schemaVersion` stayed 1.
+- Furnace/inventory stack moves use `Inventory.setSlot(i, stack)` — the one
+  sanctioned direct-slot write (it emits onChange; never poke `slots[]` raw).
+- Passive mobs and dawn burn coexist: the burn picks the last HOSTILE
+  (`findLastIndex((m) => !m.passive)`), and night gating never touches the
+  passive spawn timer — passives spawn day and night.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

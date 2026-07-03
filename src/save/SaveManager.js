@@ -11,7 +11,13 @@ import { SAVE, WORLD } from '../config.js'
 //     edits: { "cx,cz": [[blockIndex, blockId], ...] },  // sparse deltas only
 //     treasure: { found: [bool per token], celebrated },  // TreasureHunt.serialize()
 //     daynight: { time },       // DayNight.serialize() — clock, fraction of a day (Phase 10)
+//     hunger,                   // number in [0, HUNGER.max] (Phase 12; absent = full)
+//     furnaces: { "x,y,z": { input, fuel, output, ... } },  // Furnaces.serialize()
 //   }
+//
+// `hunger` and `furnaces` are optional keys (Phase 12): older saves simply
+// lack them and load with a full bar / no furnace contents, so schemaVersion
+// stayed 1 — no player save is invalidated.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -31,6 +37,10 @@ export class SaveManager {
     this.treasure = null // Phase 6 writes hunt progress here; it round-trips
     this.daynightData = null // loaded clock slot, applied by attachDayNight (Phase 10)
     this.daynight = null // live DayNight ref — serialize() reads the clock from it
+    this.hunger = null // wired by attachHunger (Phase 12)
+    this.hungerData = null // loaded value held until attachHunger applies it
+    this.furnaces = null // wired by attachFurnaces (Phase 12)
+    this.furnaceData = null
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -70,6 +80,20 @@ export class SaveManager {
     })
   }
 
+  // Same pattern for the hunger bar (Phase 12): called once after load().
+  attachHunger(hunger) {
+    this.hunger = hunger
+    if (this.hungerData !== null) hunger.deserialize(this.hungerData)
+    hunger.onChange(() => (this.dirty = true))
+  }
+
+  // And for placed-furnace contents (Phase 12): called once after load().
+  attachFurnaces(furnaces) {
+    this.furnaces = furnaces
+    if (this.furnaceData !== null) furnaces.deserialize(this.furnaceData)
+    furnaces.onChange(() => (this.dirty = true))
+  }
+
   // Restore a saved game, if one exists and matches the current seed and
   // schema. Any failure — absent, corrupt JSON, wrong shape — lands on a
   // fresh game, never a crash. Returns true when a save was applied.
@@ -94,6 +118,8 @@ export class SaveManager {
       this.player.deserialize(data.player)
       this.treasure = data.treasure ?? null
       this.daynightData = data.daynight ?? null
+      this.hungerData = data.hunger ?? null
+      this.furnaceData = data.furnaces ?? null
       this.dirty = false
       return true
     } catch (err) {
@@ -113,6 +139,8 @@ export class SaveManager {
       edits: this.world.serializeEdits(),
       treasure: this.treasure,
       daynight: this.daynight ? this.daynight.serialize() : this.daynightData,
+      hunger: this.hunger ? this.hunger.serialize() : (this.hungerData ?? undefined),
+      furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),
     }
   }
 
