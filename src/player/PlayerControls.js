@@ -16,10 +16,17 @@ export class PlayerControls {
     this.velocity = new THREE.Vector3()
     this.keys = { forward: false, back: false, left: false, right: false, sprint: false }
 
-    camera.position.set(0.5, world.surfaceY(0.5, 8.5) + PLAYER.eyeHeight, 8.5)
+    this.respawn()
 
     document.addEventListener('keydown', (e) => this.#onKey(e.code, true))
     document.addEventListener('keyup', (e) => this.#onKey(e.code, false))
+  }
+
+  // Put the player at the spawn point (initial spawn and death respawn).
+  respawn() {
+    const { x, z } = PLAYER.spawnPoint
+    this.velocity.set(0, 0, 0)
+    this.camera.position.set(x, this.world.surfaceY(x, z) + PLAYER.eyeHeight, z)
   }
 
   get isLocked() {

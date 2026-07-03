@@ -1,15 +1,17 @@
 import * as THREE from 'three'
-import { PLAYER, WORLD } from '../config.js'
+import { COMBAT, PLAYER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR } from '../world/blocks.js'
 
-// Aiming at, breaking, and placing blocks. Left click breaks the targeted
-// block, right click places the selected block against the targeted face,
-// and a wireframe box highlights the current target.
+// Aiming at, breaking, and placing blocks. Left click attacks a mob when the
+// crosshair is on one (via attackHook, wired up by Combat), otherwise mines
+// the targeted block — held down, mining auto-repeats at a rate set by the
+// block's hardness and the held tool (see BLOCKS fields). Right click places
+// the selected block against the targeted face, and a wireframe box
+// highlights the current target (flashing red when the tool is too weak).
 //
 // What gets placed comes from the inventory's selected hotbar stack; breaking
 // a block adds its drop to the inventory instantly (ground item entities are
-// a later phase). Tool/hardness gating is the combat phase's seam: it layers
-// onto breakTargeted() using the held item's `tool` data and BLOCKS fields.
+// a later phase).
 export class BlockInteraction {
   #lookDir = new THREE.Vector3()
 
@@ -19,6 +21,10 @@ export class BlockInteraction {
     this.player = player
     this.inventory = inventory
     this.target = null
+    this.attackHook = null // set by Combat: () => true if a mob took the click
+    this.mining = false // left button held — keep breaking as cooldowns allow
+    this.nextBreakAt = 0
+    this.gatedFlashUntil = 0
 
     // Slightly oversized so the outline doesn't z-fight the block faces.
     const box = new THREE.BoxGeometry(1.002, 1.002, 1.002)
@@ -32,8 +38,16 @@ export class BlockInteraction {
 
     document.addEventListener('mousedown', (e) => {
       if (!this.player.isLocked) return
-      if (e.button === 0) this.breakTargeted()
-      else if (e.button === 2) this.placeAtTargeted()
+      if (e.button === 0) {
+        if (this.attackHook?.()) return // swung at a mob — click is spent
+        this.mining = true
+        this.breakTargeted()
+      } else if (e.button === 2) {
+        this.placeAtTargeted()
+      }
+    })
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mining = false
     })
     document.addEventListener('contextmenu', (e) => e.preventDefault())
   }
@@ -61,16 +75,42 @@ export class BlockInteraction {
     } else {
       this.highlight.visible = false
     }
+
+    // Red flash on "your tool can't break this" fades back to the outline.
+    this.highlight.material.color.setHex(
+      performance.now() / 1000 < this.gatedFlashUntil ? 0xc0392b : 0x111111,
+    )
+
+    // Held-button mining: keep chewing through blocks as the cooldown allows.
+    if (this.mining && this.player.isLocked) this.breakTargeted()
   }
 
-  // Break the currently targeted block and pocket its drop. Instant for now;
-  // the combat/tools phase layers hardness and tool-tier gating on top.
+  // Break the currently targeted block and pocket its drop, if the held tool
+  // is up to it. Break rate: the block's hardness in seconds, divided down
+  // when the held tool kind matches (higher tier = faster); blocks with a
+  // minTier requirement don't break at all without that tool (red flash).
+  // Breaking anything while holding a tool costs 1 durability.
   breakTargeted() {
     if (!this.target) return false
+    const now = performance.now() / 1000
+    if (now < this.nextBreakAt) return false
     const { x, y, z } = this.target
-    const broken = BLOCKS[this.world.blockAt(x, y, z)]
+    const block = BLOCKS[this.world.blockAt(x, y, z)]
+    const tool = this.inventory.selectedItem?.tool ?? null
+    const toolMatches = tool && tool.kind === block.tool?.kind
+
+    if (block.tool?.minTier > 0 && (!toolMatches || tool.tier < block.tool.minTier)) {
+      this.gatedFlashUntil = now + COMBAT.mining.gatedFlashSeconds
+      return false
+    }
+
     if (!this.world.setBlock(x, y, z, BLOCK_AIR)) return false
-    if (broken.drop) this.inventory.add(broken.drop, 1)
+    if (block.drop) this.inventory.add(block.drop, 1)
+
+    let time = block.hardness ?? 0.3
+    if (toolMatches) time /= 1 + tool.tier * COMBAT.mining.speedPerTier
+    this.nextBreakAt = now + time
+    if (tool) this.inventory.damageSelected()
     return true
   }
 

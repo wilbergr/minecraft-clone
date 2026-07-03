@@ -50,6 +50,48 @@ export const PLAYER = {
   damping: 12, // higher = snappier stop (velocity decay per second)
   stepSmoothing: 10, // eye-height follow rate over terrain (higher = snappier)
   reach: 5, // max distance for breaking/placing blocks, in blocks
+  spawnPoint: { x: 0.5, z: 8.5 }, // initial spawn AND respawn-on-death column
+}
+
+// Combat / mobs / tools (Phase 4). Health units: 1 heart = 2 health.
+export const COMBAT = {
+  maxHealth: 20,
+  regen: {
+    delaySeconds: 6, // no regen until this long after last damage taken
+    perSecond: 1, // health regained per second once regen kicks in
+  },
+  attack: {
+    reach: 3.5, // max distance to hit a mob, in blocks (< block reach)
+    cooldownSeconds: 0.35, // min time between player attacks
+    handDamage: 1, // bare hands / non-tool items
+    toolDamage: 2, // pickaxes and axes (any tier) — better than a fist
+    swordDamage: { 1: 4, 2: 5, 3: 7 }, // by tool tier (wood/stone/iron)
+    knockback: 6, // horizontal impulse applied to a hit mob
+  },
+  mining: {
+    // Matching tool speed: break cooldown = hardness / (1 + tier * this).
+    speedPerTier: 1,
+    gatedFlashSeconds: 0.25, // highlight flashes red when the tool is too weak
+  },
+  toolDurability: { 1: 64, 2: 128, 3: 256 }, // uses per tool, by tier
+  mobs: {
+    maxCount: 4, // hard cap on live mobs (keep low — one draw call per part)
+    spawnIntervalSeconds: 5, // try to top the population up this often
+    spawnRadiusMin: 10, // spawn ring around the player, in blocks
+    spawnRadiusMax: 18,
+    despawnRadius: 48, // mobs farther than this from the player are removed
+    zombie: {
+      health: 10,
+      chaseSpeed: 2.8, // blocks/sec while chasing (player walks at 5)
+      wanderSpeed: 1, // blocks/sec while idling around
+      wanderSeconds: 3, // re-roll the wander direction this often
+      aggroRange: 12, // starts chasing when the player is this close
+      attackRange: 1.8, // melee reach
+      attackDamage: 3, // 1.5 hearts per hit
+      attackCooldownSeconds: 1.2,
+      drop: 'rotten_flesh', // added straight to the inventory (no ground items)
+    },
+  },
 }
 
 // Rendering / atmosphere tunables.

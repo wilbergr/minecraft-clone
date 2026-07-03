@@ -4,8 +4,10 @@ import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { Inventory } from './inventory/Inventory.js'
+import { Combat } from './combat/Combat.js'
 import { bindOverlay } from './ui/overlay.js'
 import { bindHotbar } from './ui/hotbar.js'
+import { bindHud } from './ui/hud.js'
 import { InventoryScreen } from './ui/inventoryScreen.js'
 
 const app = document.getElementById('app')
@@ -31,9 +33,13 @@ const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
 const interaction = new BlockInteraction(camera, world, player, scene, inventory)
 
+const combat = new Combat(camera, world, player, inventory, interaction, scene)
+
 const screen = new InventoryScreen(inventory, player)
-const refreshOverlay = bindOverlay(player, () => screen.isOpen)
+// The death screen counts as open UI so "click to play" stays out of its way.
+const refreshOverlay = bindOverlay(player, () => screen.isOpen || combat.health.isDead)
 bindHotbar(inventory, player)
+bindHud(combat.health, () => combat.respawn())
 // Closing the screen re-locks the pointer; give the lock a beat to land
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -52,8 +58,21 @@ renderer.setAnimationLoop(() => {
   world.update(camera.position)
   player.update(delta)
   interaction.update()
+  combat.update(delta)
   renderer.render(scene, camera)
 })
 
 // Debug/test hook (used by automated browser verification; harmless in prod).
-window.__mc = { scene, camera, player, world, interaction, renderer, inventory, screen }
+window.__mc = {
+  scene,
+  camera,
+  player,
+  world,
+  interaction,
+  renderer,
+  inventory,
+  screen,
+  combat,
+  health: combat.health,
+  mobs: combat.mobs,
+}
