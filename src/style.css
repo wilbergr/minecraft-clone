@@ -375,6 +375,203 @@ body {
   cursor: default;
 }
 
+/* --- Treasure hunt: compass, toast, quest log, reveal --------------------- */
+
+#compass {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(11, 14, 20, 0.55);
+  border: 1px solid rgba(255, 215, 94, 0.35);
+  color: #ffd75e;
+  font-size: 0.85rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#compass.hidden {
+  display: none;
+}
+
+#compass-arrow {
+  display: inline-block;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+#treasure-toast {
+  position: absolute;
+  top: 3.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  background: rgba(11, 14, 20, 0.85);
+  border: 1px solid rgba(255, 215, 94, 0.6);
+  color: #ffd75e;
+  font-size: 1rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+
+#treasure-toast.show {
+  opacity: 1;
+  transition: none;
+}
+
+#quest-log {
+  position: absolute;
+  top: 3rem;
+  left: 0.75rem;
+  z-index: 5;
+  user-select: none;
+  pointer-events: none;
+}
+
+#quest-log.hidden {
+  display: none;
+}
+
+#quest-log-panel {
+  color: #eef2f7;
+  padding: 0.9rem 1.1rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.8);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: 340px;
+}
+
+#quest-log-panel h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  color: #ffd75e;
+}
+
+#quest-progress {
+  float: right;
+  color: #9aa7b8;
+  font-weight: 400;
+}
+
+#quest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.quest-mark {
+  color: #ffd75e;
+  margin-right: 0.2rem;
+}
+
+.quest-found {
+  color: #9aa7b8;
+}
+
+.quest-locked {
+  color: #5d6878;
+  font-style: italic;
+}
+
+.quest-clue {
+  margin: 0.25rem 0 0;
+  color: #cdd6e2;
+  font-style: italic;
+}
+
+.quest-complete {
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 215, 94, 0.45);
+  background: rgba(255, 215, 94, 0.08);
+  color: #ffd75e;
+}
+
+#treasure-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.7);
+  z-index: 9;
+}
+
+#treasure-reveal.hidden {
+  display: none;
+}
+
+#treasure-panel {
+  text-align: center;
+  color: #eef2f7;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.9);
+  border: 1px solid rgba(255, 215, 94, 0.55);
+  box-shadow: 0 0 60px rgba(255, 215, 94, 0.25);
+  max-width: 480px;
+}
+
+#treasure-panel h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2rem;
+  color: #ffd75e;
+}
+
+#treasure-sparkles {
+  color: #ffd75e;
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+  animation: sparkle-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sparkle-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+#treasure-message {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+#treasure-continue-btn {
+  font: inherit;
+  font-size: 1rem;
+  color: #eef2f7;
+  margin-top: 1.25rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 215, 94, 0.5);
+  background: rgba(255, 215, 94, 0.15);
+  cursor: pointer;
+}
+
+#treasure-continue-btn:hover {
+  background: rgba(255, 215, 94, 0.3);
+}
+
 #crosshair {
   position: absolute;
   top: 50%;

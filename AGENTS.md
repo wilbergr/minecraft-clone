@@ -46,6 +46,30 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `SAVE.autosaveSeconds` plus once on `beforeunload`. Never serialize per
   frame.
 
+## Treasure hunt (Phase 6)
+
+- `TREASURE_MESSAGE` — the captain-editable final reward text — is the first
+  constant at the top of `src/config.js` (clearly banner-commented). It is
+  rendered verbatim by the completion modal (`src/ui/treasureReveal.js`) and
+  by the quest log once the hunt is complete. Edit that one string only.
+- All other hunt tunables live in the `TREASURE` block right below it:
+  `rings` / `names` / `clues` are index-matched arrays — add one entry to
+  each to extend the hunt. Clue templates take `{dist}` / `{dir}` / `{name}`,
+  filled from the generated positions so text always matches the world.
+- Token positions are a pure function of `WORLD.seed` (a dedicated
+  mulberry32 stream + `terrainHeight`), chained: token 1 a ring-distance
+  from spawn, each next token from the previous. Changing seed, rings, or
+  terrain params moves the tokens; the saved `found` array is index-based
+  and only valid for the same seed (load already rejects seed mismatches).
+- Save slot shape: `treasure: { found: [bool per token], celebrated }`
+  (`TreasureHunt.serialize()`), wired via `SaveManager.attachTreasure(hunt)`
+  once after `load()`. `schemaVersion` stayed 1 — the slot was reserved.
+- Collection is proximity-based, driven by `hunt.update(delta,
+  camera.position)` every frame with NO pointer-lock gate — headless tests
+  can teleport the camera onto `__mc.hunt.tokens[i].position` to collect.
+- Token height uses pristine `terrainHeight`, not `surfaceY`: player edits
+  never move a token, so positions stay save-stable.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

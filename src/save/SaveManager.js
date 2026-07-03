@@ -9,7 +9,7 @@ import { SAVE, WORLD } from '../config.js'
 //     health,                   // number in [1, COMBAT.maxHealth]
 //     inventory: { slots, selectedSlot },   // Inventory.serialize()
 //     edits: { "cx,cz": [[blockIndex, blockId], ...] },  // sparse deltas only
-//     treasure,                 // reserved: Phase 6 hunt progress (null now)
+//     treasure: { found: [bool per token], celebrated },  // TreasureHunt.serialize()
 //   }
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
@@ -40,6 +40,18 @@ export class SaveManager {
     health.onChange(markDirty)
     window.addEventListener('beforeunload', () => {
       if (this.enabled) this.save()
+    })
+  }
+
+  // Wire the treasure hunt into the reserved `treasure` slot (Phase 6).
+  // Called once, after load(): applies whatever the slot held to the hunt,
+  // then keeps the slot — and the dirty flag — in sync as tokens are found.
+  attachTreasure(hunt) {
+    hunt.deserialize(this.treasure)
+    this.treasure = hunt.serialize()
+    hunt.onChange(() => {
+      this.treasure = hunt.serialize()
+      this.dirty = true
     })
   }
 
