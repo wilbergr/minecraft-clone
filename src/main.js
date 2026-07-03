@@ -3,7 +3,10 @@ import { GRAPHICS } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
-import { bindOverlay, bindHud } from './ui/overlay.js'
+import { Inventory } from './inventory/Inventory.js'
+import { bindOverlay } from './ui/overlay.js'
+import { bindHotbar } from './ui/hotbar.js'
+import { InventoryScreen } from './ui/inventoryScreen.js'
 
 const app = document.getElementById('app')
 
@@ -25,10 +28,15 @@ const camera = new THREE.PerspectiveCamera(
 
 const world = new World(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
-const interaction = new BlockInteraction(camera, world, player, scene)
+const inventory = new Inventory()
+const interaction = new BlockInteraction(camera, world, player, scene, inventory)
 
-bindOverlay(player)
-bindHud(interaction)
+const screen = new InventoryScreen(inventory, player)
+const refreshOverlay = bindOverlay(player, () => screen.isOpen)
+bindHotbar(inventory, player)
+// Closing the screen re-locks the pointer; give the lock a beat to land
+// before re-evaluating, so "click to play" only appears if it failed.
+screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
@@ -48,4 +56,4 @@ renderer.setAnimationLoop(() => {
 })
 
 // Debug/test hook (used by automated browser verification; harmless in prod).
-window.__mc = { scene, camera, player, world, interaction, renderer }
+window.__mc = { scene, camera, player, world, interaction, renderer, inventory, screen }

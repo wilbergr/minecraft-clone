@@ -1,19 +1,20 @@
-// UI bindings: the click-to-play overlay that gates pointer lock, and the
-// selected-block readout. Later phases replace the readout with a real
-// hotbar and add health / treasure-clue HUD elements here.
-export function bindOverlay(player) {
+// The click-to-play overlay that gates pointer lock. Shown whenever the
+// pointer is unlocked AND no in-game UI (inventory screen) is open — so
+// opening the inventory doesn't flash "click to play" over it. Returns the
+// refresh function so other UI (the inventory screen) can re-evaluate.
+export function bindOverlay(player, isUiOpen) {
   const overlay = document.getElementById('overlay')
 
   overlay.addEventListener('click', () => player.lock())
-  player.addEventListener('lock', () => overlay.classList.add('hidden'))
-  player.addEventListener('unlock', () => overlay.classList.remove('hidden'))
-}
-
-export function bindHud(interaction) {
-  const readout = document.getElementById('selected-block')
-  const render = (block) => {
-    readout.textContent = `Block: ${block.name} (1–4 to switch)`
-  }
-  interaction.onSelectionChange = render
-  render(interaction.selectedBlock)
+  // Read pointerLockElement, not player.isLocked: PointerLockControls fires
+  // its lock/unlock events *before* updating isLocked, so the flag is stale
+  // inside these handlers while the DOM state is already current.
+  const update = () =>
+    overlay.classList.toggle(
+      'hidden',
+      document.pointerLockElement !== null || isUiOpen(),
+    )
+  player.addEventListener('lock', update)
+  player.addEventListener('unlock', update)
+  return update
 }

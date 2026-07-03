@@ -1,0 +1,158 @@
+import { INVENTORY } from '../config.js'
+import { ITEMS } from '../inventory/items.js'
+import { RECIPES, canCraft, craft } from '../inventory/recipes.js'
+import { createSlotEl, renderSlot } from './slots.js'
+
+// The inventory screen: a full-screen overlay (E to toggle) showing every
+// inventory slot plus the crafting panel. Opening releases pointer lock so
+// the mouse can click slots and craft buttons; closing re-locks it.
+//
+// Item moving is click-click: click a slot to pick it (highlight), click
+// another to swap/merge. Crafting is a recipe list drawing ingredients from
+// the whole inventory — see src/inventory/recipes.js.
+export class InventoryScreen {
+  constructor(inventory, player) {
+    this.inventory = inventory
+    this.player = player
+    this.root = document.getElementById('inventory-screen')
+    this.isOpen = false
+    this.pendingSlot = null // first slot of a click-click move, or null
+    this.onToggle = null // callback(isOpen) — lets the play overlay stay away
+
+    this.#build()
+    inventory.onChange(() => {
+      if (this.isOpen) this.render()
+    })
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyE') {
+        if (this.isOpen) this.close()
+        else if (this.player.isLocked) this.open()
+      } else if (e.code === 'Escape' && this.isOpen) {
+        this.close()
+      }
+    })
+  }
+
+  open() {
+    this.isOpen = true
+    this.pendingSlot = null
+    this.root.classList.remove('hidden')
+    this.player.unlock()
+    this.render()
+    this.onToggle?.(true)
+  }
+
+  close() {
+    this.isOpen = false
+    this.root.classList.add('hidden')
+    this.player.lock()
+    this.onToggle?.(false)
+  }
+
+  #build() {
+    const panel = document.createElement('div')
+    panel.id = 'inventory-panel'
+    panel.innerHTML = '<h2>Inventory</h2>'
+
+    const columns = document.createElement('div')
+    columns.id = 'inventory-columns'
+    panel.appendChild(columns)
+
+    // --- Slot grids: main slots on top, the hotbar row set apart below.
+    const slotsCol = document.createElement('div')
+    this.slotEls = new Array(this.inventory.size)
+    const makeGrid = (from, to, extraClass) => {
+      const grid = document.createElement('div')
+      grid.className = `inv-grid${extraClass ? ` ${extraClass}` : ''}`
+      for (let i = from; i < to; i++) {
+        const el = createSlotEl()
+        el.addEventListener('click', () => this.#onSlotClick(i))
+        this.slotEls[i] = el
+        grid.appendChild(el)
+      }
+      return grid
+    }
+    slotsCol.appendChild(makeGrid(INVENTORY.hotbarSlots, this.inventory.size))
+    slotsCol.appendChild(makeGrid(0, INVENTORY.hotbarSlots, 'inv-hotbar-row'))
+    const hint = document.createElement('p')
+    hint.className = 'inv-hint'
+    hint.textContent =
+      'Click a slot, then another, to move items. Bottom row is the hotbar.'
+    slotsCol.appendChild(hint)
+    columns.appendChild(slotsCol)
+
+    // --- Crafting panel: one row per recipe in the RECIPES table.
+    const crafting = document.createElement('div')
+    crafting.id = 'crafting-panel'
+    crafting.innerHTML = '<h3>Crafting</h3>'
+    const list = document.createElement('ul')
+    list.id = 'recipe-list'
+    this.recipeEls = RECIPES.map((recipe) => {
+      const [outId, outCount] = recipe.output
+      const row = document.createElement('li')
+      row.className = 'recipe'
+
+      const iconSlot = createSlotEl()
+      renderSlot(iconSlot, { id: outId, count: outCount })
+
+      const info = document.createElement('div')
+      info.className = 'recipe-info'
+      const name = document.createElement('div')
+      name.className = 'recipe-name'
+      name.textContent =
+        outCount > 1 ? `${ITEMS[outId].name} ×${outCount}` : ITEMS[outId].name
+      const needs = document.createElement('div')
+      needs.className = 'recipe-needs'
+      const needEls = recipe.input.map(([id, count], k) => {
+        const span = document.createElement('span')
+        span.textContent =
+          (k > 0 ? ' + ' : '') + `${count}× ${ITEMS[id].name}`
+        needs.appendChild(span)
+        return span
+      })
+      info.append(name, needs)
+
+      const button = document.createElement('button')
+      button.className = 'craft-btn'
+      button.textContent = 'Craft'
+      button.addEventListener('click', () => craft(this.inventory, recipe))
+
+      row.append(iconSlot, info, button)
+      list.appendChild(row)
+      return { recipe, button, needEls }
+    })
+    crafting.appendChild(list)
+    columns.appendChild(crafting)
+
+    this.root.appendChild(panel)
+  }
+
+  #onSlotClick(index) {
+    if (this.pendingSlot === null) {
+      if (!this.inventory.slots[index]) return // nothing to pick up
+      this.pendingSlot = index
+    } else {
+      const from = this.pendingSlot
+      this.pendingSlot = null
+      this.inventory.swap(from, index)
+    }
+    this.render()
+  }
+
+  render() {
+    this.slotEls.forEach((el, i) => {
+      renderSlot(el, this.inventory.slots[i])
+      el.classList.toggle('pending', i === this.pendingSlot)
+    })
+    for (const { recipe, button, needEls } of this.recipeEls) {
+      button.disabled = !canCraft(this.inventory, recipe)
+      recipe.input.forEach(([id, count], k) => {
+        needEls[k].classList.toggle(
+          'missing',
+          this.inventory.countOf(id) < count,
+        )
+      })
+    }
+  }
+}

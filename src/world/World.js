@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { WORLD } from '../config.js'
 import { BLOCK_AIR, isSolid } from './blocks.js'
-import { createFBM2D } from './noise.js'
+import { createFBM2D, hash2D, hash3D } from './noise.js'
 import { Chunk } from './Chunk.js'
 
 // Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
@@ -45,6 +45,52 @@ export class World {
     return 3 // stone
   }
 
+  // Below-surface block including scattered features: the base layering,
+  // with deep stone occasionally replaced by iron ore.
+  terrainBlock(wx, wy, wz, h) {
+    const id = this.blockForDepth(wy, h)
+    if (id !== 3) return id
+    const { ironOre } = WORLD.terrain
+    if (wy <= ironOre.maxY && hash3D(WORLD.seed ^ 0x1e55, wx, wy, wz) < ironOre.chance) {
+      return 8 // iron ore
+    }
+    return id
+  }
+
+  // Does a tree stand on the column at (wx, wz)? Trees are a pure function of
+  // position (cheap hash first, terrain checks only on a hit): trunk fills
+  // y in [base, top), a leaf cap sits at y == top, and a 3x3 canopy wraps the
+  // top two trunk levels. Grass columns only — beaches stay bare.
+  treeAt(wx, wz) {
+    const { trees, sandLevel } = WORLD.terrain
+    if (hash2D(WORLD.seed ^ 0x51ab, wx, wz) >= trees.chance) return null
+    const h = this.terrainHeight(wx, wz)
+    if (h - 1 <= sandLevel) return null
+    const span = trees.maxTrunk - trees.minTrunk + 1
+    const trunk =
+      trees.minTrunk + Math.floor(hash2D(WORLD.seed ^ 0x77f3, wx, wz) * span)
+    return { base: h, top: h + trunk }
+  }
+
+  // Tree block (wood/leaves/air) at an above-surface position. Mirrors the
+  // stamping in Chunk.generate for chunks that aren't loaded: the column's
+  // own trunk wins, then any canopy from trees within 1 block.
+  #treeBlockAt(wx, wy, wz) {
+    const self = this.treeAt(wx, wz)
+    if (self) {
+      if (wy >= self.base && wy < self.top) return 5 // trunk
+      if (wy === self.top) return 6 // leaf cap
+    }
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue
+        const tree = this.treeAt(wx + dx, wz + dz)
+        if (tree && wy >= tree.top - 2 && wy < tree.top) return 6 // canopy
+      }
+    }
+    return BLOCK_AIR
+  }
+
   // --- Block access (world coordinates) ------------------------------------
 
   blockAt(wx, wy, wz) {
@@ -62,7 +108,9 @@ export class World {
       const edited = chunkEdits.get(idx)
       if (edited !== undefined) return edited
     }
-    return this.blockForDepth(wy, this.terrainHeight(wx, wz))
+    const h = this.terrainHeight(wx, wz)
+    if (wy < h) return this.terrainBlock(wx, wy, wz, h)
+    return this.#treeBlockAt(wx, wy, wz)
   }
 
   // Set a block and remesh the affected chunk (and neighbors when the block

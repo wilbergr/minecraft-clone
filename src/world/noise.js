@@ -23,6 +23,20 @@ export function mulberry32(seed) {
   }
 }
 
+// Deterministic per-coordinate hashes -> [0, 1). Unlike the noise functions
+// these are uncorrelated between neighbors — used for scattering discrete
+// features (trees per column, ore per block) as pure functions of position.
+export function hash2D(seed, x, z) {
+  let h = (seed | 0) ^ Math.imul(x | 0, 0x27d4eb2d) ^ Math.imul(z | 0, 0x165667b1)
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+export function hash3D(seed, x, y, z) {
+  return hash2D(seed ^ Math.imul(y | 0, 0x9e3779b1), x, z)
+}
+
 // Returns noise2D(x, y) -> [-1, 1], deterministic for a given seed.
 export function createNoise2D(seed) {
   const rand = mulberry32(seed)

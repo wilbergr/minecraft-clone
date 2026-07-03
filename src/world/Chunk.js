@@ -68,8 +68,9 @@ export class Chunk {
     this.blocks[this.index(x, y, z)] = id
   }
 
-  // Fill block data from the world's deterministic generator, then apply any
-  // recorded edits (so player changes survive chunk unload/reload).
+  // Fill block data from the world's deterministic generator (terrain, then
+  // trees), then apply any recorded edits (so player changes survive chunk
+  // unload/reload).
   generate(edits) {
     const baseX = this.cx * this.size
     const baseZ = this.cz * this.size
@@ -77,12 +78,48 @@ export class Chunk {
       for (let z = 0; z < this.size; z++) {
         const h = this.world.terrainHeight(baseX + x, baseZ + z)
         for (let y = 0; y < h; y++) {
-          this.blocks[this.index(x, y, z)] = this.world.blockForDepth(y, h)
+          this.blocks[this.index(x, y, z)] = this.world.terrainBlock(
+            baseX + x, y, baseZ + z, h,
+          )
         }
       }
     }
+    this.#stampTrees(baseX, baseZ)
     if (edits) {
       for (const [idx, id] of edits) this.blocks[idx] = id
+    }
+  }
+
+  // Stamp every tree whose trunk or canopy reaches into this chunk (canopy
+  // radius is 1 block, so tree columns one block outside the border count).
+  // Must mirror World's per-block tree query for unloaded chunks.
+  #stampTrees(baseX, baseZ) {
+    for (let tx = -1; tx <= this.size; tx++) {
+      for (let tz = -1; tz <= this.size; tz++) {
+        const tree = this.world.treeAt(baseX + tx, baseZ + tz)
+        if (!tree) continue
+        // Trunk and leaf cap, when the tree column lies inside this chunk.
+        if (tx >= 0 && tx < this.size && tz >= 0 && tz < this.size) {
+          for (let y = tree.base; y < tree.top; y++) {
+            this.blocks[this.index(tx, y, tz)] = 5 // wood
+          }
+          this.blocks[this.index(tx, tree.top, tz)] = 6 // leaf cap
+        }
+        // 3x3 canopy around the top two trunk levels — only into air, so it
+        // never eats terrain or another tree's trunk.
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            if (dx === 0 && dz === 0) continue
+            const lx = tx + dx
+            const lz = tz + dz
+            if (lx < 0 || lx >= this.size || lz < 0 || lz >= this.size) continue
+            for (let y = tree.top - 2; y < tree.top; y++) {
+              const idx = this.index(lx, y, lz)
+              if (this.blocks[idx] === BLOCK_AIR) this.blocks[idx] = 6
+            }
+          }
+        }
+      }
     }
   }
 

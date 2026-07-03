@@ -1,25 +1,24 @@
 import * as THREE from 'three'
 import { PLAYER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, PLACEABLE_BLOCK_IDS } from '../world/blocks.js'
+import { BLOCKS, BLOCK_AIR } from '../world/blocks.js'
 
 // Aiming at, breaking, and placing blocks. Left click breaks the targeted
 // block, right click places the selected block against the targeted face,
 // and a wireframe box highlights the current target.
 //
-// Phase 3 seam: `selectedBlockId` is the single source of what gets placed.
-// Today it is driven by hotkeys 1-4 over PLACEABLE_BLOCK_IDS; the inventory/
-// hotbar will drive it instead (and breaking will consult block hardness from
-// the BLOCKS table before calling breakTargeted()).
+// What gets placed comes from the inventory's selected hotbar stack; breaking
+// a block adds its drop to the inventory instantly (ground item entities are
+// a later phase). Tool/hardness gating is the combat phase's seam: it layers
+// onto breakTargeted() using the held item's `tool` data and BLOCKS fields.
 export class BlockInteraction {
   #lookDir = new THREE.Vector3()
 
-  constructor(camera, world, player, scene) {
+  constructor(camera, world, player, scene, inventory) {
     this.camera = camera
     this.world = world
     this.player = player
+    this.inventory = inventory
     this.target = null
-    this.selectedIndex = 0
-    this.onSelectionChange = null // callback(blockDef) — HUD hook
 
     // Slightly oversized so the outline doesn't z-fight the block faces.
     const box = new THREE.BoxGeometry(1.002, 1.002, 1.002)
@@ -37,21 +36,11 @@ export class BlockInteraction {
       else if (e.button === 2) this.placeAtTargeted()
     })
     document.addEventListener('contextmenu', (e) => e.preventDefault())
-    document.addEventListener('keydown', (e) => {
-      const slot = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code)
-      if (slot !== -1 && slot < PLACEABLE_BLOCK_IDS.length) {
-        this.selectedIndex = slot
-        this.onSelectionChange?.(this.selectedBlock)
-      }
-    })
   }
 
+  // Block id the selected hotbar item places, or null (empty hand / tool).
   get selectedBlockId() {
-    return PLACEABLE_BLOCK_IDS[this.selectedIndex]
-  }
-
-  get selectedBlock() {
-    return BLOCKS[this.selectedBlockId]
+    return this.inventory.selectedItem?.blockId ?? null
   }
 
   // Re-raycast from the camera and move the highlight. Called every frame.
@@ -74,16 +63,23 @@ export class BlockInteraction {
     }
   }
 
-  // Break the currently targeted block. Instant in Phase 2; Phase 3+ layers
-  // tool/hardness gating and drops on top of this.
+  // Break the currently targeted block and pocket its drop. Instant for now;
+  // the combat/tools phase layers hardness and tool-tier gating on top.
   breakTargeted() {
     if (!this.target) return false
-    return this.world.setBlock(this.target.x, this.target.y, this.target.z, BLOCK_AIR)
+    const { x, y, z } = this.target
+    const broken = BLOCKS[this.world.blockAt(x, y, z)]
+    if (!this.world.setBlock(x, y, z, BLOCK_AIR)) return false
+    if (broken.drop) this.inventory.add(broken.drop, 1)
+    return true
   }
 
-  // Place the selected block against the targeted face.
+  // Place the selected block against the targeted face, consuming one item
+  // from the active hotbar stack.
   placeAtTargeted() {
     if (!this.target) return false
+    const blockId = this.selectedBlockId
+    if (blockId === null) return false
     const [nx, ny, nz] = this.target.normal
     const x = this.target.x + nx
     const y = this.target.y + ny
@@ -91,7 +87,9 @@ export class BlockInteraction {
     if (y < 0 || y >= WORLD.chunkHeight) return false
     if (this.world.blockAt(x, y, z) !== BLOCK_AIR) return false
     if (this.#overlapsPlayer(x, y, z)) return false
-    return this.world.setBlock(x, y, z, this.selectedBlockId)
+    if (!this.world.setBlock(x, y, z, blockId)) return false
+    this.inventory.consumeSelected()
+    return true
   }
 
   // Don't place a block into the cells the player's body occupies.

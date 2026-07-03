@@ -30,6 +30,10 @@ export class PlayerControls {
     this.controls.lock()
   }
 
+  unlock() {
+    this.controls.unlock()
+  }
+
   addEventListener(type, listener) {
     this.controls.addEventListener(type, listener)
   }
