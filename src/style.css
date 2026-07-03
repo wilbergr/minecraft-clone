@@ -68,19 +68,190 @@ body {
   font-size: 0.9em;
 }
 
-#hud {
+/* --- Hotbar + item slots ------------------------------------------------ */
+
+#hotbar {
   position: absolute;
-  bottom: 1rem;
+  bottom: 0.75rem;
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.35rem 0.9rem;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
   border-radius: 8px;
   background: rgba(11, 14, 20, 0.55);
-  color: #eef2f7;
-  font-size: 0.9rem;
   user-select: none;
   pointer-events: none;
   z-index: 5;
+}
+
+.slot {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border: 2px solid rgba(238, 242, 247, 0.25);
+  border-radius: 6px;
+  background: rgba(11, 14, 20, 0.45);
+}
+
+.slot.selected {
+  border-color: #eef2f7;
+  background: rgba(238, 242, 247, 0.12);
+}
+
+.slot.pending {
+  border-color: #f5c542;
+}
+
+.slot-icon {
+  position: absolute;
+  inset: 7px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.slot-count {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  color: #eef2f7;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* --- Inventory / crafting screen ----------------------------------------- */
+
+#inventory-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.65);
+  z-index: 8;
+}
+
+#inventory-screen.hidden {
+  display: none;
+}
+
+#inventory-panel {
+  color: #eef2f7;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+#inventory-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+#inventory-columns {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 46px);
+  gap: 4px;
+}
+
+.inv-grid .slot {
+  cursor: pointer;
+}
+
+.inv-hotbar-row {
+  margin-top: 10px;
+}
+
+.inv-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  color: #9aa7b8;
+  max-width: 450px;
+}
+
+#crafting-panel {
+  min-width: 280px;
+}
+
+#crafting-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+#recipe-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.recipe {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 3px 6px 3px 3px;
+  border-radius: 6px;
+  background: rgba(238, 242, 247, 0.05);
+}
+
+.recipe .slot {
+  flex: none;
+  width: 38px;
+  height: 38px;
+}
+
+.recipe-info {
+  flex: 1;
+}
+
+.recipe-name {
+  font-size: 0.85rem;
+}
+
+.recipe-needs {
+  font-size: 0.72rem;
+  color: #9aa7b8;
+}
+
+.recipe-needs .missing {
+  color: #e07a6b;
+}
+
+.craft-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  color: #eef2f7;
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid rgba(238, 242, 247, 0.3);
+  background: rgba(238, 242, 247, 0.12);
+  cursor: pointer;
+}
+
+.craft-btn:hover:not(:disabled) {
+  background: rgba(238, 242, 247, 0.25);
+}
+
+.craft-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 #crosshair {

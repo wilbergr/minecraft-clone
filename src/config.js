@@ -23,7 +23,23 @@ export const WORLD = {
     gain: 0.5, // amplitude multiplier per octave
     dirtDepth: 3, // dirt layers under the grass surface before stone
     sandLevel: 11, // surfaces at or below this height are sand ("beaches")
+    trees: {
+      chance: 0.012, // per grass column probability of spawning a tree
+      minTrunk: 4, // trunk height range, in blocks
+      maxTrunk: 6,
+    },
+    ironOre: {
+      chance: 0.05, // per stone block probability of being iron ore
+      maxY: 12, // ore only spawns at or below this height
+    },
   },
+}
+
+// Inventory / hotbar layout (Phase 3).
+export const INVENTORY = {
+  hotbarSlots: 9, // slots in the always-visible hotbar (keys 1-9)
+  mainRows: 3, // rows of 9 extra slots shown in the inventory screen
+  maxStack: 64, // default max items per stack (tools override to 1)
 }
 
 // Player movement tunables.
