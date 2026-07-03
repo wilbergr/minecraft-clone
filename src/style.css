@@ -111,6 +111,7 @@ body.touch-mode .desktop-only {
 }
 
 #help-btn,
+#mute-btn,
 #reset-world-btn {
   font: inherit;
   font-size: 0.85rem;
@@ -123,6 +124,7 @@ body.touch-mode .desktop-only {
 }
 
 #help-btn:hover,
+#mute-btn:hover,
 #reset-world-btn:hover {
   color: #eef2f7;
   border-color: rgba(238, 242, 247, 0.5);

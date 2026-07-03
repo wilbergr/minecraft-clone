@@ -1,4 +1,4 @@
-import { COMBAT, PHYSICS } from '../config.js'
+import { AUDIO, COMBAT, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
 
 // Owns the live mob population: periodically tops it up to COMBAT.mobs.maxCount
@@ -8,12 +8,14 @@ import { Zombie } from './Zombie.js'
 // Mob state is intentionally not persisted (Phase 5 note): mobs are ambient
 // spawns, so a reload simply starts with a fresh population.
 export class MobManager {
-  constructor(scene, world) {
+  constructor(scene, world, fx = {}) {
     this.scene = scene
     this.world = world
+    this.fx = fx
     this.mobs = []
     // Full interval before the first spawn — no zombie the instant you click in.
     this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
+    this.groanTimer = AUDIO.zombie.groanIntervalSeconds / 2
     this.onMobKilled = null // callback(mob) — Combat awards the drop
   }
 
@@ -31,6 +33,17 @@ export class MobManager {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
       if (this.mobs.length < COMBAT.mobs.maxCount) this.#spawnNear(playerPos)
+    }
+
+    // Ambient groans (Phase 9): every so often one random live mob groans,
+    // volume fading with distance, so the horde is audible offscreen. Lives
+    // here (not in Zombie) so mob AI stays sound-agnostic.
+    this.groanTimer -= delta
+    if (this.groanTimer <= 0 && this.mobs.length > 0) {
+      this.groanTimer = AUDIO.zombie.groanIntervalSeconds * (0.6 + Math.random() * 0.8)
+      const mob = this.mobs[Math.floor(Math.random() * this.mobs.length)]
+      const gain = 1 - mob.group.position.distanceTo(playerPos) / AUDIO.zombie.hearRadius
+      if (gain > 0) this.fx.sounds?.play('zombie', { gain })
     }
 
     for (let i = this.mobs.length - 1; i >= 0; i--) {

@@ -136,6 +136,48 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   placement into the player's exact AABB is refused
   (`BlockInteraction.#overlapsPlayer`).
 
+## Feedback, sound & equip-and-use (Phase 9)
+
+- Mining is hold-to-break: `BlockInteraction` accumulates `progress += delta
+  / breakTime` (breakTime = block `hardness` ÷ matching-tool tier factor) and
+  breaks at 1.0, with canvas-generated crack stages (`src/fx/CrackOverlay.js`)
+  tracking progress. Progress resets on target/hotbar-slot change or
+  `FEEDBACK.mining.tapGraceSeconds` after release. `breakTargeted()` is still
+  the tap/test seam — one call now applies `tapSeconds` of progress, and taps
+  accumulate within the grace window (soft blocks: 1 tap; hard: several).
+- Right click / touch ▦ route through `interaction.useSelected()` — the
+  "use" verb: items with `consumable: true` (items.js) are eaten (token
+  `FEEDBACK.consume.healAmount` heal — placeholder until hunger exists),
+  otherwise the held block places via `placeAtTargeted()` (unchanged seam).
+- The `fx` object (`{ sounds, particles, drops, viewmodel, health }`, built
+  in main.js) is how game systems reach the feedback layer. Every hook is
+  optional-chained, so systems still run bare (tests, future headless tools).
+- Sound is 100% synthesized WebAudio (`src/audio/SoundEngine.js`) — zero
+  audio assets. Voices are keyed by name + the per-block `material` field in
+  blocks.js (dirt/stone/wood/sand); every play detunes ±AUDIO.pitchVariance.
+  The AudioContext is created lazily on the first user gesture
+  (`sounds.unlock()`, wired in main.js) — `play()` no-ops before that. Mute
+  (M key / overlay "Sound" button) persists in its own localStorage key, NOT
+  the save. Headless: AudioContext runs fine in headless Chrome; assert on
+  `__mc.sounds.stats.byName` play counters, not audibility.
+- Particles: `src/fx/Particles.js` is one pooled `THREE.Points` — a single
+  draw call however many bursts are live. `burst(x, y, z, colorHex, count)`
+  is generic; reuse it for new effects instead of adding mesh systems.
+- Viewmodel (`src/fx/Viewmodel.js`): a camera-child group (main.js does
+  `scene.add(camera)` — removing that makes it vanish), materials render
+  depthTest-off at renderOrder 100 so it never clips terrain. `swing()`
+  retriggers only after the previous arc finishes, so calling it every frame
+  while mining yields a continuous chop; `use()` is the place/eat pulse.
+- Ground drops (`src/fx/GroundItems.js`): block breaks and mob kills spawn
+  drop entities that pop on a SELF-CONTAINED arc (own gravity constant — do
+  not couple to the physics pass) and vacuum to the player inside
+  `FEEDBACK.drops.magnetRadius`. Inventory-full pickups retry on a backoff;
+  the entity list is capped (oldest despawns first).
+- Zombie audio hooks live OUTSIDE Zombie.js (idle groans in
+  `MobManager.update`, attack growl in Combat's damagePlayer wrapper) so mob
+  AI stays sound-agnostic; footsteps watch camera movement
+  (`src/audio/Footsteps.js`) without touching PlayerControls.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

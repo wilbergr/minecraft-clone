@@ -10,13 +10,14 @@ import { MobManager } from './MobManager.js'
 export class Combat {
   #dir = new THREE.Vector3()
 
-  constructor(camera, world, player, inventory, interaction, scene) {
+  constructor(camera, world, player, inventory, interaction, scene, fx = {}) {
     this.camera = camera
     this.world = world
     this.player = player
     this.inventory = inventory
+    this.fx = fx // Phase 9 feedback hooks (sounds, drops) — all optional
     this.health = new Health()
-    this.mobs = new MobManager(scene, world)
+    this.mobs = new MobManager(scene, world, fx)
     this.raycaster = new THREE.Raycaster()
     this.raycaster.far = COMBAT.attack.reach
     this.nextAttackAt = 0
@@ -25,8 +26,13 @@ export class Combat {
     // breaking the targeted block when this returns false.
     interaction.attackHook = () => this.tryAttack()
 
-    // Kill drops go straight into the inventory (no ground items yet).
-    this.mobs.onMobKilled = (mob) => this.inventory.add(mob.cfg.drop, 1)
+    // Kill drops pop out as ground items (Phase 9); straight to the
+    // inventory only when running without the fx layer.
+    this.mobs.onMobKilled = (mob) => {
+      const p = mob.group.position
+      if (this.fx.drops) this.fx.drops.spawn(p.x, p.y + 1, p.z, mob.cfg.drop)
+      else this.inventory.add(mob.cfg.drop, 1)
+    }
 
     // Fall damage (Phase 8): landings past the grace cost health per block.
     player.body.onLand = (blocksFallen) => {
@@ -46,9 +52,10 @@ export class Combat {
       return
     }
     this.health.update(delta)
-    this.mobs.update(delta, this.camera.position, (amount) =>
-      this.health.damage(amount),
-    )
+    this.mobs.update(delta, this.camera.position, (amount) => {
+      this.fx.sounds?.play('zombieAttack')
+      this.health.damage(amount)
+    })
   }
 
   // Swing at whatever mob the crosshair is on. Returns true when a mob was
@@ -69,6 +76,7 @@ export class Combat {
     }
 
     this.nextAttackAt = now + COMBAT.attack.cooldownSeconds
+    this.fx.sounds?.play('hit')
     const knockDir = this.#dir.clone().setY(0).normalize()
     this.mobs.hit(hit.object.userData.mob, this.#attackDamage(), knockDir)
     this.inventory.damageSelected() // swinging any tool costs a use
