@@ -100,9 +100,24 @@ export const BLOCKS = {
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 2 }, // needs stone pickaxe or better
   },
+  9: {
+    id: 9,
+    name: 'Water',
+    solid: false, // walked (swum) through: no collision, no raycast target
+    liquid: true, // physics switches to WATER.physics while submerged in it
+    color: { top: 0x3d7fdc, side: 0x2a6fd4, bottom: 0x2a6fd4 },
+    drop: null, // can't be mined (raycast skips non-solid blocks anyway)
+  },
 }
+
+export const BLOCK_WATER = 9
 
 export function isSolid(id) {
   const block = BLOCKS[id]
   return block ? block.solid : false
+}
+
+export function isLiquid(id) {
+  const block = BLOCKS[id]
+  return block ? block.liquid === true : false
 }

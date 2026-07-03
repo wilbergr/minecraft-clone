@@ -234,6 +234,66 @@ export const FEEDBACK = {
   },
 }
 
+// Day/night cycle (Phase 10). `time` is the fraction of a full cycle:
+// 0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight. The clock only
+// advances while the player is in control (menus pause time like they pause
+// physics) and persists in the save (SaveManager.attachDayNight).
+export const DAYNIGHT = {
+  dayLengthSeconds: 600, // full day+night cycle (Minecraft's is 20 min)
+  startTime: 0.1, // fresh worlds begin mid-morning
+  // Hostile spawns are gated to this window (see MobManager); it sits just
+  // inside the dusk/dawn sky transitions so mobs arrive once it's dark.
+  night: { start: 0.54, end: 0.96 },
+  // Sky keyframes: [time, skyColor, sunIntensity, ambientIntensity, lightColor].
+  // scene.background, fog color, and both lights lerp between neighbors; the
+  // first and last entries match so the cycle wraps seamlessly.
+  keyframes: [
+    [0.0, 0xff9e63, 0.5, 0.45, 0xffc48a], // sunrise
+    [0.08, 0x87ceeb, 1.2, 0.6, 0xffffff], // morning
+    [0.42, 0x87ceeb, 1.2, 0.6, 0xffffff], // afternoon
+    [0.5, 0xff8a50, 0.45, 0.4, 0xffb27a], // sunset
+    [0.58, 0x0b1026, 0.12, 0.22, 0x8899ff], // dusk — moonlight takes over
+    [0.92, 0x0b1026, 0.12, 0.22, 0x8899ff], // deep night
+    [1.0, 0xff9e63, 0.5, 0.45, 0xffc48a], // wraps back to sunrise
+  ],
+  sun: { distance: 150, size: 30, color: 0xffdd88 }, // billboard sprite
+  moon: { distance: 150, size: 20, color: 0xdfe8ff },
+  hostiles: {
+    // Night population cap. Day spawning is off entirely; keep this modest —
+    // each mob body part is a draw call (see COMBAT.mobs.maxCount).
+    nightMaxCount: 6,
+    burnStaggerSeconds: 0.4, // dawn: one zombie ignites this often
+    burnColor: 0xff8c3a, // ember-orange particle burst on each burn
+    burnParticles: 22,
+  },
+  clouds: {
+    count: 12, // quads per tile (geometry repeats 3x3 tiles — one draw call)
+    height: 60, // cloud layer altitude (above chunkHeight, in blocks)
+    tile: 220, // pattern repeat size, blocks
+    speed: 1.5, // eastward drift, blocks/sec
+    opacity: 0.5,
+  },
+}
+
+// Sea water (Phase 10). Generation fills air at y <= level with water — a
+// pure function of (seed, x, y, z) like all terrain, so border meshing and
+// unloaded-chunk queries stay correct. Water is not solid: collision,
+// raycasts, and mining ignore it; physics switches to the constants below
+// while a body's midsection is submerged.
+export const WATER = {
+  level: 9, // water surface height; keep below WORLD.terrain.sandLevel so beaches ring the sea
+  opacity: 0.62, // translucent chunk water pass (see Chunk buildMesh)
+  surfaceDrop: 0.12, // open-air water tops render this far below the block top
+  physics: {
+    gravity: 6, // gentle sink, blocks/s²
+    sinkSpeed: 3.2, // max sink rate (water "terminal velocity")
+    drag: 4, // vertical velocity decay per second — kills dive momentum
+    swimUpSpeed: 4.2, // held Space rises at this rate, blocks/s
+    breachBoost: 0.85, // jump-out-of-water impulse, fraction of jumpVelocity
+    moveMultiplier: 0.55, // horizontal speed factor while submerged
+  },
+}
+
 // Sound layer (Phase 9): everything is synthesized WebAudio (noise bursts and
 // oscillator blips — no bundled samples), created lazily after the first user
 // gesture. Per-block-material voices come from BLOCKS[id].material; the mute

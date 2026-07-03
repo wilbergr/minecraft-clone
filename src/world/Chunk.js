@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, isSolid } from './blocks.js'
+import { WATER, WORLD } from '../config.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
 
 // One face per entry: outward direction, the 4 quad corners (in block-local
 // 0..1 coords, wound so triangles (0,1,2)+(2,1,3) face outward), and a baked
@@ -51,6 +51,7 @@ export class Chunk {
     this.height = WORLD.chunkHeight
     this.blocks = new Uint8Array(this.size * this.size * this.height)
     this.mesh = null
+    this.waterMesh = null // translucent water pass, a child of `mesh` (Phase 10)
   }
 
   index(x, y, z) {
@@ -68,9 +69,9 @@ export class Chunk {
     this.blocks[this.index(x, y, z)] = id
   }
 
-  // Fill block data from the world's deterministic generator (terrain, then
-  // trees), then apply any recorded edits (so player changes survive chunk
-  // unload/reload).
+  // Fill block data from the world's deterministic generator (terrain, sea
+  // water, then trees), then apply any recorded edits (so player changes
+  // survive chunk unload/reload).
   generate(edits) {
     const baseX = this.cx * this.size
     const baseZ = this.cz * this.size
@@ -81,6 +82,12 @@ export class Chunk {
           this.blocks[this.index(x, y, z)] = this.world.terrainBlock(
             baseX + x, y, baseZ + z, h,
           )
+        }
+        // Sea water (Phase 10): air below the waterline fills with water.
+        // Mirrors World.blockAt's unloaded-chunk answer, keeping generation a
+        // pure function of (seed, x, y, z) so border meshing stays correct.
+        for (let y = h; y <= WATER.level; y++) {
+          this.blocks[this.index(x, y, z)] = BLOCK_WATER
         }
       }
     }
@@ -140,7 +147,7 @@ export class Chunk {
       for (let z = 0; z < this.size; z++) {
         for (let y = 0; y < this.height; y++) {
           const id = this.blocks[this.index(x, y, z)]
-          if (id === BLOCK_AIR) continue
+          if (id === BLOCK_AIR || id === BLOCK_WATER) continue // water has its own pass
           const block = BLOCKS[id]
 
           for (const face of FACES) {
@@ -177,7 +184,76 @@ export class Chunk {
       this.mesh = new THREE.Mesh(geometry, material)
       this.mesh.position.set(baseX, 0, baseZ)
     }
+    this.#buildWaterMesh(baseX, baseZ)
     return this.mesh
+  }
+
+  // Second render pass (Phase 10): all water faces in one translucent
+  // double-sided mesh, parented to the solid mesh so scene add/remove and
+  // positioning stay a single-object affair. Water culls only against itself
+  // and solids — faces meeting air are drawn (that's the sea surface and any
+  // exposed sides), and open-air tops sit WATER.surfaceDrop below the block
+  // top so the surface reads as a waterline rather than a full cube.
+  #buildWaterMesh(baseX, baseZ) {
+    const positions = []
+    const normals = []
+    const colors = []
+    const indices = []
+    const color = new THREE.Color()
+    const water = BLOCKS[BLOCK_WATER]
+
+    for (let x = 0; x < this.size; x++) {
+      for (let z = 0; z < this.size; z++) {
+        for (let y = 0; y < this.height; y++) {
+          if (this.blocks[this.index(x, y, z)] !== BLOCK_WATER) continue
+          const open = // air (not water) directly above: this is a surface block
+            this.#neighborId(x, y + 1, z, baseX, baseZ) === BLOCK_AIR
+          for (const face of FACES) {
+            const [dx, dy, dz] = face.dir
+            if (dy === -1) continue // seabed hides water undersides
+            const neighbor = this.#neighborId(x + dx, y + dy, z + dz, baseX, baseZ)
+            if (neighbor === BLOCK_WATER || isSolid(neighbor)) continue
+
+            const faceColor = dy === 1 ? water.color.top : water.color.side
+            color.set(faceColor).multiplyScalar(face.shade)
+            const ndx = positions.length / 3
+            for (const [ox, oy, oz] of face.corners) {
+              const top = oy === 1 && open ? 1 - WATER.surfaceDrop : oy
+              positions.push(x + ox, y + top, z + oz)
+              normals.push(dx, dy, dz)
+              colors.push(color.r, color.g, color.b)
+            }
+            indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
+          }
+        }
+      }
+    }
+
+    if (positions.length === 0 && !this.waterMesh) return
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    geometry.setIndex(indices)
+
+    if (this.waterMesh) {
+      this.waterMesh.geometry.dispose()
+      this.waterMesh.geometry = geometry
+    } else {
+      this.waterMesh = new THREE.Mesh(geometry, this.world.waterMaterial)
+      this.mesh.add(this.waterMesh) // local coords match the parent's
+    }
+  }
+
+  // Neighbor block id for the water pass (the solid pass only needs
+  // solidity). Below the world reads as stone so sea bottoms stay closed.
+  #neighborId(x, y, z, baseX, baseZ) {
+    if (y < 0) return 3
+    if (y >= this.height) return BLOCK_AIR
+    if (x >= 0 && x < this.size && z >= 0 && z < this.size) {
+      return this.blocks[this.index(x, y, z)]
+    }
+    return this.world.blockAt(baseX + x, y, baseZ + z)
   }
 
   #neighborSolid(x, y, z, baseX, baseZ) {
@@ -191,6 +267,8 @@ export class Chunk {
 
   dispose() {
     if (this.mesh) {
+      this.waterMesh?.geometry.dispose()
+      this.waterMesh = null
       this.mesh.geometry.dispose()
       this.mesh = null
     }

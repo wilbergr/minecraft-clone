@@ -23,6 +23,9 @@ import { createFootsteps } from './audio/Footsteps.js'
 import { Particles } from './fx/Particles.js'
 import { Viewmodel } from './fx/Viewmodel.js'
 import { GroundItems } from './fx/GroundItems.js'
+import { DayNight } from './sky/DayNight.js'
+import { Clouds } from './sky/Clouds.js'
+import { isLiquid } from './world/blocks.js'
 
 const app = document.getElementById('app')
 
@@ -46,6 +49,11 @@ const world = new World(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
 
+// Sky layer (Phase 10): the day/night clock drives lights, sky/fog color,
+// and the sun/moon billboards; clouds drift as one merged mesh.
+const daynight = new DayNight(scene, world, camera)
+const clouds = new Clouds(scene)
+
 // Feedback layer (Phase 9): synthesized sound, break particles, ground item
 // drops, and the held-item viewmodel, bundled into the `fx` object the game
 // systems hook into (every hook optional).
@@ -59,6 +67,7 @@ const interaction = new BlockInteraction(camera, world, player, scene, inventory
 
 const combat = new Combat(camera, world, player, inventory, interaction, scene, fx)
 fx.health = combat.health
+combat.mobs.daynight = daynight // hostile spawns are night-gated (Phase 10)
 fx.viewmodel = new Viewmodel(camera, inventory, player)
 const hunt = new TreasureHunt(world, scene)
 
@@ -68,6 +77,7 @@ const hunt = new TreasureHunt(world, scene)
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
 save.attachTreasure(hunt)
+save.attachDayNight(daynight)
 
 const screen = new InventoryScreen(inventory, player)
 const reveal = bindTreasureReveal(hunt, player)
@@ -125,6 +135,16 @@ window.addEventListener('resize', () => {
 
 const clock = new THREE.Clock()
 
+// Blue full-screen wash while the camera is underwater (Phase 10).
+const waterTint = document.getElementById('water-tint')
+const updateWaterTint = () => {
+  const p = camera.position
+  const submerged = isLiquid(
+    world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)),
+  )
+  waterTint.classList.toggle('hidden', !submerged)
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
@@ -136,6 +156,11 @@ renderer.setAnimationLoop(() => {
   particles.update(delta)
   drops.update(delta, camera.position)
   fx.viewmodel.update(delta)
+  // The sky keeps rendering behind menus, but game time only passes while
+  // the player is in control — matching the physics/combat pause.
+  daynight.update(player.isLocked ? delta : 0)
+  clouds.update(delta, camera.position)
+  updateWaterTint()
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)
@@ -163,4 +188,6 @@ window.__mc = {
   particles,
   drops,
   viewmodel: fx.viewmodel,
+  daynight,
+  clouds,
 }
