@@ -5,9 +5,11 @@ import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { Inventory } from './inventory/Inventory.js'
 import { Combat } from './combat/Combat.js'
+import { SaveManager } from './save/SaveManager.js'
 import { bindOverlay } from './ui/overlay.js'
 import { bindHotbar } from './ui/hotbar.js'
 import { bindHud } from './ui/hud.js'
+import { bindResetButton } from './ui/resetButton.js'
 import { InventoryScreen } from './ui/inventoryScreen.js'
 
 const app = document.getElementById('app')
@@ -35,11 +37,18 @@ const interaction = new BlockInteraction(camera, world, player, scene, inventory
 
 const combat = new Combat(camera, world, player, inventory, interaction, scene)
 
+// Restore a saved game before anything renders: block edits must be in the
+// overlay before the first chunks generate, and the UI binders below pick up
+// the restored inventory/health through their initial renders.
+const save = new SaveManager({ world, player, inventory, health: combat.health })
+save.load()
+
 const screen = new InventoryScreen(inventory, player)
 // The death screen counts as open UI so "click to play" stays out of its way.
 const refreshOverlay = bindOverlay(player, () => screen.isOpen || combat.health.isDead)
 bindHotbar(inventory, player)
 bindHud(combat.health, () => combat.respawn())
+bindResetButton(save)
 // Closing the screen re-locks the pointer; give the lock a beat to land
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -59,6 +68,7 @@ renderer.setAnimationLoop(() => {
   player.update(delta)
   interaction.update()
   combat.update(delta)
+  save.update(delta)
   renderer.render(scene, camera)
 })
 
@@ -75,4 +85,5 @@ window.__mc = {
   combat,
   health: combat.health,
   mobs: combat.mobs,
+  save,
 }

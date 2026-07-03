@@ -94,6 +94,19 @@ export const COMBAT = {
   },
 }
 
+// Persistence (Phase 5): the whole game state lives in one versioned
+// localStorage key — see src/save/SaveManager.js for the schema.
+export const SAVE = {
+  storageKey: 'minecraft-clone-save',
+  schemaVersion: 1, // bump (and migrate in SaveManager.load) when the shape changes
+  autosaveSeconds: 5, // how often dirty state is flushed to localStorage
+  // localStorage holds ~5MB of UTF-16 per origin. Past this payload size the
+  // save is still attempted but a console warning fires (once), so a
+  // pathological number of block edits degrades gracefully instead of
+  // silently marching toward a thrown QuotaExceededError.
+  warnPayloadChars: 4_000_000,
+}
+
 // Rendering / atmosphere tunables.
 export const GRAPHICS = {
   skyColor: 0x87ceeb,
