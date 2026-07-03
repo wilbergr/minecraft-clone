@@ -72,6 +72,7 @@ export class PlayerControls {
     this.velocity.set(0, 0, 0)
     this.body.velocity.set(0, 0, 0)
     this.body.fallDistance = 0
+    this.body.grounded = false // until physics proves otherwise at the new spot
     this.body.position.set(x, y, z)
     this.#syncCamera(0)
   }

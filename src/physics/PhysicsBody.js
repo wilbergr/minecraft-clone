@@ -55,22 +55,27 @@ export class PhysicsBody {
       return
     }
 
+    // Vertical displacement uses the frame's AVERAGE velocity (exact for
+    // constant acceleration) — naive Euler would make jump height shrink
+    // with frame time, losing a third of the apex at the clamped 0.1s delta.
+    const vy0 = this.velocity.y
     this.velocity.y = Math.max(
-      this.velocity.y - PHYSICS.gravity * delta,
+      vy0 - PHYSICS.gravity * delta,
       -PHYSICS.terminalVelocity,
     )
+    let vyMove = (vy0 + this.velocity.y) / 2
     this.hitWall = false
 
     const v = this.velocity
-    const maxAxis = Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)) * delta
+    const maxAxis = Math.max(Math.abs(v.x), Math.abs(vyMove), Math.abs(v.z)) * delta
     const steps = Math.max(1, Math.ceil(maxAxis / MAX_SWEEP))
     const dt = delta / steps
     for (let i = 0; i < steps; i++) {
       // Velocity is re-read each sub-step: a clamp zeroes the axis, so later
-      // sub-steps stop pushing into the wall.
+      // sub-steps stop pushing into the wall (or floor).
       this.#sweepHorizontal('x', v.x * dt, sneak)
       this.#sweepHorizontal('z', v.z * dt, sneak)
-      this.#sweepVertical(v.y * dt)
+      if (this.#sweepVertical(vyMove * dt)) vyMove = 0
     }
   }
 
@@ -127,6 +132,7 @@ export class PhysicsBody {
     this.hitWall = true
   }
 
+  // Returns true when the move was clamped by a block.
   #sweepVertical(amount) {
     const pos = this.position
     if (amount > 0) {
@@ -135,6 +141,7 @@ export class PhysicsBody {
       if (this.#collides()) {
         pos.y = Math.floor(pos.y + this.height) - this.height - EPS
         this.velocity.y = 0
+        return true
       }
     } else if (amount < 0) {
       pos.y += amount
@@ -148,10 +155,11 @@ export class PhysicsBody {
         const fell = this.fallDistance
         this.fallDistance = 0
         if (fell > 0.01) this.onLand?.(fell)
-      } else {
-        this.grounded = false
+        return true
       }
+      this.grounded = false
     }
+    return false
   }
 
   // Would the box, moved by `amount` along `axis`, still have a solid block
