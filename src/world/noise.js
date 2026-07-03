@@ -37,6 +37,29 @@ export function hash3D(seed, x, y, z) {
   return hash2D(seed ^ Math.imul(y | 0, 0x9e3779b1), x, z)
 }
 
+// Returns noise3D(x, y, z) -> [0, 1), deterministic for a given seed.
+// Trilinearly-interpolated value noise over the hash3D lattice — cheap and
+// dependency-free, smooth enough for cave fields (Phase 11). Sample it at a
+// scaled-down frequency; single samples at integer coords are just hash3D.
+export function createValueNoise3D(seed) {
+  const smooth = (t) => t * t * (3 - 2 * t)
+  const lerp = (a, b, t) => a + (b - a) * t
+  return function noise3D(x, y, z) {
+    const xi = Math.floor(x)
+    const yi = Math.floor(y)
+    const zi = Math.floor(z)
+    const tx = smooth(x - xi)
+    const ty = smooth(y - yi)
+    const tz = smooth(z - zi)
+    const c = (dx, dy, dz) => hash3D(seed, xi + dx, yi + dy, zi + dz)
+    const x00 = lerp(c(0, 0, 0), c(1, 0, 0), tx)
+    const x10 = lerp(c(0, 1, 0), c(1, 1, 0), tx)
+    const x01 = lerp(c(0, 0, 1), c(1, 0, 1), tx)
+    const x11 = lerp(c(0, 1, 1), c(1, 1, 1), tx)
+    return lerp(lerp(x00, x10, ty), lerp(x01, x11, ty), tz)
+  }
+}
+
 // Returns noise2D(x, y) -> [-1, 1], deterministic for a given seed.
 export function createNoise2D(seed) {
   const rand = mulberry32(seed)

@@ -122,13 +122,59 @@ export const BLOCKS = {
     // BlockInteraction.useBlockHook (opens the smelting UI) instead of placing.
     interactive: true,
   },
+  11: {
+    id: 11,
+    name: 'Coal Ore',
+    solid: true,
+    // Stone flecked darker — soot-black seams.
+    color: { top: 0x6e6e6e, side: 0x606060, bottom: 0x555555 },
+    drop: 'coal', // drops the fuel item directly, like the original
+    hardness: 2.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 }, // any pickaxe
+  },
+  12: {
+    id: 12,
+    name: 'Gold Ore',
+    solid: true,
+    // Stone flecked warm yellow — the deep-tier prize.
+    color: { top: 0xc9b458, side: 0xb8a24b, bottom: 0xa38f3e },
+    drop: 'gold_ore',
+    hardness: 3.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 3 }, // needs an iron pickaxe
+  },
+  13: {
+    id: 13,
+    name: 'Torch',
+    solid: false, // walk-through — it doesn't fill its cell
+    // `targetable` (Phase 11) lets the raycast stop on a non-solid block so
+    // torches can be aimed at and broken; `shape: 'torch'` makes the mesher
+    // emit a small post instead of a full cube, and `emissive` exempts it
+    // from depth darkening (the torch is the thing making the light).
+    targetable: true,
+    shape: 'torch',
+    emissive: true,
+    color: { top: 0xffe9a8, side: 0xc98d4b, bottom: 0x8a5f3c },
+    drop: 'torch',
+    hardness: 0.1,
+    material: 'wood',
+  },
 }
 
 export const BLOCK_WATER = 9
+export const BLOCK_TORCH = 13
 
 export function isSolid(id) {
   const block = BLOCKS[id]
   return block ? block.solid : false
+}
+
+// Solid blocks plus non-solid ones flagged `targetable` (torches): what the
+// block-interaction raycast is allowed to stop on (Phase 11).
+export function isTargetable(id) {
+  const block = BLOCKS[id]
+  return block ? block.solid || block.targetable === true : false
 }
 
 export function isLiquid(id) {

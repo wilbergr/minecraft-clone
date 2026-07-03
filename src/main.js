@@ -23,6 +23,7 @@ import { createFootsteps } from './audio/Footsteps.js'
 import { Particles } from './fx/Particles.js'
 import { Viewmodel } from './fx/Viewmodel.js'
 import { GroundItems } from './fx/GroundItems.js'
+import { TorchLights } from './fx/TorchLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
 import { isLiquid } from './world/blocks.js'
@@ -57,6 +58,10 @@ const inventory = new Inventory()
 // and the sun/moon billboards; clouds drift as one merged mesh.
 const daynight = new DayNight(scene, world, camera)
 const clouds = new Clouds(scene)
+
+// Torch lighting (Phase 11): a fixed point-light pool tracks the torches
+// nearest the camera — see src/fx/TorchLights.js.
+const torchLights = new TorchLights(scene, world)
 
 // Feedback layer (Phase 9): synthesized sound, break particles, ground item
 // drops, and the held-item viewmodel, bundled into the `fx` object the game
@@ -204,6 +209,7 @@ renderer.setAnimationLoop(() => {
   // the player is in control — matching the physics/combat pause.
   daynight.update(player.isLocked ? delta : 0)
   clouds.update(delta, camera.position)
+  torchLights.update(camera.position)
   updateWaterTint()
   updateFootsteps()
   updateTreasureHud()
@@ -237,4 +243,5 @@ window.__mc = {
   hunger,
   furnaces,
   furnaceScreen,
+  torchLights,
 }

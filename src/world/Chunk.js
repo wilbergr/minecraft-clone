@@ -1,6 +1,15 @@
 import * as THREE from 'three'
-import { WATER, WORLD } from '../config.js'
+import { LIGHTING, WATER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
+
+// Sky-light factor [minSkyLight, 1] for an air cell `depth` blocks below its
+// column's top solid block (<= 0 means open sky). The Phase 11 budget depth
+// lighting: multiplied into vertex colors at mesh time — no light propagation.
+export function skyFactor(depth) {
+  const { falloffBlocks, minSkyLight } = LIGHTING.depth
+  if (depth <= 0) return 1
+  return Math.max(minSkyLight, 1 - depth / falloffBlocks)
+}
 
 // One face per entry: outward direction, the 4 quad corners (in block-local
 // 0..1 coords, wound so triangles (0,1,2)+(2,1,3) face outward), and a baked
@@ -134,6 +143,12 @@ export class Chunk {
   // cross the chunk border go through the world, which answers from the
   // adjacent chunk if loaded or from the deterministic generator if not —
   // border faces are correct without forcing neighbor chunks to exist.
+  //
+  // Depth lighting (Phase 11): every face color is multiplied by skyFactor()
+  // of the air cell the face is exposed to — its depth below that column's
+  // top solid block — so cave interiors go dark while open shafts dug from
+  // the surface stay lit. Column tops are cached per build (the chunk's own
+  // 16x16 plus the 1-block border ring, answered through the world).
   buildMesh(material) {
     const positions = []
     const normals = []
@@ -142,6 +157,7 @@ export class Chunk {
     const color = new THREE.Color()
     const baseX = this.cx * this.size
     const baseZ = this.cz * this.size
+    const colTops = new Array((this.size + 2) * (this.size + 2))
 
     for (let x = 0; x < this.size; x++) {
       for (let z = 0; z < this.size; z++) {
@@ -149,6 +165,10 @@ export class Chunk {
           const id = this.blocks[this.index(x, y, z)]
           if (id === BLOCK_AIR || id === BLOCK_WATER) continue // water has its own pass
           const block = BLOCKS[id]
+          if (block.shape === 'torch') {
+            this.#emitTorch(positions, normals, colors, indices, x, y, z, block, color)
+            continue
+          }
 
           for (const face of FACES) {
             const [dx, dy, dz] = face.dir
@@ -158,6 +178,8 @@ export class Chunk {
             const faceColor =
               dy === 1 ? block.color.top : dy === -1 ? block.color.bottom : block.color.side
             color.set(faceColor).multiplyScalar(face.shade)
+            const top = this.#colTop(x + dx, z + dz, baseX, baseZ, colTops)
+            color.multiplyScalar(skyFactor(top - (y + dy)))
 
             const ndx = positions.length / 3
             for (const [ox, oy, oz] of face.corners) {
@@ -186,6 +208,54 @@ export class Chunk {
     }
     this.#buildWaterMesh(baseX, baseZ)
     return this.mesh
+  }
+
+  // y of the highest solid block in the column at local (x, z), cached per
+  // mesh build. Columns inside the chunk scan live block data; the 1-block
+  // border ring asks the world (loaded neighbor or pure generator).
+  #colTop(x, z, baseX, baseZ, cache) {
+    const k = (x + 1) * (this.size + 2) + (z + 1)
+    let top = cache[k]
+    if (top === undefined) {
+      if (x >= 0 && x < this.size && z >= 0 && z < this.size) {
+        top = -1
+        for (let y = this.height - 1; y >= 0; y--) {
+          if (isSolid(this.blocks[this.index(x, y, z)])) {
+            top = y
+            break
+          }
+        }
+      } else {
+        top = this.world.topSolidY(baseX + x, baseZ + z)
+      }
+      cache[k] = top
+    }
+    return top
+  }
+
+  // Torches render as a small post (all 6 faces of a slim box), not a full
+  // cube: they don't fill their cell, so neighbor culling doesn't apply, and
+  // being `emissive` they skip depth darkening — the torch is the light.
+  #emitTorch(positions, normals, colors, indices, x, y, z, block, color) {
+    const w = 0.09 // post half-width, blocks
+    const h = 0.7 // post height, blocks
+    for (const face of FACES) {
+      const [dx, dy, dz] = face.dir
+      const faceColor =
+        dy === 1 ? block.color.top : dy === -1 ? block.color.bottom : block.color.side
+      color.set(faceColor).multiplyScalar(face.shade)
+      const ndx = positions.length / 3
+      for (const [ox, oy, oz] of face.corners) {
+        positions.push(
+          x + 0.5 + (ox - 0.5) * w * 2,
+          y + oy * h,
+          z + 0.5 + (oz - 0.5) * w * 2,
+        )
+        normals.push(dx, dy, dz)
+        colors.push(color.r, color.g, color.b)
+      }
+      indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
+    }
   }
 
   // Second render pass (Phase 10): all water faces in one translucent
