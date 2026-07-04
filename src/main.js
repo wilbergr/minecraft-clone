@@ -20,6 +20,8 @@ import { bindQuestLog } from './ui/questLog.js'
 import { bindDropKeys, bindBackdropDrop } from './ui/dropKeys.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
+import { bindChallengeReveal } from './ui/challengeReveal.js'
+import { bindBossHud } from './ui/bossHud.js'
 import { bindHelp } from './ui/help.js'
 import { bindMuteButton } from './ui/muteButton.js'
 import { SoundEngine } from './audio/SoundEngine.js'
@@ -164,6 +166,39 @@ challenge.onSiegeWon = (pos) => {
   sounds.play('pickup')
   particles.burst(pos.x, pos.y + 2, pos.z, CHALLENGE.siege.clearedBeamColor, 80)
 }
+// Stage 4 boss wiring: the fight runner's live deps (the mobs.daynight
+// pattern) plus its fx. onBossEvent is deliberately generic — the future
+// guidance layer (Herald) will observe these same events; here they only
+// drive sound/particles.
+challenge.bossFight.mobs = combat.mobs
+challenge.bossFight.health = combat.health
+challenge.bossFight.player = player
+challenge.bossFight.onBossEvent = (type, data) => {
+  if (type === 'rumble') {
+    sounds.play('rumble')
+    particles.burst(data.position.x, data.position.y + 1, data.position.z, 0xffd75e, 60)
+  } else if (type === 'rise' || type === 'leash') {
+    sounds.play('roar')
+    if (data.position) {
+      particles.burst(data.position.x, data.position.y + 1.5, data.position.z, 0x9aa4b8, 60)
+    }
+  } else if (type === 'phase') {
+    sounds.play('roar')
+    particles.burst(data.position.x, data.position.y + 2, data.position.z, 0xffffff, 80)
+  } else if (type === 'slam') {
+    sounds.play('explosion', { gain: 0.4 })
+    particles.burst(data.position.x, data.position.y + 0.2, data.position.z, 0xbcc4d4, 40)
+  } else if (type === 'stagger') {
+    sounds.play('arrowHit')
+    particles.burst(data.position.x, data.position.y + 2.2, data.position.z, 0xffd75e, 30)
+  }
+}
+// Victory: crown-nova + roar; the reveal modal opens via challenge.onComplete.
+challenge.onBossDefeated = (pos) => {
+  sounds.play('roar')
+  const nova = CHALLENGE.boss.defeatNova
+  particles.burst(pos.x, pos.y + 1.5, pos.z, nova.color, nova.particles)
+}
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
 interaction.useItemHook = (item) => {
@@ -212,13 +247,16 @@ combat.mobs.onBlocksExploded = (cells) => {
   for (const c of cells) blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
 }
 const reveal = bindTreasureReveal(hunt, player)
+const challengeReveal = bindChallengeReveal(challenge, player)
+bindBossHud(challenge.bossFight)
 const help = bindHelp(player)
-// The death screen, treasure reveal, furnace, and help panel count as open UI
+// The death screen, reveals, furnace, and help panel count as open UI
 // so "click to play" stays out of their way.
 const anyUIOpen = () =>
   screen.isOpen ||
   combat.health.isDead ||
   reveal.isOpen ||
+  challengeReveal.isOpen ||
   help.isOpen ||
   furnaceScreen.isOpen ||
   chestScreen.isOpen
@@ -244,6 +282,7 @@ const updateTreasureHud = bindTreasureHud(hunt, challenge, camera)
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+challengeReveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 furnaceScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 chestScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -343,6 +382,8 @@ window.__mc = {
   save,
   hunt,
   challenge,
+  bossFight: challenge.bossFight,
+  challengeReveal,
   touch,
   help,
   sounds,

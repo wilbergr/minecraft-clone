@@ -2,6 +2,7 @@ import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
 import { Skeleton } from './Skeleton.js'
 import { Creeper } from './Creeper.js'
+import { Boss } from './Boss.js'
 import { PassiveMob } from './PassiveMob.js'
 
 // Owns the live mob population: periodically tops it up by spawning hostiles
@@ -25,6 +26,10 @@ const HOSTILES = {
   zombie: (world, x, z) => new Zombie(world, x, z),
   skeleton: (world, x, z, projectiles) => new Skeleton(world, x, z, projectiles),
   creeper: (world, x, z) => new Creeper(world, x, z),
+  // The Hollow King (King's Trial stage 4). In the table so spawnAt works
+  // (BossFight summons through it; tests too), but deliberately NOT in
+  // hostileWeights — the boss can never ambient-spawn.
+  boss: (world, x, z, projectiles) => new Boss(world, x, z, projectiles),
 }
 
 export class MobManager {
@@ -149,6 +154,61 @@ export class MobManager {
         this.#remove(i)
       }
     }
+
+    // Boss deferred actions (King's Trial stage 4): Summon and Quake mutate
+    // mob/world state, so the boss only flags them during its update — they
+    // resolve HERE, after the loop, exactly like the creeper's `exploded`
+    // flag. Minion refs are pruned against the live list at the same time so
+    // the boss's hard cap counts only survivors.
+    for (const mob of [...this.mobs]) {
+      if (mob.minions) mob.minions = mob.minions.filter((m) => this.mobs.includes(m))
+      if (mob.pendingQuake) {
+        const q = mob.pendingQuake
+        mob.pendingQuake = null
+        this.#quake(q, playerPos, damagePlayer, mob)
+      }
+      if (mob.pendingSummon > 0) {
+        const n = mob.pendingSummon
+        mob.pendingSummon = 0
+        this.#summonMinions(mob, n)
+      }
+    }
+  }
+
+  // The Hollow King's Quake: carve the marked cell (batched remesh, same as
+  // a creeper blast — craters accumulate and the arena erodes) and hurt the
+  // player if they ignored the ground marker.
+  #quake(q, playerPos, damagePlayer, mob) {
+    const carved = this.world.explode(q.x, q.y, q.z, q.radius)
+    this.onBlocksExploded?.(carved)
+    const dist = Math.sqrt(
+      (playerPos.x - q.x) ** 2 +
+        (playerPos.y - PHYSICS.playerAABB.height / 2 - q.y) ** 2 +
+        (playerPos.z - q.z) ** 2,
+    )
+    if (dist < q.damageRadius) damagePlayer(q.damage, mob)
+    this.fx.particles?.burst(q.x, q.y + 0.5, q.z, 0x9a9a9a, 60)
+    this.fx.sounds?.play('explosion')
+  }
+
+  // The Hollow King's Summon: raise zombie minions on a small ring around
+  // the boss, respecting its hard alive-cap (minions were pruned above).
+  #summonMinions(boss, count) {
+    const s = boss.cfg.attacks.summon
+    const room = s.maxMinions - boss.minions.length
+    const start = Math.random() * Math.PI * 2
+    for (let i = 0; i < Math.min(count, room); i++) {
+      const angle = start + (i / Math.max(1, count)) * Math.PI * 2
+      const minion = this.spawnAt(
+        boss.group.position.x + Math.sin(angle) * s.ringRadius,
+        boss.group.position.z + Math.cos(angle) * s.ringRadius,
+        'zombie',
+      )
+      boss.minions.push(minion)
+      const p = minion.group.position
+      this.fx.particles?.burst(p.x, p.y + 1, p.z, 0x66cc66, 24)
+    }
+    this.fx.sounds?.play('zombie')
   }
 
   // A creeper's fuse ran out: carve the blast sphere (batched remesh —
