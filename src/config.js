@@ -471,9 +471,23 @@ export const PASSIVE_MOBS = {
       scale: 1.0,
       drop: 'raw_mutton',
       dropCount: [1, 2],
+      // Bed feature: sheep also shed wool — the bed-crafting ingredient
+      // (same extraDrop mechanism as cow leather).
+      extraDrop: { id: 'wool', count: [1, 2] },
       colors: { body: 0xe8e6df, head: 0xcbb9a4, legs: 0xbfae99 },
     },
   },
+}
+
+// Sleeping in a bed (bed feature): right-clicking a placed bed at night sets
+// the respawn point to the bed and skips the clock ahead to dawn; by day it
+// refuses, MC-style. The spawn point persists in the save's optional `spawn`
+// key (SaveManager.attachSleep) and falls back to PLAYER.spawnPoint when the
+// bed no longer exists at respawn time.
+export const SLEEP = {
+  wakeTime: 0.0, // clock time sleeping skips to (0 = sunrise; see DAYNIGHT)
+  fadeSeconds: 1.4, // full-screen fade-to-black while the night skips past
+  toastSeconds: 3, // how long sleep-related toast messages linger
 }
 
 // Depth lighting (Phase 11) — the budget version, no flood-fill: chunk vertex

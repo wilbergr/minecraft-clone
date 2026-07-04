@@ -56,6 +56,10 @@ export const ITEMS = {
   gold_ore: blockItem('gold_ore', 12, 'Gold Ore'),
   torch: blockItem('torch', 13, 'Torch'),
   snow: blockItem('snow', 14, 'Snow'),
+  // Bed feature: sleep at night to set your respawn point (see src/survival/Sleep.js).
+  bed: blockItem('bed', 15, 'Bed'),
+  // Sheep bonus drop — the bed-crafting ingredient.
+  wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into
   // the Phase 12 furnace is a follow-up.
   coal: { id: 'coal', name: 'Coal', maxStack: INVENTORY.maxStack, glyph: '◆', tint: '#3a3a3a' },

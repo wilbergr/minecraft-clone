@@ -130,6 +130,10 @@ export class SoundEngine {
         this.#burst({ type: 'bandpass', freq: 1400, dur: 0.06, gain: 0.3 * v })
         this.#tone({ type: 'square', from: 900, to: 700, dur: 0.06, gain: 0.15 * v })
         break
+      case 'sleep': // two soft descending sine chimes — a tiny lullaby
+        this.#tone({ type: 'sine', from: 620, to: 310, dur: 0.5, gain: 0.25 * v })
+        this.#tone({ type: 'sine', from: 460, to: 230, dur: 0.6, gain: 0.2 * v, when: 0.3 })
+        break
     }
   }
 

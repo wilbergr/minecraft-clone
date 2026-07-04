@@ -50,6 +50,9 @@ export class PlayerControls {
     // horizontal velocity every frame, so knockback rides its own vector
     // that update() adds on top — the same trick mobs use.
     this.knock = new THREE.Vector3()
+    // Optional custom respawn-point provider (bed spawn, wired in main.js):
+    // returns feet {x, y, z} to respawn at, or null for the default spawn.
+    this.spawnHook = null
 
     this.respawn()
 
@@ -65,7 +68,14 @@ export class PlayerControls {
   }
 
   // Put the player at the spawn point (initial spawn and death respawn).
+  // spawnHook (the bed spawn) wins when it offers a point; otherwise the
+  // origin PLAYER.spawnPoint column, at its current surface.
   respawn() {
+    const custom = this.spawnHook?.()
+    if (custom) {
+      this.teleport(custom.x, custom.y, custom.z)
+      return
+    }
     const { x, z } = PLAYER.spawnPoint
     this.teleport(x, this.world.surfaceY(x, z), z)
   }

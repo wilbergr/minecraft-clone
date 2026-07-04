@@ -185,6 +185,13 @@ export class Chunk {
             this.#emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color)
             continue
           }
+          if (block.shape === 'bed') {
+            // Beds aren't emissive, so unlike torches they take the depth
+            // darkening of their own cell (one factor for the whole box).
+            const light = skyFactor(this.#colTop(x, z, baseX, baseZ, colTops) - y)
+            this.#emitBed(positions, normals, colors, uvs, indices, x, y, z, block, color, light)
+            continue
+          }
 
           for (const face of FACES) {
             const [dx, dy, dz] = face.dir
@@ -294,6 +301,33 @@ export class Chunk {
           x + 0.5 + (ox - 0.5) * w * 2,
           y + oy * h,
           z + 0.5 + (oz - 0.5) * w * 2,
+        )
+        normals.push(dx, dy, dz)
+        colors.push(color.r, color.g, color.b)
+        this.#pushUV(uvs, rect, dx, dy, ox, oy, oz)
+      }
+      indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
+    }
+  }
+
+  // Beds render as a low mattress box filling most of the cell (a 1-cell bed
+  // — see blocks.js): like torches they don't fill their cell so neighbor
+  // culling doesn't apply, but they DO take depth darkening (`light`). Per
+  // face: bed_top above, planks below, bed_side around.
+  #emitBed(positions, normals, colors, uvs, indices, x, y, z, block, color, light) {
+    const inset = 0.06 // horizontal shrink so the box reads as furniture
+    const h = 0.5625 // mattress height — MC's 9/16 bed
+    for (const face of FACES) {
+      const [dx, dy, dz] = face.dir
+      color.setScalar(face.shade * light)
+      const tile = dy === 1 ? block.tex.top : dy === -1 ? block.tex.bottom : block.tex.side
+      const rect = uvRect(tile)
+      const ndx = positions.length / 3
+      for (const [ox, oy, oz] of face.corners) {
+        positions.push(
+          x + inset + ox * (1 - inset * 2),
+          y + oy * h,
+          z + inset + oz * (1 - inset * 2),
         )
         normals.push(dx, dy, dz)
         colors.push(color.r, color.g, color.b)

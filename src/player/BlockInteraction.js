@@ -32,7 +32,8 @@ export class BlockInteraction {
     this.target = null
     this.attackHook = null // set by Combat: () => true if a mob took the click
     // Phase 12 seams (both optional): useBlockHook(block, x, y, z) handles a
-    // right click on an `interactive` block (the furnace UI) — sneaking
+    // right click on an `interactive` block — main.js wires it to a
+    // dispatcher keyed by block id (furnace UI, bed sleep, ...) — sneaking
     // bypasses it so you can still place against one; onBlockBroken fires
     // after any block breaks (the furnace spills its contents).
     this.useBlockHook = null

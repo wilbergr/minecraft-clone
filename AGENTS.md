@@ -364,6 +364,41 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   inland un-caved columns (beaches are sand in EVERY biome, and caves can
   puncture any surface).
 
+## Bed, sleep & spawn point
+
+- The bed is block 15: a deliberate **1-cell bed** (not MC's 2-cell) —
+  non-solid + `targetable` + `interactive`, `shape: 'bed'` (the mesher's
+  `#emitBed` low box; unlike the emissive torch it takes depth darkening).
+  Walk-through like the torch. Recipe: 3 planks + 3 wool; wool is a sheep
+  `extraDrop` (the cow-leather mechanism in `PASSIVE_MOBS.kinds.sheep`).
+- `interaction.useBlockHook` is wired in main.js to a **dispatcher keyed by
+  block id** (`blockUseHandlers`): furnace → furnace screen, bed → sleep. To
+  add an interactive block: `interactive: true` in blocks.js + one handler
+  row returning true when the click is spent. `useSelected` still gates on
+  `block.interactive` before consulting the hook, and sneak still bypasses.
+  main.js's `onBlockBroken` now checks `block.id === BLOCK_FURNACE` (not
+  `interactive`) before spilling furnace slots.
+- Sleep logic lives in `src/survival/Sleep.js` (tunables in `SLEEP`):
+  night-only (`daynight.isNight`) — success sets `sleep.spawn = [x, y, z]`
+  (bed block coords) and `setTime(SLEEP.wakeTime)`; a daytime click toasts
+  "You can only sleep at night" and does nothing else, but still returns
+  true so the click never falls through to block placement.
+- Respawn: `PlayerControls.respawn` consults the optional `player.spawnHook`
+  (main.js → `sleep.respawnPoint()`). The hook validates the bed still
+  exists via `world.blockAt` — which answers from the **edit overlay even
+  for unloaded chunks**, so validation is correct at any distance; a missing
+  bed clears the spawn, toasts, and falls back to `PLAYER.spawnPoint`.
+- Persistence: optional `spawn` save key via `save.attachSleep(sleep)` —
+  the hunger/armor optional-slot pattern, `schemaVersion` still 3. Sleep
+  feedback (toast `#sleep-toast`, fade `#sleep-fade`, synth `sleep` sound)
+  binds in `src/ui/sleepFx.js`; both DOM layers are z-index 6 transient
+  feedback, styled at the END of style.css.
+- Headless: `__mc.sleep` is exposed; drive sleeping by setting
+  `interaction.target` to the bed cell and calling `useSelected()` (no
+  pointer-lock gate on that path). `sounds.stats.byName.sleep` counts the
+  chime; puppeteer-core is NOT a project dep — `npm install --no-save
+  puppeteer-core` before browser verification.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE
