@@ -129,6 +129,21 @@ function buildBlock(blockId) {
 function buildTool(kind, tint) {
   const group = new THREE.Group()
   const head = new THREE.Color(tint)
+  if (kind === 'bow') {
+    // An arc of three wood segments with a pale string across the tips.
+    const mid = box(0.06, 0.3, 0.05, head)
+    const top = box(0.055, 0.16, 0.05, head)
+    top.position.set(0.05, 0.2, 0)
+    top.rotation.z = -0.5
+    const bottom = box(0.055, 0.16, 0.05, head)
+    bottom.position.set(0.05, -0.2, 0)
+    bottom.rotation.z = 0.5
+    const string = box(0.012, 0.5, 0.012, 0xe8e8dc)
+    string.position.x = 0.09
+    group.add(mid, top, bottom, string)
+    group.rotation.set(0.2, -0.5, -0.3)
+    return group
+  }
   if (kind === 'sword') {
     const handle = box(0.05, 0.16, 0.05, HANDLE)
     const guard = box(0.14, 0.035, 0.06, head)

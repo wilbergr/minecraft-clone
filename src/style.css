@@ -207,6 +207,8 @@ body.touch-mode #hotbar {
   justify-content: center;
   font-size: 1.35rem;
   line-height: 1;
+  /* Block icons are 16×16 atlas tiles (Phase 13) — keep them pixel-crisp. */
+  image-rendering: pixelated;
 }
 
 .slot-count {
@@ -252,6 +254,30 @@ body.touch-mode #hotbar {
 }
 
 .heart.empty {
+  opacity: 0.15;
+}
+
+/* Armor row (Phase 13): shields directly above the hearts, same split-bar
+   column; hidden entirely while nothing is worn. */
+#armor-bar {
+  position: absolute;
+  bottom: calc(5.8rem + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(calc(-100% - 6px));
+  display: flex;
+  gap: 2px;
+  font-size: 0.95rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.shield.half {
+  opacity: 0.45;
+}
+
+.shield.empty {
   opacity: 0.15;
 }
 
@@ -394,6 +420,12 @@ body.touch-mode #hotbar {
 
 .inv-hotbar-row {
   margin-top: 10px;
+}
+
+/* Worn armor (Phase 13): four wear slots set apart above the main grid. */
+.inv-armor-row {
+  grid-template-columns: repeat(4, 46px);
+  margin-bottom: 6px;
 }
 
 .inv-hint {
@@ -969,6 +1001,11 @@ body.touch-mode .help-touch {
     font-size: 0.85rem;
   }
 
+  #armor-bar {
+    bottom: calc(4.9rem + env(safe-area-inset-bottom));
+    font-size: 0.8rem;
+  }
+
   #furnace-panel {
     padding: 1rem;
   }
@@ -992,6 +1029,10 @@ body.touch-mode .help-touch {
   .inv-grid {
     grid-template-columns: repeat(9, 34px);
     gap: 3px;
+  }
+
+  .inv-armor-row {
+    grid-template-columns: repeat(4, 34px);
   }
 
   .inv-grid .slot {

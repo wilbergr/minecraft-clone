@@ -31,6 +31,7 @@ import { Hunger } from './survival/Hunger.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
 import { bindHungerHud } from './ui/hungerHud.js'
+import { bindArmorHud } from './ui/armorHud.js'
 
 const app = document.getElementById('app')
 
@@ -100,8 +101,16 @@ save.attachTreasure(hunt)
 save.attachDayNight(daynight)
 save.attachHunger(hunger)
 save.attachFurnaces(furnaces)
+save.attachArmor(combat.armor)
 
-const screen = new InventoryScreen(inventory, player)
+// Armor equipping (Phase 13): right-clicking an armor item wears it.
+interaction.useItemHook = (item) => {
+  if (!item.armor || !combat.armor.equipSelected()) return false
+  sounds.play('equip')
+  return true
+}
+
+const screen = new InventoryScreen(inventory, player, combat.armor)
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
 // Right click on a furnace block opens its UI; breaking one spills its slots.
 interaction.useBlockHook = (block, x, y, z) => {
@@ -129,6 +138,7 @@ bindHud(combat.health, () => {
   hunger.reset() // fresh spawn, fresh appetite
 })
 bindHungerHud(hunger)
+bindArmorHud(combat.armor)
 bindResetButton(save)
 const toggleQuestLog = bindQuestLog(hunt)
 const updateTreasureHud = bindTreasureHud(hunt, camera)
@@ -244,4 +254,6 @@ window.__mc = {
   furnaces,
   furnaceScreen,
   torchLights,
+  armor: combat.armor,
+  projectiles: combat.projectiles,
 }

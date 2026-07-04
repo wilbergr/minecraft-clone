@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { LIGHTING, WATER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
+import { uvRect } from './atlas.js'
 
 // Sky-light factor [minSkyLight, 1] for an air cell `depth` blocks below its
 // column's top solid block (<= 0 means open sky). The Phase 11 budget depth
@@ -87,9 +88,12 @@ export class Chunk {
     for (let x = 0; x < this.size; x++) {
       for (let z = 0; z < this.size; z++) {
         const h = this.world.terrainHeight(baseX + x, baseZ + z)
+        // Biome resolved once per column (it's the same pure function
+        // terrainBlock would default to per block — just cheaper).
+        const biome = this.world.biomeAt(baseX + x, baseZ + z)
         for (let y = 0; y < h; y++) {
           this.blocks[this.index(x, y, z)] = this.world.terrainBlock(
-            baseX + x, y, baseZ + z, h,
+            baseX + x, y, baseZ + z, h, biome,
           )
         }
         // Sea water (Phase 10): air below the waterline fills with water.
@@ -144,20 +148,32 @@ export class Chunk {
   // adjacent chunk if loaded or from the deterministic generator if not —
   // border faces are correct without forcing neighbor chunks to exist.
   //
+  // Textures (Phase 13): every face is UV-mapped onto its block's atlas tile
+  // (blocks.js `tex` names → atlas.js rects) and the vertex color becomes a
+  // pure TINT layer the texture is multiplied by: face shade × depth
+  // darkening × biome tint. Dropping vertexColors from the material would
+  // break Phase 11's cave darkness — keep both.
+  //
   // Depth lighting (Phase 11): every face color is multiplied by skyFactor()
   // of the air cell the face is exposed to — its depth below that column's
   // top solid block — so cave interiors go dark while open shafts dug from
   // the surface stay lit. Column tops are cached per build (the chunk's own
   // 16x16 plus the 1-block border ring, answered through the world).
+  //
+  // Biome tint (Phase 13): faces flagged `biomeTint` (grass tops, leaves)
+  // multiply in their own column's biome grass/leaf tint — grayscale tiles
+  // pick up the biome color for free. Cached per column like the tops.
   buildMesh(material) {
     const positions = []
     const normals = []
     const colors = []
+    const uvs = []
     const indices = []
     const color = new THREE.Color()
     const baseX = this.cx * this.size
     const baseZ = this.cz * this.size
     const colTops = new Array((this.size + 2) * (this.size + 2))
+    const biomes = new Array(this.size * this.size)
 
     for (let x = 0; x < this.size; x++) {
       for (let z = 0; z < this.size; z++) {
@@ -166,7 +182,7 @@ export class Chunk {
           if (id === BLOCK_AIR || id === BLOCK_WATER) continue // water has its own pass
           const block = BLOCKS[id]
           if (block.shape === 'torch') {
-            this.#emitTorch(positions, normals, colors, indices, x, y, z, block, color)
+            this.#emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color)
             continue
           }
 
@@ -175,17 +191,24 @@ export class Chunk {
             if (this.#neighborSolid(x + dx, y + dy, z + dz, baseX, baseZ)) {
               continue
             }
-            const faceColor =
-              dy === 1 ? block.color.top : dy === -1 ? block.color.bottom : block.color.side
-            color.set(faceColor).multiplyScalar(face.shade)
+            // Vertex color = tint only (the atlas tile carries the albedo).
+            color.setScalar(face.shade)
             const top = this.#colTop(x + dx, z + dz, baseX, baseZ, colTops)
             color.multiplyScalar(skyFactor(top - (y + dy)))
+            if (block.biomeTint === 'all' || (block.biomeTint === 'top' && dy === 1)) {
+              const biome = this.#biome(x, z, baseX, baseZ, biomes)
+              color.multiply(block.biomeTint === 'all' ? biome.leafColor : biome.grassColor)
+            }
 
+            const tile =
+              dy === 1 ? block.tex.top : dy === -1 ? block.tex.bottom : block.tex.side
+            const rect = uvRect(tile)
             const ndx = positions.length / 3
             for (const [ox, oy, oz] of face.corners) {
               positions.push(x + ox, y + oy, z + oz)
               normals.push(dx, dy, dz)
               colors.push(color.r, color.g, color.b)
+              this.#pushUV(uvs, rect, dx, dy, ox, oy, oz)
             }
             indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
           }
@@ -197,6 +220,7 @@ export class Chunk {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
     geometry.setIndex(indices)
 
     if (this.mesh) {
@@ -233,17 +257,37 @@ export class Chunk {
     return top
   }
 
+  // Face corner → tile UV. Side faces keep v on world y (tile tops — the
+  // grass overhang strip — stay up); tops/bottoms map to the x/z plane.
+  #pushUV(uvs, rect, dx, dy, ox, oy, oz) {
+    const u = dx !== 0 ? oz : ox
+    const v = dy !== 0 ? oz : oy
+    uvs.push(rect.u0 + (rect.u1 - rect.u0) * u, rect.v0 + (rect.v1 - rect.v0) * v)
+  }
+
+  // Biome of the column at local (x, z), cached per mesh build. Only the
+  // chunk's own columns are asked (a face tints from its block's column,
+  // never a neighbor's), so no border ring is needed.
+  #biome(x, z, baseX, baseZ, cache) {
+    const k = x * this.size + z
+    let biome = cache[k]
+    if (biome === undefined) {
+      biome = this.world.biomeAt(baseX + x, baseZ + z)
+      cache[k] = biome
+    }
+    return biome
+  }
+
   // Torches render as a small post (all 6 faces of a slim box), not a full
   // cube: they don't fill their cell, so neighbor culling doesn't apply, and
   // being `emissive` they skip depth darkening — the torch is the light.
-  #emitTorch(positions, normals, colors, indices, x, y, z, block, color) {
+  #emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color) {
     const w = 0.09 // post half-width, blocks
     const h = 0.7 // post height, blocks
+    const rect = uvRect(block.tex.side)
     for (const face of FACES) {
       const [dx, dy, dz] = face.dir
-      const faceColor =
-        dy === 1 ? block.color.top : dy === -1 ? block.color.bottom : block.color.side
-      color.set(faceColor).multiplyScalar(face.shade)
+      color.setScalar(face.shade)
       const ndx = positions.length / 3
       for (const [ox, oy, oz] of face.corners) {
         positions.push(
@@ -253,6 +297,7 @@ export class Chunk {
         )
         normals.push(dx, dy, dz)
         colors.push(color.r, color.g, color.b)
+        this.#pushUV(uvs, rect, dx, dy, ox, oy, oz)
       }
       indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
     }

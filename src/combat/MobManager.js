@@ -1,16 +1,32 @@
 import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS } from '../config.js'
 import { Zombie } from './Zombie.js'
+import { Skeleton } from './Skeleton.js'
+import { Creeper } from './Creeper.js'
 import { PassiveMob } from './PassiveMob.js'
 
-// Owns the live mob population: periodically tops it up to COMBAT.mobs.maxCount
-// by spawning zombies on a ring around the player, updates their AI each
-// frame, and removes mobs that die or fall too far behind a travelling player.
-// Passive mobs (Phase 12) share the same list — one update/attack/despawn
-// path — but spawn on their own timer against their own cap (mobs with
-// `passive: true` never count toward the hostile population).
+// Owns the live mob population: periodically tops it up by spawning hostiles
+// on a ring around the player — the night mix is weighted across zombie /
+// skeleton / creeper (Phase 13, COMBAT.mobs.hostileWeights) — updates their
+// AI each frame, and removes mobs that die or fall too far behind a
+// travelling player. Passive mobs (Phase 12) share the same list — one
+// update/attack/despawn path — but spawn on their own timer against their
+// own cap (mobs with `passive: true` never count toward the hostile
+// population).
+//
+// Creeper detonation (Phase 13) happens HERE, not in the creeper: the mob
+// sets `exploded` during its update and the manager carves the blast,
+// applies proximity damage, and removes it — mob-list mutation stays out of
+// the update callback (the Phase 4 rule).
 //
 // Mob state is intentionally not persisted (Phase 5 note): mobs are ambient
 // spawns, so a reload simply starts with a fresh population.
+
+const HOSTILES = {
+  zombie: (world, x, z) => new Zombie(world, x, z),
+  skeleton: (world, x, z, projectiles) => new Skeleton(world, x, z, projectiles),
+  creeper: (world, x, z) => new Creeper(world, x, z),
+}
+
 export class MobManager {
   constructor(scene, world, fx = {}) {
     this.scene = scene
@@ -26,6 +42,9 @@ export class MobManager {
     // spawns are night-only (with a raised cap) and daylight burns the
     // stragglers; when absent (bare/test runs) spawning behaves as before.
     this.daynight = null
+    // Projectile system (Phase 13), attached by Combat — skeletons shoot
+    // through it. Null in bare runs: skeletons then simply never fire.
+    this.projectiles = null
     this.burnTimer = 0
   }
 
@@ -39,9 +58,9 @@ export class MobManager {
   }
 
   update(delta, playerPos, damagePlayer) {
-    // Night-gated spawning (Phase 10): zombies only rise after dark, and the
-    // dark ring holds more of them. Kept modest — each body part is a draw
-    // call, which is why the day cap is low in the first place.
+    // Night-gated spawning (Phase 10): hostiles only rise after dark, and
+    // the dark ring holds more of them. Kept modest — each body part is a
+    // draw call, which is why the day cap is low in the first place.
     const night = this.daynight ? this.daynight.isNight : true
     this.spawnTimer -= delta
     if (this.spawnTimer <= 0) {
@@ -50,12 +69,12 @@ export class MobManager {
         night && this.daynight
           ? DAYNIGHT.hostiles.nightMaxCount
           : COMBAT.mobs.maxCount
-      // Hostiles only — passive mobs must not eat into the zombie cap.
+      // Hostiles only — passive mobs must not eat into the hostile cap.
       const hostiles = this.mobs.filter((m) => !m.passive).length
       if (night && hostiles < cap) this.#spawnNear(playerPos)
     }
 
-    // Dawn burn (Phase 10): daylight ignites the night's zombies one at a
+    // Dawn burn (Phase 10): daylight ignites the night's hostiles one at a
     // time — an ember burst each (reusing the pooled particles), staggered so
     // sunrise reads as a wave of little pyres rather than a mass vanish.
     // Hostiles only: farm animals (Phase 12) graze on through the day.
@@ -82,16 +101,16 @@ export class MobManager {
       if (passives < PASSIVE_MOBS.maxCount) this.#spawnPassiveNear(playerPos)
     }
 
-    // Ambient groans (Phase 9): every so often one random live mob groans,
-    // volume fading with distance, so the horde is audible offscreen. Lives
-    // here (not in Zombie) so mob AI stays sound-agnostic. Hostiles only —
-    // pigs don't groan like zombies.
+    // Ambient groans (Phase 9): every so often one random growling mob
+    // groans, volume fading with distance, so the horde is audible offscreen.
+    // Lives here (not in the mob) so mob AI stays sound-agnostic. Growlers
+    // only — pigs and skeletons don't moan like zombies.
     this.groanTimer -= delta
     if (this.groanTimer <= 0) {
-      const hostiles = this.mobs.filter((m) => !m.passive)
-      if (hostiles.length > 0) {
+      const growlers = this.mobs.filter((m) => m.growls)
+      if (growlers.length > 0) {
         this.groanTimer = AUDIO.zombie.groanIntervalSeconds * (0.6 + Math.random() * 0.8)
-        const mob = hostiles[Math.floor(Math.random() * hostiles.length)]
+        const mob = growlers[Math.floor(Math.random() * growlers.length)]
         const gain = 1 - mob.group.position.distanceTo(playerPos) / AUDIO.zombie.hearRadius
         if (gain > 0) this.fx.sounds?.play('zombie', { gain })
       }
@@ -100,6 +119,12 @@ export class MobManager {
     for (let i = this.mobs.length - 1; i >= 0; i--) {
       const mob = this.mobs[i]
       mob.update(delta, playerPos, damagePlayer)
+      // Creeper detonation (Phase 13): flagged during update, resolved here.
+      if (mob.exploded) {
+        this.#detonate(mob, playerPos, damagePlayer)
+        this.#remove(i)
+        continue
+      }
       const dx = mob.group.position.x - playerPos.x
       const dz = mob.group.position.z - playerPos.z
       // Too far behind a travelling player, or fallen out of a mined-open
@@ -113,17 +138,56 @@ export class MobManager {
     }
   }
 
-  // Spawn one zombie at a random angle on the ring around the player.
-  #spawnNear(playerPos) {
-    const { spawnRadiusMin, spawnRadiusMax } = COMBAT.mobs
-    const angle = Math.random() * Math.PI * 2
-    const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
-    this.spawnAt(playerPos.x + Math.sin(angle) * dist, playerPos.z + Math.cos(angle) * dist)
+  // A creeper's fuse ran out: carve the blast sphere (batched remesh —
+  // World.explode), hurt the player by proximity, and let the fx layer boom.
+  #detonate(mob, playerPos, damagePlayer) {
+    const e = COMBAT.mobs.creeper.explosion
+    const p = mob.group.position
+    const bx = p.x
+    const by = p.y + 0.8 // blast centered on the body, not the feet
+    const bz = p.z
+    this.world.explode(bx, by, bz, e.radius)
+    const dist = Math.sqrt(
+      (playerPos.x - bx) ** 2 +
+        (playerPos.y - PHYSICS.playerAABB.height / 2 - by) ** 2 +
+        (playerPos.z - bz) ** 2,
+    )
+    if (dist < e.damageRadius) {
+      const damage = Math.round(e.maxDamage * (1 - dist / e.damageRadius))
+      if (damage > 0) damagePlayer(damage, mob)
+    }
+    this.fx.particles?.burst(bx, by, bz, e.color, e.particles)
+    this.fx.sounds?.play('explosion')
   }
 
-  // Direct spawn (also the browser-verification hook: __mc.mobs.spawnAt).
-  spawnAt(x, z) {
-    const mob = new Zombie(this.world, x, z)
+  // Spawn one hostile at a random angle on the ring around the player,
+  // weighted across the Phase 13 kinds.
+  #spawnNear(playerPos) {
+    const { spawnRadiusMin, spawnRadiusMax, hostileWeights } = COMBAT.mobs
+    const angle = Math.random() * Math.PI * 2
+    const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
+    let roll = Math.random() * Object.values(hostileWeights).reduce((a, b) => a + b, 0)
+    let kind = 'zombie'
+    for (const [name, weight] of Object.entries(hostileWeights)) {
+      roll -= weight
+      if (roll <= 0) {
+        kind = name
+        break
+      }
+    }
+    this.spawnAt(
+      playerPos.x + Math.sin(angle) * dist,
+      playerPos.z + Math.cos(angle) * dist,
+      kind,
+    )
+  }
+
+  // Direct hostile spawn (also the browser-verification hook:
+  // __mc.mobs.spawnAt — kind defaults to zombie so old tests still work).
+  spawnAt(x, z, kind = 'zombie') {
+    const mob = HOSTILES[kind](this.world, x, z, this.projectiles)
+    // Fuse-start hiss (creepers): wired here so mob AI stays sound-agnostic.
+    if ('onHiss' in mob) mob.onHiss = () => this.fx.sounds?.play('fuse')
     this.mobs.push(mob)
     this.scene.add(mob.group)
     return mob

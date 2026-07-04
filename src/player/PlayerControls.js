@@ -46,6 +46,10 @@ export class PlayerControls {
     this.jumpBuffer = 0 // seconds a tapped (touch) jump keeps waiting for ground
     this.eyeOffset = 0 // smoothed sneak crouch, subtracted from eye height
     this.isSprinting = false // sprint input while actually moving (hunger drain reads this)
+    // Decaying hit-shove (Phase 13): control input overwrites the body's
+    // horizontal velocity every frame, so knockback rides its own vector
+    // that update() adds on top — the same trick mobs use.
+    this.knock = new THREE.Vector3()
 
     this.respawn()
 
@@ -72,6 +76,7 @@ export class PlayerControls {
   teleport(x, y, z) {
     this.velocity.set(0, 0, 0)
     this.body.velocity.set(0, 0, 0)
+    this.knock.set(0, 0, 0)
     this.body.fallDistance = 0
     this.body.grounded = false // until physics proves otherwise at the new spot
     this.body.position.set(x, y, z)
@@ -115,6 +120,16 @@ export class PlayerControls {
   // the exact frame they arrive).
   queueJump() {
     this.jumpBuffer = PHYSICS.touchJumpBufferSeconds
+  }
+
+  // Shove the player (Phase 13: mob hits, arrows, explosions): a horizontal
+  // impulse along `dir` (unit XZ) that decays over the next moments, plus an
+  // upward pop applied as a velocity floor so back-to-back hits don't stack
+  // into a launch.
+  applyKnockback(dir, horizontal = PHYSICS.jumpVelocity, vertical = 0) {
+    this.knock.x += dir.x * horizontal
+    this.knock.z += dir.z * horizontal
+    this.body.velocity.y = Math.max(this.body.velocity.y, vertical)
   }
 
   #onKey(code, down) {
@@ -212,6 +227,12 @@ export class PlayerControls {
     const cos = Math.cos(yaw)
     this.body.velocity.x = this.velocity.x * cos + this.velocity.z * sin
     this.body.velocity.z = -this.velocity.x * sin + this.velocity.z * cos
+
+    // Hit-shove (Phase 13) rides on top of control velocity, then decays —
+    // the player steers through the knockback rather than losing input.
+    this.body.velocity.x += this.knock.x
+    this.body.velocity.z += this.knock.z
+    this.knock.multiplyScalar(Math.exp(-8 * delta))
 
     // Jump when grounded: held Space keeps hopping (handy when every full
     // block takes a jump); a buffered touch tap is spent once. In water

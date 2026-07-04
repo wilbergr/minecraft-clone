@@ -16,6 +16,13 @@
 //
 // `material` (Phase 9) groups blocks into sound voices — dirt/stone/wood/sand
 // — used for break/place/dig/footstep sounds (see src/audio/SoundEngine.js).
+//
+// Textures (Phase 13): `tex: { top, side, bottom }` names 16×16 tiles in the
+// procedural atlas (src/world/atlas.js) that the chunk mesher UV-maps onto
+// each face. `color` stays: it still paints particles, ground drops, the
+// viewmodel, and the water pass. `biomeTint: 'top' | 'all'` marks faces whose
+// atlas tile is drawn grayscale and colored at mesh time by the column's
+// biome tint riding the vertex-color layer.
 
 export const BLOCK_AIR = 0
 
@@ -27,6 +34,8 @@ export const BLOCKS = {
     solid: true,
     // Per-face colors: grassy top, mossy-earth sides, dirt underside.
     color: { top: 0x5d9c3f, side: 0x79893f, bottom: 0x8a5f3c },
+    tex: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' },
+    biomeTint: 'top', // grayscale grass_top tile colored per biome
     drop: 'dirt', // grass blocks drop dirt, like the original
     hardness: 0.3,
     material: 'dirt',
@@ -36,6 +45,7 @@ export const BLOCKS = {
     name: 'Dirt',
     solid: true,
     color: { top: 0x8a5f3c, side: 0x8a5f3c, bottom: 0x7a5233 },
+    tex: { top: 'dirt', side: 'dirt', bottom: 'dirt' },
     drop: 'dirt',
     hardness: 0.3,
     material: 'dirt',
@@ -45,6 +55,7 @@ export const BLOCKS = {
     name: 'Stone',
     solid: true,
     color: { top: 0x9a9a9a, side: 0x8d8d8d, bottom: 0x7f7f7f },
+    tex: { top: 'stone', side: 'stone', bottom: 'stone' },
     drop: 'stone',
     hardness: 2, // ~7x dirt — the tier gap should be felt
     material: 'stone',
@@ -55,6 +66,7 @@ export const BLOCKS = {
     name: 'Sand',
     solid: true,
     color: { top: 0xdccf94, side: 0xd2c489, bottom: 0xc2b47c },
+    tex: { top: 'sand', side: 'sand', bottom: 'sand' },
     drop: 'sand',
     hardness: 0.3,
     material: 'sand',
@@ -65,6 +77,7 @@ export const BLOCKS = {
     solid: true,
     // Tree trunks: ringed cut faces on top/bottom, bark on the sides.
     color: { top: 0x9c7f4e, side: 0x6b4a2b, bottom: 0x9c7f4e },
+    tex: { top: 'wood_top', side: 'wood_side', bottom: 'wood_top' },
     drop: 'wood',
     hardness: 1,
     material: 'wood',
@@ -75,6 +88,8 @@ export const BLOCKS = {
     name: 'Leaves',
     solid: true,
     color: { top: 0x3e7a2e, side: 0x437f33, bottom: 0x376b29 },
+    tex: { top: 'leaves', side: 'leaves', bottom: 'leaves' },
+    biomeTint: 'all', // grayscale leaf tile colored per biome
     drop: null, // decorative; sapling/stick drops could land in a later phase
     hardness: 0.1,
     material: 'dirt', // soft rustle — closest of the four voices
@@ -84,6 +99,7 @@ export const BLOCKS = {
     name: 'Planks',
     solid: true,
     color: { top: 0xb08d57, side: 0xa5814e, bottom: 0x997747 },
+    tex: { top: 'planks', side: 'planks', bottom: 'planks' },
     drop: 'planks',
     hardness: 1,
     material: 'wood',
@@ -95,6 +111,7 @@ export const BLOCKS = {
     solid: true,
     // Stone flecked warmer — reads as ore without textures.
     color: { top: 0xb0a08c, side: 0xa4917c, bottom: 0x93816d },
+    tex: { top: 'iron_ore', side: 'iron_ore', bottom: 'iron_ore' },
     drop: 'iron_ore',
     hardness: 3,
     material: 'stone',
@@ -114,6 +131,7 @@ export const BLOCKS = {
     solid: true,
     // Darker than stone with a charcoal top — reads as a worked block.
     color: { top: 0x4a4a4a, side: 0x5f5f5f, bottom: 0x424242 },
+    tex: { top: 'furnace_top', side: 'furnace_side', bottom: 'furnace_top' },
     drop: 'furnace',
     hardness: 2.5,
     material: 'stone',
@@ -128,6 +146,7 @@ export const BLOCKS = {
     solid: true,
     // Stone flecked darker — soot-black seams.
     color: { top: 0x6e6e6e, side: 0x606060, bottom: 0x555555 },
+    tex: { top: 'coal_ore', side: 'coal_ore', bottom: 'coal_ore' },
     drop: 'coal', // drops the fuel item directly, like the original
     hardness: 2.5,
     material: 'stone',
@@ -139,6 +158,7 @@ export const BLOCKS = {
     solid: true,
     // Stone flecked warm yellow — the deep-tier prize.
     color: { top: 0xc9b458, side: 0xb8a24b, bottom: 0xa38f3e },
+    tex: { top: 'gold_ore', side: 'gold_ore', bottom: 'gold_ore' },
     drop: 'gold_ore',
     hardness: 3.5,
     material: 'stone',
@@ -156,9 +176,21 @@ export const BLOCKS = {
     shape: 'torch',
     emissive: true,
     color: { top: 0xffe9a8, side: 0xc98d4b, bottom: 0x8a5f3c },
+    tex: { top: 'torch', side: 'torch', bottom: 'torch' },
     drop: 'torch',
     hardness: 0.1,
     material: 'wood',
+  },
+  14: {
+    id: 14,
+    name: 'Snow',
+    solid: true,
+    // Snow biome surface block (Phase 13): white cap over a dirt body.
+    color: { top: 0xf2f5f7, side: 0xd8ddd0, bottom: 0x8a5f3c },
+    tex: { top: 'snow', side: 'snow_side', bottom: 'dirt' },
+    drop: 'snow',
+    hardness: 0.3,
+    material: 'dirt',
   },
 }
 

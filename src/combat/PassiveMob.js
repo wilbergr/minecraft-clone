@@ -1,19 +1,18 @@
 import * as THREE from 'three'
-import { COMBAT, PASSIVE_MOBS, PHYSICS } from '../config.js'
-import { PhysicsBody } from '../physics/PhysicsBody.js'
+import { PASSIVE_MOBS } from '../config.js'
+import { Mob } from './Mob.js'
 
-// Passive farm mobs (Phase 12): pig / cow / sheep. The box-part body pattern
-// is generalized from Zombie into a quadruped — one body slab, a head out
-// front, four legs — recolored and scaled per kind (PASSIVE_MOBS.kinds).
-// They never aggro: the AI is the zombie's wander branch, plus a short panic
-// bolt away from whatever just hit them. Locomotion is the shared
-// PhysicsBody (gravity, AABB collision, hop-on-hitWall), so they roam
-// terrain exactly like zombies do.
+// Passive farm mobs (Phase 12): pig / cow / sheep. A quadruped — one body
+// slab, a head out front, four legs — recolored and scaled per kind
+// (PASSIVE_MOBS.kinds), on the shared Mob base (Phase 13): body building,
+// hurt/flash/knockback, and locomotion all come from there. They never
+// aggro: the AI is the wander branch plus a short panic bolt away from
+// whatever just hit them.
 //
-// The interface matches Zombie (group / cfg / update / hurt / dispose, plus
-// `passive: true`), so MobManager keeps one mob list and Combat's attack
-// raycast and kill-drop path work unchanged — cfg.drop / cfg.dropCount yield
-// the raw meat that the furnace turns into food.
+// The interface matches the hostiles (group / cfg / update / hurt / dispose,
+// plus `passive: true`), so MobManager keeps one mob list and Combat's
+// attack raycast and kill-drop path work unchanged — cfg.drop /
+// cfg.dropCount / cfg.extraDrop yield raw meat (and cow leather).
 
 const GEOM = {
   body: new THREE.BoxGeometry(0.6, 0.5, 0.9),
@@ -21,53 +20,35 @@ const GEOM = {
   leg: new THREE.BoxGeometry(0.16, 0.45, 0.16),
 }
 
-export class PassiveMob {
+export class PassiveMob extends Mob {
   constructor(world, x, z, kind) {
-    this.world = world
+    super(world, PASSIVE_MOBS.kinds[kind].health)
     this.kind = kind
     this.passive = true
     this.cfg = PASSIVE_MOBS.kinds[kind]
-    this.health = this.cfg.health
-    this.knock = new THREE.Vector3() // decaying knockback impulse
     this.wanderDir = null // unit XZ vector, or null while pausing
     this.wanderTimer = 0
     this.panicTimer = 0
     this.panicDir = new THREE.Vector3()
-    this.flashTimer = 0
-
-    const c = this.cfg.colors
-    this.materials = {
-      body: new THREE.MeshLambertMaterial({ color: c.body }),
-      head: new THREE.MeshLambertMaterial({ color: c.head }),
-      legs: new THREE.MeshLambertMaterial({ color: c.legs }),
-    }
-    this.group = this.#buildBody(this.cfg.scale)
-    this.group.position.set(x, world.surfaceY(x, z), z)
+    this.makeMaterials(this.cfg.colors)
     const { width, height } = PASSIVE_MOBS.aabb
-    this.body = new PhysicsBody(
-      world,
-      { width: width * this.cfg.scale, height: height * this.cfg.scale },
-      this.group.position,
-    )
+    this.attachBody(this.#buildBody(this.cfg.scale), x, z, {
+      width: width * this.cfg.scale,
+      height: height * this.cfg.scale,
+    })
   }
 
-  // Group origin at the feet, like Zombie; head faces +z (the walk direction).
+  // Group origin at the feet, like the hostiles; head faces +z.
   #buildBody(scale) {
     const m = this.materials
-    const part = (geom, material, x, y, z) => {
-      const mesh = new THREE.Mesh(geom, material)
-      mesh.position.set(x, y, z)
-      mesh.userData.mob = this // attack raycasts map intersections back here
-      return mesh
-    }
     const group = new THREE.Group()
     group.add(
-      part(GEOM.body, m.body, 0, 0.7, 0),
-      part(GEOM.head, m.head, 0, 0.85, 0.58),
-      part(GEOM.leg, m.legs, -0.2, 0.225, 0.32),
-      part(GEOM.leg, m.legs, 0.2, 0.225, 0.32),
-      part(GEOM.leg, m.legs, -0.2, 0.225, -0.32),
-      part(GEOM.leg, m.legs, 0.2, 0.225, -0.32),
+      this.part(GEOM.body, m.body, 0, 0.7, 0),
+      this.part(GEOM.head, m.head, 0, 0.85, 0.58),
+      this.part(GEOM.leg, m.legs, -0.2, 0.225, 0.32),
+      this.part(GEOM.leg, m.legs, 0.2, 0.225, 0.32),
+      this.part(GEOM.leg, m.legs, -0.2, 0.225, -0.32),
+      this.part(GEOM.leg, m.legs, 0.2, 0.225, -0.32),
     )
     group.scale.setScalar(scale)
     return group
@@ -93,44 +74,14 @@ export class PassiveMob {
       moveDir = this.panicDir
       speed *= PASSIVE_MOBS.panic.speedMultiplier
     }
-    if (moveDir) this.group.rotation.y = Math.atan2(moveDir.x, moveDir.z)
 
-    // Same locomotion contract as Zombie: intent + decaying knockback become
-    // the horizontal velocity; a blocked grounded move hops the next frame.
-    const body = this.body
-    body.velocity.x = (moveDir ? moveDir.x * speed : 0) + this.knock.x
-    body.velocity.z = (moveDir ? moveDir.z * speed : 0) + this.knock.z
-    this.knock.multiplyScalar(Math.exp(-8 * delta))
-    if (moveDir && body.grounded && body.hitWall) {
-      body.velocity.y = PHYSICS.jumpVelocity
-    }
-    body.step(delta)
-
-    if (this.flashTimer > 0) {
-      this.flashTimer -= delta
-      if (this.flashTimer <= 0) this.#setFlash(false)
-    }
+    this.locomote(delta, moveDir, speed)
   }
 
-  // Take a hit: lose health, flash, get shoved, and bolt away from the blow.
-  // Returns true when the hit was fatal.
+  // On top of the shared hit reaction: bolt away from the blow for a while.
   hurt(amount, knockDir) {
-    this.health -= amount
-    this.knock.addScaledVector(knockDir, COMBAT.attack.knockback)
     this.panicTimer = PASSIVE_MOBS.panic.seconds
     this.panicDir.set(knockDir.x, 0, knockDir.z).normalize()
-    this.flashTimer = 0.15
-    this.#setFlash(true)
-    return this.health <= 0
-  }
-
-  #setFlash(on) {
-    for (const mat of Object.values(this.materials)) {
-      mat.emissive.setHex(on ? 0x8a1a1a : 0x000000)
-    }
-  }
-
-  dispose() {
-    for (const mat of Object.values(this.materials)) mat.dispose()
+    return super.hurt(amount, knockDir)
   }
 }

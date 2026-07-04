@@ -1,5 +1,6 @@
 import { INVENTORY } from '../config.js'
 import { ITEMS } from '../inventory/items.js'
+import { ARMOR_SLOTS } from '../combat/Armor.js'
 import { RECIPES, canCraft, craft } from '../inventory/recipes.js'
 import { createSlotEl, renderSlot } from './slots.js'
 
@@ -10,10 +11,15 @@ import { createSlotEl, renderSlot } from './slots.js'
 // Item moving is click-click: click a slot to pick it (highlight), click
 // another to swap/merge. Crafting is a recipe list drawing ingredients from
 // the whole inventory — see src/inventory/recipes.js.
+//
+// Armor (Phase 13): a row of four wear slots above the grid shows what's
+// equipped; clicking a worn piece takes it off (equipping happens in-game —
+// right click the piece). `armor` is optional so bare setups keep working.
 export class InventoryScreen {
-  constructor(inventory, player) {
+  constructor(inventory, player, armor = null) {
     this.inventory = inventory
     this.player = player
+    this.armor = armor
     this.root = document.getElementById('inventory-screen')
     this.isOpen = false
     this.pendingSlot = null // first slot of a click-click move, or null
@@ -21,6 +27,9 @@ export class InventoryScreen {
 
     this.#build()
     inventory.onChange(() => {
+      if (this.isOpen) this.render()
+    })
+    armor?.onChange(() => {
       if (this.isOpen) this.render()
     })
 
@@ -73,6 +82,24 @@ export class InventoryScreen {
     // --- Slot grids: main slots on top, the hotbar row set apart below.
     const slotsCol = document.createElement('div')
     this.slotEls = new Array(this.inventory.size)
+
+    // Equipped armor (Phase 13): a labeled 4-slot row; click to take off.
+    if (this.armor) {
+      const armorRow = document.createElement('div')
+      armorRow.className = 'inv-grid inv-armor-row'
+      this.armorEls = ARMOR_SLOTS.map((slot) => {
+        const el = createSlotEl()
+        el.addEventListener('click', () => {
+          this.armor.unequip(slot)
+        })
+        armorRow.appendChild(el)
+        return { slot, el }
+      })
+      const label = document.createElement('p')
+      label.className = 'inv-hint'
+      label.textContent = 'Worn armor — click a piece to take it off.'
+      slotsCol.append(armorRow, label)
+    }
     const makeGrid = (from, to, extraClass) => {
       const grid = document.createElement('div')
       grid.className = `inv-grid${extraClass ? ` ${extraClass}` : ''}`
@@ -156,6 +183,12 @@ export class InventoryScreen {
       renderSlot(el, this.inventory.slots[i])
       el.classList.toggle('pending', i === this.pendingSlot)
     })
+    if (this.armor) {
+      for (const { slot, el } of this.armorEls) {
+        const id = this.armor.slots[slot]
+        renderSlot(el, id ? { id, count: 1 } : null)
+      }
+    }
     for (const { recipe, button, needEls } of this.recipeEls) {
       button.disabled = !canCraft(this.inventory, recipe)
       recipe.input.forEach(([id, count], k) => {
