@@ -399,6 +399,49 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   chime; puppeteer-core is NOT a project dep — `npm install --no-save
   puppeteer-core` before browser verification.
 
+## The King's Trial, PR 1: quest framework + relic scavenger
+
+- `CHALLENGE_MESSAGE` (the captain-editable trial payoff) sits directly under
+  `TREASURE_MESSAGE` at the top of `src/config.js`; all trial tunables live in
+  the `CHALLENGE` block. The `beacon`/`siege`/`boss` sub-blocks and the
+  latched `beaconBuilt`/`siegeCleared`/`bossDefeated` save flags are declared
+  but INERT — PRs 2–4 (building, siege, boss) fill them in. `retry: 'free'`
+  is the captain's locked decision for those stages.
+- `src/quest/Challenge.js` is the stage machine (TreasureHunt-shaped:
+  `onChange`, `update(delta, playerPos)` beside `hunt.update` in main.js,
+  `serialize`/`deserialize`). It unlocks via `hunt.isComplete` — constructed
+  AFTER `save.attachTreasure(hunt)` so it sees restored hunt state, and it
+  subscribes to `hunt.onChange` for the live unlock. Saves through the
+  optional `challenge` slot (`save.attachChallenge`, a verbatim sibling of
+  `attachTreasure`); `schemaVersion` stayed 3.
+- The Trial Grounds anchor is ringed off the third treasure token and marked
+  with scene meshes only (ring + beam built on activation) — NOTHING is
+  stamped into terrain generation. Same for relic shards: placement uses
+  ONLY the pristine generators (`terrainHeight`/`biomeAt`/`caveAt`/`treeAt`),
+  never `blockAt`, which consults the player-edit overlay and would make
+  positions drift between saves.
+- `src/quest/TokenField.js` is the shared floating-token helper (mesh +
+  beam + bob/spin + proximity) extracted from TreasureHunt — both hunts use
+  it; keep visual changes there so they stay identical. Relic meshes build
+  lazily on activation, so a sealed trial renders nothing.
+- Sea columns are SCARCE on seed 1337 (deepest ocean within 600 blocks is
+  h=55 vs WATER.level 57): the Tide Shard placement sweeps outward rings
+  deterministically with a depth-relaxation ladder instead of random darts —
+  reuse that pattern for any "find a rare column" placement.
+- Stage 1 completes by collecting all 5 shards (added as `relic_shard`
+  items) then standing inside the anchor ring: found-flags are the source of
+  truth; delivery consumes whatever shards are carried, so item loss can
+  never soft-lock the trial.
+- Headless: `__mc.challenge` (+ `challenge.skipToStage(n)` latches prior
+  stages but does NOT bypass the hunt.isComplete unlock gate). Collect by
+  `player.teleport` onto `relics.relics[i].position` (same trick as treasure
+  tokens); the compass HUD (`treasureHud.js`) targets
+  `hunt.activeToken ?? challenge.compassTarget`. When wiping storage in a
+  test, set `__mc.save.enabled = false` BEFORE `localStorage.clear()` — the
+  beforeunload autosave otherwise resurrects the save on reload.
+- Torch recipe exists now (`stick + coal → 4 torches` in recipes.js) — the
+  Phase 11 "no torch recipe yet" note is obsolete.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

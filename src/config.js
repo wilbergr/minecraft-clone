@@ -7,6 +7,15 @@
 export const TREASURE_MESSAGE =
   'Congratulations, adventurer! You found the hidden treasure!'
 
+// ---------------------------------------------------------------------------
+// CHALLENGE_MESSAGE — the payoff revealed when The King's Trial is complete
+// (all four stages; the boss falls in a later phase). Captain: personalize
+// this text before release. Keep it a plain string; the quest log renders it
+// verbatim once the trial is done.
+// ---------------------------------------------------------------------------
+export const CHALLENGE_MESSAGE =
+  'The Hollow King has fallen. The realm is yours, champion!'
+
 // Treasure hunt tunables (Phase 6). Three glowing tokens sit at
 // seed-deterministic spots: the first a ring-distance from spawn, each next
 // one a ring-distance from the previous token, at seed-chosen bearings — so
@@ -33,6 +42,87 @@ export const TREASURE = {
   tokenColor: 0xffd75e, // unlit gold — reads as glowing against lit terrain
   beam: { color: 0xffe9a0, radius: 0.2, opacity: 0.35 }, // sky-beam marker
   toastSeconds: 4, // how long the "found it" banner lingers
+}
+
+// The King's Trial (endgame challenge chain): a four-stage quest — scavenger
+// → build → siege → boss — that unlocks when the treasure hunt completes.
+// It anchors at the Trial Grounds, a seed-deterministic site ringed off the
+// third treasure token (marked with scene meshes, never stamped into terrain
+// generation — the purity rule). Stage 1 (Relics of the Deep) ships first;
+// the `beacon`/`siege`/`boss` blocks below are the later stages' knobs,
+// pre-declared with the design's proposed values so those PRs only add code.
+export const CHALLENGE = {
+  seedSalt: 0x7a11, // mixed into WORLD.seed for the Trial Grounds placement stream
+  site: {
+    minDist: 80, // ring distance from the third treasure token, in blocks
+    maxDist: 130,
+    flatSpread: 4, // reject sites whose terrainHeight varies more than this ±4 blocks
+    deliverRadius: 6, // stand within this of the anchor (with all shards) to deliver
+    marker: {
+      ringRadius: 5, // flat glowing ring on the ground marking the arena center
+      ringWidth: 0.6,
+      color: 0xffb066, // ember-orange — distinct from the gold treasure beams
+      opacity: 0.5,
+      beam: { color: 0xffc890, radius: 0.3, opacity: 0.3 }, // sky-beam landmark
+    },
+  },
+  // Stage 1 — Relics of the Deep: five relic shards hidden across the world's
+  // systems (three far biomes, one deep cave pocket, one seabed), collected by
+  // proximity like treasure tokens but carried as items and DELIVERED at the
+  // Trial Grounds. Placement is a pure function of WORLD.seed (own salt) —
+  // shard entries are index-matched to the save's `relics.found` array, so
+  // extend/reorder only alongside a fresh world. Clue templates take {dist} /
+  // {dir} / {name}, filled from the generated positions relative to spawn.
+  relics: {
+    seedSalt: 0x3e1c, // placement stream for the five shards
+    collectRadius: 2.25, // walk within this many blocks (horizontal) to collect
+    hoverHeight: 1.4, // surface shards float this far above the terrain
+    tokenColor: 0x7fe7d0, // unlit sea-glass green — reads as glowing, unlike gold tokens
+    beam: { color: 0xa8f5e2, radius: 0.2, opacity: 0.3 },
+    spinSpeed: 1.5,
+    bob: { amplitude: 0.2, speed: 2 },
+    toastSeconds: 4,
+    shards: [
+      { name: 'Ember Shard', kind: 'biome', biome: 'desert', minDist: 150, maxDist: 300,
+        clue: 'Where the sun scorches bare sand, {dist} blocks {dir} — the {name} smolders.' },
+      { name: 'Verdant Shard', kind: 'biome', biome: 'forest', minDist: 150, maxDist: 300,
+        clue: 'Beneath thick canopies {dist} blocks {dir}, the {name} has taken root.' },
+      { name: 'Frost Shard', kind: 'biome', biome: 'snow', minDist: 150, maxDist: 300,
+        clue: 'High in the snows {dist} blocks {dir}, the {name} waits in the cold.' },
+      { name: 'Deep Shard', kind: 'cave', minDist: 60, maxDist: 140, maxY: 24,
+        clue: 'Travel {dist} blocks {dir}, then dig: far beneath the stone the {name} glimmers in the dark.' },
+      { name: 'Tide Shard', kind: 'sea', minDist: 60, maxDist: 160,
+        clue: '{dist} blocks {dir}, beneath the waves — the {name} rests on the seabed.' },
+    ],
+    deliverClue: 'Carry all five shards to the Trial Grounds, {dist} blocks {dir} of where you first awoke.',
+  },
+  // Retry policy for the combat stages (captain's decision): failed siege /
+  // boss attempts cost nothing — re-arm at the core and try again. Later
+  // stage PRs read this; 'free' is the only implemented value.
+  retry: 'free',
+  // Stage 2 — Raise the Beacon (PR 2, inert): voxel-checked build at the
+  // anchor. The cell spec helper lands with the stage.
+  beacon: {
+    checkRadius: 12, // world edits within this of the anchor re-run the structure check
+    ghostOpacity: 0.35, // translucent preview cells
+  },
+  // Stage 3 — The Siege (PR 3, inert): survive escalating night waves on the
+  // arena ring, cleared before dawn.
+  siege: {
+    waves: [{ zombie: 4 }, { zombie: 3, skeleton: 3 }, { zombie: 3, skeleton: 3, creeper: 2 }],
+    spawnRadius: 14, // waves crest this far from the anchor
+    arenaRadius: 24, // leaving this ring too long disperses the horde
+    leaveGraceSeconds: 6,
+    breatherSeconds: 10, // pause between waves
+  },
+  // Stage 4 — The Hollow King (PR 4, inert): the 3-phase end boss.
+  boss: {
+    health: 120,
+    aabb: { width: 1.1, height: 2.8 },
+    knockbackFactor: 0.15, // fraction of normal knockback the boss takes
+    phases: [0.66, 0.33], // health fractions where phases 2 and 3 begin
+    leash: { playerSeconds: 8, losSeconds: 10 }, // out-of-arena / no-line-of-sight reset timers
+  },
 }
 
 // World layout (Phase 2: chunked procedural terrain).
