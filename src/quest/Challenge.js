@@ -5,16 +5,18 @@ import { cardinal8 } from '../treasure/TreasureHunt.js'
 import { RelicHunt } from './RelicHunt.js'
 import { StructureCheck } from './StructureCheck.js'
 import { SiegeEvent } from './SiegeEvent.js'
+import { BossFight } from './BossFight.js'
 
 // The King's Trial (endgame): a four-stage machine — scavenger → build →
 // siege → boss — mirroring TreasureHunt's shape so every established pattern
 // transfers: onChange listeners for the UI/save layers, update(delta,
 // playerPos) beside hunt.update in the main loop, serialize()/deserialize()
 // for the optional `challenge` save slot, and window.__mc.challenge as the
-// test seam. Stage 0 (Relics of the Deep), stage 1 (Raise the Beacon —
-// StructureCheck), and stage 2 (The Siege — SiegeEvent) are live; stage 3 is
-// declared in STAGES and the save shape but inert — its PR lands Boss behind
-// the same machine.
+// test seam. All four stages are live: stage 0 (Relics of the Deep), stage 1
+// (Raise the Beacon — StructureCheck), stage 2 (The Siege — SiegeEvent), and
+// stage 3 (The Hollow King — BossFight + src/combat/Boss.js). Felling the
+// King latches bossDefeated, completes the trial, and fires onComplete — the
+// CHALLENGE_MESSAGE reveal modal (src/ui/challengeReveal.js) owns that hook.
 //
 // The Trial unlocks when the treasure hunt completes (hunt.isComplete): the
 // anchor marker and relic meshes appear only then, and until then the quest
@@ -42,6 +44,8 @@ export class Challenge {
     this.onBeaconPulse = null // callback({x,y,z}) — a beacon cell satisfied
     this.onBeaconDone = null // callback(anchorPosition) — the beacon completed
     this.onSiegeWon = null // callback(anchorPosition) — the final wave cleared
+    this.onBossDefeated = null // callback(bossPosition) — victory fx (nova, roar)
+    this.onComplete = null // single-slot, owned by the reveal modal (hunt.onComplete pattern)
 
     this.stage = 0 // index into STAGES; STAGES.length = trial complete
     // Latched stage flags (report §9): once true they stay true — a creeper
@@ -80,6 +84,13 @@ export class Challenge {
     this.siege.onToast = (text) => this.onToast?.(text)
     this.siege.onChange = () => this.#emit()
     this.siege.onWin = () => this.#onSiegeWin()
+
+    // Stage 4 — the Hollow King fight runner. Same live-dep pattern as the
+    // siege: main.js attaches mobs/health/player after construction.
+    this.bossFight = new BossFight(this.anchorPosition, scene, world)
+    this.bossFight.onToast = (text) => this.onToast?.(text)
+    this.bossFight.onChange = () => this.#emit()
+    this.bossFight.onWin = (position) => this.#onBossWin(position)
 
     this.activated = false // meshes built / trial live — flips on hunt completion
     this.marker = null // { ring, beam } scene meshes at the anchor
@@ -125,6 +136,14 @@ export class Challenge {
       return {
         position: this.anchorPosition,
         name: this.siege.hudLabel ?? 'Arm the siege at the beacon core',
+      }
+    }
+    if (this.stage === 3) {
+      // Boss stage: phase/health readout while the King walks, else the call
+      // back to the core.
+      return {
+        position: this.anchorPosition,
+        name: this.bossFight.hudLabel ?? 'Summon the Hollow King at the beacon core',
       }
     }
     return { position: this.anchorPosition, name: 'Trial Grounds' }
@@ -234,29 +253,49 @@ export class Challenge {
     }
     // Stage 1 (beacon) is edit-driven, not ticked — see #onWorldEdit.
     if (this.stage === 2) this.siege.update(delta, playerPos)
-    // Stage 3 (boss) ticks here when its PR lands.
+    if (this.stage === 3) this.bossFight.update(delta, playerPos)
   }
 
   // --- Stage 2: The Siege (SiegeEvent owns the waves) -------------------------
 
   // The use-verb dispatcher (main.js) consults this for EVERY targeted block:
-  // right-clicking the beacon's gold core arms the siege. Gate hard on the
-  // core cells at the anchor AND the siege stage — gold ore is never globally
+  // right-clicking the beacon's gold core arms the siege (stage 2) or summons
+  // the Hollow King (stage 3, siege cleared). Gate hard on the core cells at
+  // the anchor AND the combat stages — gold ore is never globally
   // interactive, so cave veins stay plain mining targets.
   tryUseBlock(block, x, y, z) {
-    if (!this.activated || this.stage !== 2) return false
+    if (!this.activated || (this.stage !== 2 && this.stage !== 3)) return false
     if (block.id !== this.structure.cfg.shape.coreId) return false
     const s = this.structure
     if (x !== s.anchorX || z !== s.anchorZ) return false
     const dy = y - s.baseY
     if (dy < 1 || dy > s.cfg.shape.coreHeight) return false
-    return this.siege.arm()
+    if (this.stage === 2) return this.siege.arm()
+    return this.bossFight.trySummon()
   }
 
   #onSiegeWin() {
     this.siegeCleared = true // latched, like beaconBuilt
     this.onSiegeWon?.(this.anchorPosition)
     this.#advance('The siege is broken! The beam burns blood-orange — the Hollow King stirs.')
+  }
+
+  // The King fell (through the normal kill plumbing — BossFight observed the
+  // pinned reference vanish with zero health). Latch, advance to complete,
+  // and fire onComplete for the reveal modal.
+  #onBossWin(position) {
+    this.bossDefeated = true // latched, like the others
+    this.onBossDefeated?.(position)
+    this.#advance('The Hollow King has fallen. The Trial is complete!')
+    this.onComplete?.()
+  }
+
+  // The reveal modal was shown — never replay it on a reload (the treasure
+  // hunt's celebrated guard, same shape).
+  markCelebrated() {
+    if (this.celebrated) return
+    this.celebrated = true
+    this.#emit()
   }
 
   // Delivery: all shards found and the player standing inside the marker
@@ -360,6 +399,7 @@ export class Challenge {
     if (stage >= 4) this.bossDefeated = true
     this.stage = stage
     this.siege.cancel() // never jump away leaving mobs.event set
+    this.bossFight.cancel() // ditto — also despawns a live King
     this.#syncBeacon()
     this.#emit()
   }

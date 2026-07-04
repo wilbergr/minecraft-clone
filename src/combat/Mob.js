@@ -51,13 +51,15 @@ export class Mob {
 
   // The shared per-frame movement tail: face + apply the move intent, decay
   // knockback, hop blocked grounded moves, step physics, tick the flash.
-  locomote(delta, moveDir, speed) {
+  // `hop: false` lets a move slam into walls instead of jumping them (the
+  // boss's charge — hitWall is its stagger trigger, not a step to climb).
+  locomote(delta, moveDir, speed, hop = true) {
     if (moveDir) this.group.rotation.y = Math.atan2(moveDir.x, moveDir.z)
     const body = this.body
     body.velocity.x = (moveDir ? moveDir.x * speed : 0) + this.knock.x
     body.velocity.z = (moveDir ? moveDir.z * speed : 0) + this.knock.z
     this.knock.multiplyScalar(Math.exp(-8 * delta))
-    if (moveDir && body.grounded && body.hitWall) {
+    if (hop && moveDir && body.grounded && body.hitWall) {
       body.velocity.y = PHYSICS.jumpVelocity
     }
     body.step(delta)

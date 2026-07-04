@@ -1199,3 +1199,100 @@ body.touch-mode .help-touch {
   opacity: 0.9;
   transition: opacity 0.25s ease;
 }
+
+/* --- The Hollow King (King's Trial stage 4) --------------------------------- */
+
+/* Boss HP bar: a slim strip just under the compass, alive only while the
+   King is. z-index 5: passive HUD. */
+#boss-bar {
+  position: absolute;
+  top: calc(2.5rem + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 72vw);
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#boss-name {
+  color: #ffd75e;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  margin-bottom: 2px;
+}
+
+#boss-track {
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 215, 94, 0.55);
+  background: rgba(11, 14, 20, 0.65);
+  overflow: hidden;
+}
+
+#boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff6a3c, #ffd75e);
+  transition: width 0.15s ease-out;
+}
+
+/* Trial completion reveal: the treasure modal's sibling, ember-toned. */
+#challenge-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.7);
+  z-index: 9;
+}
+
+#challenge-panel {
+  text-align: center;
+  color: #eef2f7;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.9);
+  border: 1px solid rgba(255, 176, 102, 0.55);
+  box-shadow: 0 0 60px rgba(255, 176, 102, 0.25);
+  max-width: min(480px, calc(100vw - 2rem));
+}
+
+#challenge-panel h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2rem;
+  color: #ffb066;
+}
+
+#challenge-crown {
+  color: #ffd75e;
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  animation: sparkle-pulse 1.6s ease-in-out infinite;
+}
+
+#challenge-reveal-message {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+#challenge-continue-btn {
+  font: inherit;
+  font-size: 1rem;
+  color: #eef2f7;
+  margin-top: 1.25rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 176, 102, 0.5);
+  background: rgba(255, 176, 102, 0.15);
+  cursor: pointer;
+}
+
+#challenge-continue-btn:hover {
+  background: rgba(255, 176, 102, 0.3);
+}

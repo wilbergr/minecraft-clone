@@ -93,6 +93,22 @@ export function bindQuestLog(hunt, challenge) {
     trialList.appendChild(li)
   }
 
+  // Stage 4's live detail row: how to summon the King, or how the duel stands.
+  const renderBoss = () => {
+    const fight = challenge.bossFight
+    const li = item(
+      'quest-active',
+      `<span class="quest-mark">◈</span> Face the Hollow King<p class="quest-clue"></p>`,
+    )
+    li.querySelector('.quest-clue').textContent =
+      fight.state === 'fighting'
+        ? 'The Hollow King walks the ring. Every attack is announced — watch the pose, then move. A charge into a pillar staggers him.'
+        : fight.state === 'rumbling'
+          ? 'The ground trembles — the King is coming.'
+          : "Right-click the beacon's gold core to summon the Hollow King. Fell him and the Trial is yours."
+    trialList.appendChild(li)
+  }
+
   // Stage 3's live detail row: how to start the siege, or where it stands.
   const renderSiege = () => {
     const siege = challenge.siege
@@ -128,6 +144,7 @@ export function bindQuestLog(hunt, challenge) {
         if (index === 0) renderRelics()
         if (index === 1) renderBeacon()
         if (index === 2) renderSiege()
+        if (index === 3) renderBoss()
       } else {
         trialList.appendChild(item('quest-locked', `<span class="quest-mark">·</span> ${stage.name} — sealed`))
       }

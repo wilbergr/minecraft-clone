@@ -171,13 +171,49 @@ export const CHALLENGE = {
     flare: { leadSeconds: 1.2, color: 0xff4545, particles: 40 },
     clearedBeamColor: 0xff6a3c, // blood-orange anchor beam once the siege is won — the King is ready
   },
-  // Stage 4 — The Hollow King (PR 4, inert): the 3-phase end boss.
+  // Stage 4 — The Hollow King: the 3-phase end boss (src/combat/Boss.js +
+  // src/quest/BossFight.js). Summoned by re-clicking the gold core after the
+  // siege; every attack telegraphs (emissive flash + pose) for at least
+  // `telegraphSeconds` and no attack one-shots through iron armor (max 10
+  // pre-armor vs 20 HP × 60% reduction). ~12 body parts + ≤2 zombie minions
+  // is the whole event population — ambient spawns stay suppressed.
   boss: {
-    health: 120,
+    health: 120, // ≈18 full bow shots or ~26 iron-sword swings pre-crit
     aabb: { width: 1.1, height: 2.8 },
     knockbackFactor: 0.15, // fraction of normal knockback the boss takes
     phases: [0.66, 0.33], // health fractions where phases 2 and 3 begin
+    phaseSpeeds: [2.2, 2.8, 2.8], // walk speed per phase, blocks/s
+    phase3CooldownFactor: 0.75, // Breaker phase: every attack cools down faster
+    roarSeconds: 2, // invulnerable phase-transition roar (crown spins fast)
+    summonSeconds: 3, // core-click rumble before the King rises
     leash: { playerSeconds: 8, losSeconds: 10 }, // out-of-arena / no-line-of-sight reset timers
+    drop: 'kings_crown', // the trophy, through the normal kill-drop path
+    extraDrop: { id: 'gold_ore', count: [4, 8] },
+    attacks: {
+      // A — Crownfall Slam: arms overhead, white ramp, then an AoE around the
+      // boss. Counter: back off — the radius reads from the arm pose.
+      slam: { telegraphSeconds: 0.9, cooldownSeconds: 5, radius: 3.5, damage: 8, triggerRange: 3 },
+      // B — Charge: crouch + 3 flashes, then a straight rush. Hitting a wall
+      // (body.hitWall) staggers it — bait it into the beacon pillars.
+      charge: { telegraphSeconds: 0.8, cooldownSeconds: 8, speed: 11, maxSeconds: 2,
+        damage: 6, hitRange: 1.4, staggerSeconds: 2.5, staggerDamageFactor: 1.5,
+        minRange: 5, maxRange: 18 },
+      // C — Bone Volley (phase ≥ 2): 3 arrows in a fan with ballistic lead,
+      // line-of-sight gated like the skeleton. Counter: strafe or take cover.
+      volley: { telegraphSeconds: 0.9, cooldownSeconds: 6, arrows: 3, fanDegrees: 15,
+        arrowSpeed: 18, arrowDamage: 3, minRange: 4, maxRange: 18 },
+      // D — Summon (phase ≥ 2): raises zombie minions, hard-capped alive.
+      summon: { telegraphSeconds: 1.2, cooldownSeconds: 12, count: 2, maxMinions: 2, ringRadius: 3 },
+      // E — Quake (phase 3): marks the player's cell, then world.explode
+      // there — dodgeable by walking; the craters accumulate and the arena
+      // erodes. The world itself keeps score.
+      quake: { telegraphSeconds: 1.2, cooldownSeconds: 10, radius: 2.2, damage: 10,
+        damageRadius: 3, minRange: 2, maxRange: 14,
+        marker: { color: 0xffb066, radius: 1.4, opacity: 0.55 } },
+    },
+    crown: { color: 0xffd75e, hover: 3.15, spinSpeed: 1.2, roarSpinSpeed: 10, staggerDrop: 1.7 },
+    core: { color: 0xff5533, pulseSpeed: 3 }, // the exposed chest core (visual flavor)
+    defeatNova: { color: 0xffd75e, particles: 140 }, // crown-colored victory burst
   },
 }
 

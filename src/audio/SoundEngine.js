@@ -138,6 +138,15 @@ export class SoundEngine {
         this.#tone({ type: 'sawtooth', from: 150, to: 200, dur: 1.0, gain: 0.35 * v })
         this.#tone({ type: 'sawtooth', from: 100, to: 133, dur: 1.0, gain: 0.28 * v })
         break
+      case 'roar': // the Hollow King — a descending sweep over low detuned saws
+        this.#burst({ type: 'lowpass', freq: 900, dur: 1.1, gain: 0.55 * v })
+        this.#tone({ type: 'sawtooth', from: 140, to: 55, dur: 1.2, gain: 0.4 * v })
+        this.#tone({ type: 'sawtooth', from: 95, to: 38, dur: 1.2, gain: 0.3 * v })
+        break
+      case 'rumble': // summoning tremor — long, low, swelling ground noise
+        this.#burst({ type: 'lowpass', freq: 160, dur: 2.8, gain: 0.7 * v })
+        this.#tone({ type: 'sine', from: 45, to: 28, dur: 2.8, gain: 0.4 * v })
+        break
       case 'chestOpen': // wooden creak rising as the lid lifts
         this.#burst({ type: 'lowpass', freq: 620, dur: 0.14, gain: 0.35 * v })
         this.#tone({ type: 'triangle', from: 140, to: 260, dur: 0.18, gain: 0.22 * v })

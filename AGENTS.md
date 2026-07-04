@@ -536,6 +536,63 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   frame. The siege freezes while the pointer is unlocked (like combat), so
   tests must hold the lock through waves.
 
+## The King's Trial, PR 4: The Hollow King (boss finale)
+
+- `src/combat/Boss.js` extends `Mob` — 12 parts, feet-origin, arms hang from
+  PIVOT GROUPS at the shoulders (poses rotate the joint, not the box center).
+  The crown + chest core are `MeshBasicMaterial` (unlit = glowing) kept OUT
+  of `this.materials`, so the hurt flash / telegraph emissive never touch
+  them — `dispose()` is overridden to free both. In `HOSTILES` as `'boss'`
+  (`mobs.spawnAt(x, z, 'boss')` works) but never in `hostileWeights`.
+- All tunables in `CHALLENGE.boss` (config-driven rule): HP 120, AABB
+  1.1×2.8, `knockbackFactor` 0.15 (applied in an overridden `hurt`),
+  `phases: [0.66, 0.33]` health fractions, per-attack
+  `{telegraphSeconds, cooldownSeconds, …}` blocks, `drop`/`extraDrop` (the
+  `kings_crown` trophy + gold ride Combat's normal kill plumbing untouched).
+- The state machine is plain readable fields (`phase`, `state`, `attack`,
+  `cooldowns`, `lastAttack`) and `boss.startAttack(key, playerPos)` is PUBLIC
+  — the headless seam that forces any attack past range/phase/cooldown gates
+  (the telegraph still runs). Attacks: slam (AoE), charge (rush;
+  `body.hitWall` while charging → 2.5s stagger at ×1.5 damage — `locomote`
+  grew a `hop = true` 4th param so the charge does NOT auto-hop walls),
+  volley (phase ≥2, 3-arrow fan, skeleton-style lead + LOS), summon (phase
+  ≥2, hard cap via `minions.length`), quake (phase 3, marks the player's
+  cell then explodes it — craters are real `World.explode` edits and persist).
+- MID-UPDATE MUTATION RULE: the boss only SETS `pendingSummon` /
+  `pendingQuake`; `MobManager.update` resolves both AFTER the mob loop
+  (creeper-`exploded` pattern) and prunes `mob.minions` against the live
+  list there too. Never resolve them inside `Boss.update`.
+- Phase transitions: 2s invulnerable roar (`hurt` returns false), the crown
+  spinning fast IS the tell; attack cooldowns reset. Phase 3 multiplies all
+  cooldowns by `phase3CooldownFactor`.
+- `src/quest/BossFight.js` is the fight runner (SiegeEvent's sibling, owned
+  by Challenge as `challenge.bossFight`, deps attached in main.js):
+  core-click at stage 3 → `trySummon()` → 3s rumble → boss rises at the
+  anchor via `spawnAt`, pinned BY REFERENCE. Gone from `mobs.mobs` with
+  `health <= 0` = victory; gone otherwise (void, despawnRadius) = quietly
+  re-summonable. Leash: outside `CHALLENGE.siege.arenaRadius` >
+  `leash.playerSeconds` or LOS broken > `leash.losSeconds` → roar + despawn
+  (fresh summon = full health, so leashing IS the heal). `mobs.event` is set
+  for the whole fight; death/skips route through `cancel()` so it never
+  leaks. Mid-fight state is not saved (mobs never persist).
+- Victory: `Challenge.#onBossWin` latches `bossDefeated`, advances to
+  complete, fires `onComplete` — owned by `bindChallengeReveal`
+  (`src/ui/challengeReveal.js`, `#challenge-reveal` modal rendering
+  `CHALLENGE_MESSAGE`) with the treasure reveal's `celebrated` replay guard
+  (`challenge.markCelebrated()`). The api exposes `show()` so the future
+  guidance layer can wrap the moment. Boss HP bar: `src/ui/bossHud.js`
+  (`#boss-bar`), purely driven by `bossFight.onBossHealth`/`onBossGone`.
+- Observability seam for the guidance PR: `bossFight.onBossEvent(type,
+  data)` — rumble/rise/telegraph/slam/charge/volley/summon/quake/quakeMark/
+  stagger/phase/leash. main.js wires only fx to it today.
+- Headless: shrink `__mc.bossFight.cfg.…` (it IS `CHALLENGE.boss`, so
+  `boss.cfg` too) before summoning; summon = `skipToStage(3)` + setBlock the
+  two core cells + set `interaction.target` to a core cell + `useSelected()`;
+  or spawn bare via `mobs.spawnAt(x, z, 'boss')` (no leash/HP bar without
+  the runner). Force attacks with `boss.startAttack('quake', camera.position)`;
+  `waitForFunction` on `boss.state`/`boss.phase`/`challenge.stage` — never
+  fixed sleeps. Reveal is `__mc.challengeReveal` (`.isOpen`).
+
 ## Inventory overhaul: cursor stacks, drop/throw, chests, sort
 
 - One interaction model for every screen: `src/inventory/stackOps.js` (pure

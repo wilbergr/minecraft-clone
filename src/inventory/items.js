@@ -110,6 +110,15 @@ export const ITEMS = {
     glyph: '◈',
     tint: '#7fe7d0',
   },
+  // King's Trial stage 4: the Hollow King's trophy — dropped on the boss
+  // kill through the normal drop path. No use; it IS the point.
+  kings_crown: {
+    id: 'kings_crown',
+    name: "King's Crown",
+    maxStack: 1,
+    glyph: '♛',
+    tint: '#ffd75e',
+  },
   // Cow bonus drop (Phase 13) — the leather armor ingredient.
   leather: { id: 'leather', name: 'Leather', maxStack: INVENTORY.maxStack, glyph: '▤', tint: LEATHER_TINT },
   // Armor sets (Phase 13). Points are MC-ish: full leather 7, full iron 15.
