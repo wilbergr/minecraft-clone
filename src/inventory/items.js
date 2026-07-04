@@ -99,6 +99,15 @@ export const ITEMS = {
     tool: { kind: 'bow', tier: 1, durability: 96 },
   },
   arrow: { id: 'arrow', name: 'Arrow', maxStack: INVENTORY.maxStack, glyph: '➶', tint: '#d8dde2' },
+  // King's Trial stage 1: relic shards are collected by walking into them
+  // (src/quest/RelicHunt.js) and consumed on delivery at the Trial Grounds.
+  relic_shard: {
+    id: 'relic_shard',
+    name: 'Relic Shard',
+    maxStack: INVENTORY.maxStack,
+    glyph: '◈',
+    tint: '#7fe7d0',
+  },
   // Cow bonus drop (Phase 13) — the leather armor ingredient.
   leather: { id: 'leather', name: 'Leather', maxStack: INVENTORY.maxStack, glyph: '▤', tint: LEATHER_TINT },
   // Armor sets (Phase 13). Points are MC-ish: full leather 7, full iron 15.

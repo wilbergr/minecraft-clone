@@ -26,6 +26,9 @@ export const RECIPES = [
   // all wood and arrows are stick + stone — skeletons also drop arrows.
   { id: 'bow', input: [['stick', 3], ['planks', 2]], output: ['bow', 1] },
   { id: 'arrow', input: [['stick', 1], ['stone', 1]], output: ['arrow', 4] },
+  // Torches (Phase 11 left this "no recipe yet" — closed with the King's
+  // Trial: cave diving for the Deep Shard needs light the honest way).
+  { id: 'torch', input: [['stick', 1], ['coal', 1]], output: ['torch', 4] },
   // Armor (Phase 13): leather from cows, iron from smelted ingots. Right
   // click a piece to wear it.
   { id: 'leather_helmet', input: [['leather', 5]], output: ['leather_helmet', 1] },

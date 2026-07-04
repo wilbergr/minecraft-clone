@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { PLAYER, TREASURE, WORLD } from '../config.js'
 import { mulberry32 } from '../world/noise.js'
+import { TokenField } from '../quest/TokenField.js'
 
 // The treasure hunt (Phase 6): TREASURE.rings.length glowing tokens at
 // seed-deterministic world positions, collected by walking up to them. Token
@@ -30,9 +31,11 @@ export class TreasureHunt {
     this.onCollect = null // callback(token) — HUD toast
     this.onComplete = null // callback() — opens the reveal overlay
     this.celebrated = false // reveal shown — set via markCelebrated(), persisted
-    this.time = 0 // drives the bob animation
+    // Visuals + proximity live in the shared TokenField (also used by the
+    // King's Trial relic hunt), styled from the same TREASURE knobs as ever.
+    this.field = new TokenField(scene, TREASURE)
     this.tokens = this.#placeTokens()
-    for (const token of this.tokens) this.#buildMeshes(token)
+    for (const token of this.tokens) this.field.build(token)
   }
 
   onChange(fn) {
@@ -100,69 +103,15 @@ export class TreasureHunt {
       .replaceAll('{name}', TREASURE.names[index])
   }
 
-  // --- Rendering -------------------------------------------------------------
-
-  #buildMeshes(token) {
-    // Unlit gold octahedron: MeshBasicMaterial ignores the scene lights, so
-    // it reads as glowing against the Lambert-shaded terrain.
-    token.mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.45),
-      new THREE.MeshBasicMaterial({ color: TREASURE.tokenColor }),
-    )
-    token.mesh.position.copy(token.position)
-    // Sky beam: a faint additive column over the token. Scene fog still
-    // applies, so it emerges as a landmark on approach instead of giving the
-    // spot away from across the world.
-    const { radius, color, opacity } = TREASURE.beam
-    token.beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius, radius, WORLD.chunkHeight * 2, 8, 1, true),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }),
-    )
-    token.beam.position.set(token.position.x, WORLD.chunkHeight, token.position.z)
-    this.scene.add(token.mesh, token.beam)
-  }
-
-  #removeMeshes(token) {
-    for (const mesh of [token.mesh, token.beam]) {
-      this.scene.remove(mesh)
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-    }
-  }
-
   // --- Gameplay tick (driven by the main loop) -------------------------------
 
   update(delta, playerPos) {
-    this.time += delta
-    const { spinSpeed, bob, collectRadius } = TREASURE
-    for (const token of this.tokens) {
-      if (token.found) continue
-      token.mesh.rotation.y += spinSpeed * delta
-      token.mesh.position.y =
-        token.position.y + Math.sin(this.time * bob.speed + token.index) * bob.amplitude
-      // Horizontal proximity collect (with a loose vertical band, so pillars
-      // and pits under the token don't count as "reaching" it).
-      const dx = playerPos.x - token.position.x
-      const dz = playerPos.z - token.position.z
-      if (
-        dx * dx + dz * dz <= collectRadius * collectRadius &&
-        Math.abs(playerPos.y - token.position.y) < 4
-      ) {
-        this.#collect(token)
-      }
-    }
+    this.field.update(delta, playerPos, this.tokens, (token) => this.#collect(token))
   }
 
   #collect(token) {
     token.found = true
-    this.#removeMeshes(token)
+    this.field.remove(token)
     this.onCollect?.(token)
     this.#emit()
     if (this.isComplete) this.onComplete?.()
@@ -192,7 +141,7 @@ export class TreasureHunt {
     for (const token of this.tokens) {
       if (found[token.index] === true && !token.found) {
         token.found = true
-        this.#removeMeshes(token)
+        this.field.remove(token)
       }
     }
     this.celebrated = data?.celebrated === true

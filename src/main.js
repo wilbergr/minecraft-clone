@@ -8,6 +8,7 @@ import { Inventory } from './inventory/Inventory.js'
 import { Combat } from './combat/Combat.js'
 import { SaveManager } from './save/SaveManager.js'
 import { TreasureHunt } from './treasure/TreasureHunt.js'
+import { Challenge } from './quest/Challenge.js'
 import { bindOverlay } from './ui/overlay.js'
 import { bindHotbar } from './ui/hotbar.js'
 import { bindHud } from './ui/hud.js'
@@ -111,6 +112,20 @@ save.attachFurnaces(furnaces)
 save.attachArmor(combat.armor)
 save.attachSleep(sleep)
 
+// The King's Trial (endgame): the four-stage challenge chain, unlocked by
+// treasure-hunt completion. Constructed after attachTreasure so it sees the
+// restored hunt state; its own progress rides the optional `challenge` slot.
+const challenge = new Challenge(world, scene, hunt, inventory)
+save.attachChallenge(challenge)
+challenge.onCollect = (relic) => {
+  sounds.play('pickup')
+  particles.burst(relic.position.x, relic.position.y, relic.position.z, 0x7fe7d0, 24)
+}
+challenge.onDeliver = (pos) => {
+  sounds.play('pickup')
+  particles.burst(pos.x, pos.y + 1, pos.z, 0xffb066, 60)
+}
+
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
 interaction.useItemHook = (item) => {
   if (!item.armor || !combat.armor.equipSelected()) return false
@@ -158,8 +173,8 @@ bindHungerHud(hunger)
 bindArmorHud(combat.armor)
 bindSleepFx(sleep, sounds)
 bindResetButton(save)
-const toggleQuestLog = bindQuestLog(hunt)
-const updateTreasureHud = bindTreasureHud(hunt, camera)
+const toggleQuestLog = bindQuestLog(hunt, challenge)
+const updateTreasureHud = bindTreasureHud(hunt, challenge, camera)
 // Closing the screen re-locks the pointer; give the lock a beat to land
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -230,6 +245,7 @@ renderer.setAnimationLoop(() => {
   }
   if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
   hunt.update(delta, camera.position)
+  challenge.update(delta, camera.position)
   particles.update(delta)
   drops.update(delta, camera.position)
   fx.viewmodel.update(delta)
@@ -260,6 +276,7 @@ window.__mc = {
   mobs: combat.mobs,
   save,
   hunt,
+  challenge,
   touch,
   help,
   sounds,

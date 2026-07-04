@@ -15,12 +15,14 @@ import { SAVE, WORLD } from '../config.js'
 //     furnaces: { "x,y,z": { input, fuel, output, ... } },  // Furnaces.serialize()
 //     armor: { head, chest, legs, feet },  // Armor.serialize() (Phase 13; item ids or null)
 //     spawn: [x, y, z],          // bed respawn point, block coords (bed feature; absent/null = origin)
+//     challenge: { stage, relics, beaconBuilt, siegeCleared, bossDefeated, celebrated },
+//                               // Challenge.serialize() (King's Trial)
 //   }
 //
-// `hunger`, `furnaces`, `armor`, and `spawn` are optional keys (Phases 12–13,
-// bed feature): older saves simply lack them and load with a full bar / no
-// furnace contents / nothing worn / the origin spawn — absent keys never
-// invalidate a save on their own.
+// `hunger`, `furnaces`, `armor`, `spawn`, and `challenge` are optional keys
+// (Phase 12 onward): older saves simply lack them and load with a full bar /
+// no furnace contents / nothing worn / the origin spawn / a fresh trial —
+// absent keys never invalidate a save on their own.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -38,6 +40,7 @@ export class SaveManager {
     this.inventory = inventory
     this.health = health
     this.treasure = null // Phase 6 writes hunt progress here; it round-trips
+    this.challenge = null // King's Trial progress, wired by attachChallenge
     this.daynightData = null // loaded clock slot, applied by attachDayNight (Phase 10)
     this.daynight = null // live DayNight ref — serialize() reads the clock from it
     this.hunger = null // wired by attachHunger (Phase 12)
@@ -83,6 +86,18 @@ export class SaveManager {
     this.treasure = hunt.serialize()
     hunt.onChange(() => {
       this.treasure = hunt.serialize()
+      this.dirty = true
+    })
+  }
+
+  // Verbatim sibling of attachTreasure for the King's Trial: the optional
+  // `challenge` slot round-trips Challenge.serialize(), dirty-flagged on
+  // every stage/relic change. Called once, after load().
+  attachChallenge(challenge) {
+    challenge.deserialize(this.challenge)
+    this.challenge = challenge.serialize()
+    challenge.onChange(() => {
+      this.challenge = challenge.serialize()
       this.dirty = true
     })
   }
@@ -138,6 +153,7 @@ export class SaveManager {
       this.health.deserialize(data.health)
       this.player.deserialize(data.player)
       this.treasure = data.treasure ?? null
+      this.challenge = data.challenge ?? null
       this.daynightData = data.daynight ?? null
       this.hungerData = data.hunger ?? null
       this.furnaceData = data.furnaces ?? null
@@ -161,6 +177,7 @@ export class SaveManager {
       inventory: this.inventory.serialize(),
       edits: this.world.serializeEdits(),
       treasure: this.treasure,
+      challenge: this.challenge ?? undefined, // optional key — omitted until wired
       daynight: this.daynight ? this.daynight.serialize() : this.daynightData,
       hunger: this.hunger ? this.hunger.serialize() : (this.hungerData ?? undefined),
       furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),

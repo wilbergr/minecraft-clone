@@ -2,12 +2,15 @@ import * as THREE from 'three'
 import { TREASURE } from '../config.js'
 import { cardinal8 } from '../treasure/TreasureHunt.js'
 
-// Treasure HUD (DOM, like the hotbar): a compass strip at the top of the
-// screen whose arrow points at the active token relative to where the camera
+// Quest HUD (DOM, like the hotbar): a compass strip at the top of the screen
+// whose arrow points at the current objective relative to where the camera
 // faces, with a "~62 blocks NE · Sunstone" readout — plus the short-lived
-// "found it" toast. Returns an update() for the main loop: the arrow needs
-// the camera every frame, but text only touches the DOM when it changes.
-export function bindTreasureHud(hunt, camera) {
+// toast line. The compass target is the active treasure token first, then
+// the King's Trial takes over (active relic shard, then the Trial Grounds
+// anchor); it hides only when neither quest has an objective. Returns an
+// update() for the main loop: the arrow needs the camera every frame, but
+// text only touches the DOM when it changes.
+export function bindTreasureHud(hunt, challenge, camera) {
   const compass = document.getElementById('compass')
   compass.innerHTML =
     '<span id="compass-arrow" aria-hidden="true">▲</span><span id="compass-text"></span>'
@@ -16,8 +19,8 @@ export function bindTreasureHud(hunt, camera) {
   const toast = document.getElementById('treasure-toast')
 
   let toastTimeout
-  hunt.onCollect = (token) => {
-    toast.textContent = `✦ You found the ${token.name}! (${hunt.foundCount}/${hunt.tokens.length})`
+  const showToast = (message) => {
+    toast.textContent = message
     toast.classList.add('show')
     clearTimeout(toastTimeout)
     toastTimeout = setTimeout(
@@ -25,11 +28,14 @@ export function bindTreasureHud(hunt, camera) {
       TREASURE.toastSeconds * 1000,
     )
   }
+  hunt.onCollect = (token) =>
+    showToast(`✦ You found the ${token.name}! (${hunt.foundCount}/${hunt.tokens.length})`)
+  challenge.onToast = showToast
 
   let lastText = ''
   const forward = new THREE.Vector3()
   return function update() {
-    const target = hunt.activeToken
+    const target = hunt.activeToken ?? challenge.compassTarget
     compass.classList.toggle('hidden', !target)
     if (!target) return
 
