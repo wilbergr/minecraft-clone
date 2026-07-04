@@ -17,6 +17,7 @@ import { InventoryScreen } from './ui/inventoryScreen.js'
 import { SlotCursor } from './ui/slotCursor.js'
 import { bindSlotTooltips } from './ui/slots.js'
 import { bindQuestLog } from './ui/questLog.js'
+import { bindDropKeys, bindBackdropDrop } from './ui/dropKeys.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
 import { bindHelp } from './ui/help.js'
@@ -197,11 +198,14 @@ const reveal = bindTreasureReveal(hunt, player)
 const help = bindHelp(player)
 // The death screen, treasure reveal, furnace, and help panel count as open UI
 // so "click to play" stays out of their way.
-const refreshOverlay = bindOverlay(
-  player,
-  () =>
-    screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen || furnaceScreen.isOpen,
-)
+const anyUIOpen = () =>
+  screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen || furnaceScreen.isOpen
+const refreshOverlay = bindOverlay(player, anyUIOpen)
+// Q / Shift+Q throw from the hotbar while playing; clicking a screen's
+// backdrop throws the held cursor stack (left = all, right = one).
+bindDropKeys(inventory, drops, camera, player, combat.health, sounds, anyUIOpen)
+bindBackdropDrop(screen.root, cursor, drops, camera)
+bindBackdropDrop(furnaceScreen.root, cursor, drops, camera)
 bindHotbar(inventory, player)
 bindHud(combat.health, () => {
   combat.respawn()

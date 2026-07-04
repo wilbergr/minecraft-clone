@@ -484,13 +484,19 @@ export const FEEDBACK = {
     bob: { amount: 0.012, speed: 5.5 }, // idle sway
   },
   drops: {
-    maxEntities: 32, // oldest drop despawns past this
+    // Raised 32 → 64 with the Q-drop feature: oldest-drop destruction is
+    // player-visible once whole stacks can be thrown on purpose.
+    maxEntities: 64, // oldest drop despawns past this
     size: 0.24, // ground item cube edge, blocks
     // Spawn "pop": a short self-contained arc (NOT the physics pass — the
     // tween integrates its own gravity so drops work without it).
     pop: { horizontal: 1.6, up: 4.5, gravity: 13 },
     spinSpeed: 2.6, // radians/sec while on the ground
     pickupDelaySeconds: 0.5, // can't be vacuumed until the pop finishes
+    // Thrown items (Q / Shift+Q / backdrop-drop in screens): fast enough to
+    // clear magnetRadius, with a longer per-entity pickup delay covering the
+    // flight — without both, a thrown item boomerangs straight back.
+    throw: { speed: 6, up: 2.5, pickupDelaySeconds: 1.5 },
     magnetRadius: 1.5, // starts homing to the player within this distance
     magnetSpeed: 9, // homing speed, blocks/sec
     collectRadius: 0.6, // absorbed into the inventory at this distance

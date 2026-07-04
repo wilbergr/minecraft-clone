@@ -116,6 +116,20 @@ export class Inventory {
     return true
   }
 
+  // Remove up to `count` items from a slot, returning the removed stack
+  // ({ id, count, durability? }) or null. Unlike consume() it's
+  // slot-addressed and returns what it removed — the Q-drop path.
+  take(index, count) {
+    const stack = this.slots[index]
+    if (!stack || count <= 0) return null
+    const taken = Math.min(count, stack.count)
+    const removed = { ...stack, count: taken }
+    stack.count -= taken
+    if (stack.count === 0) this.slots[index] = null
+    this.#emit()
+    return removed
+  }
+
   // Replace a slot's stack outright (Phase 12: the furnace screen moves
   // stacks between the inventory and furnace slots). `stack` is
   // { id, count, durability? } or null; listeners are notified.

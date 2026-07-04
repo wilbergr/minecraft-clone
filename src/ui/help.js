@@ -28,6 +28,7 @@ export function bindHelp(player) {
             <li>Right click — use the held item: place a block, eat food, wear armor</li>
             <li>Hold right click with a bow — draw; release to shoot (needs arrows)</li>
             <li><kbd>1</kbd>–<kbd>9</kbd> / wheel — pick a hotbar slot</li>
+            <li><kbd>Q</kbd> — drop one item · <kbd>Shift</kbd>+<kbd>Q</kbd> — drop the stack</li>
             <li><kbd>E</kbd> — inventory &amp; crafting · <kbd>J</kbd> — quest log</li>
             <li><kbd>H</kbd> — this panel · <kbd>Esc</kbd> — release the mouse</li>
             <li><kbd>M</kbd> — mute / unmute sound</li>
