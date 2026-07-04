@@ -194,8 +194,44 @@ body.touch-mode #hotbar {
   background: rgba(238, 242, 247, 0.12);
 }
 
-.slot.pending {
-  border-color: #f5c542;
+/* The held cursor stack's ghost (inventory overhaul): a slot-styled element
+   pinned to the pointer, above every screen (z 8) and modal (z 9). Position
+   is transform-only — no layout thrash on pointermove. */
+.slot.cursor-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 11;
+  pointer-events: none;
+  border-color: rgba(238, 242, 247, 0.55);
+  background: rgba(11, 14, 20, 0.75);
+}
+
+/* Styled hover tooltip shared by every slot (replaces the native title). */
+#slot-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 11;
+  pointer-events: none;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(11, 14, 20, 0.95);
+  border: 1px solid rgba(238, 242, 247, 0.25);
+  color: #eef2f7;
+  font-size: 0.8rem;
+  max-width: 240px;
+}
+
+#slot-tooltip .tooltip-detail {
+  color: #9aa7b8;
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+#slot-tooltip.hidden,
+.slot.cursor-ghost.hidden {
+  display: none;
 }
 
 .slot-icon {

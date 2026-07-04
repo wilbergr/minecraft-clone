@@ -14,6 +14,8 @@ import { bindHotbar } from './ui/hotbar.js'
 import { bindHud } from './ui/hud.js'
 import { bindResetButton } from './ui/resetButton.js'
 import { InventoryScreen } from './ui/inventoryScreen.js'
+import { SlotCursor } from './ui/slotCursor.js'
+import { bindSlotTooltips } from './ui/slots.js'
 import { bindQuestLog } from './ui/questLog.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
@@ -103,8 +105,15 @@ player.spawnHook = () => sleep.respawnPoint()
 // Restore a saved game before anything renders: block edits must be in the
 // overlay before the first chunks generate, and the UI binders below pick up
 // the restored inventory/health through their initial renders.
+// The shared cursor stack (inventory overhaul): every screen moves items by
+// picking them up onto this cursor; its held stack rides the optional
+// `cursor` save key so a refresh mid-move can't lose it.
+const cursor = new SlotCursor()
+bindSlotTooltips()
+
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
+save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
 save.attachHunger(hunger)
@@ -158,8 +167,8 @@ interaction.useItemHook = (item) => {
   return true
 }
 
-const screen = new InventoryScreen(inventory, player, combat.armor)
-const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
+const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drops, camera)
+const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
 // Use dispatcher for right clicks on blocks (touch ▦ too, sneak bypasses):
 // handlers keyed by block id, each returning true when the click was spent.
 // New interactive blocks register here — mark the block `interactive: true`
@@ -321,4 +330,5 @@ window.__mc = {
   armor: combat.armor,
   projectiles: combat.projectiles,
   sleep,
+  cursor,
 }

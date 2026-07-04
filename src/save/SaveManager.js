@@ -17,12 +17,15 @@ import { SAVE, WORLD } from '../config.js'
 //     spawn: [x, y, z],          // bed respawn point, block coords (bed feature; absent/null = origin)
 //     challenge: { stage, relics, beaconBuilt, siegeCleared, bossDefeated, celebrated },
 //                               // Challenge.serialize() (King's Trial)
+//     cursor: { id, count, durability? },  // held cursor stack (inventory overhaul);
+//                               // returned to the inventory on load
 //   }
 //
-// `hunger`, `furnaces`, `armor`, `spawn`, and `challenge` are optional keys
-// (Phase 12 onward): older saves simply lack them and load with a full bar /
-// no furnace contents / nothing worn / the origin spawn / a fresh trial —
-// absent keys never invalidate a save on their own.
+// `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, and `cursor` are
+// optional keys (Phase 12 onward): older saves simply lack them and load
+// with a full bar / no furnace contents / nothing worn / the origin spawn /
+// a fresh trial / an empty hand — absent keys never invalidate a save on
+// their own.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -51,6 +54,8 @@ export class SaveManager {
     this.armorData = null
     this.sleep = null // wired by attachSleep (bed feature)
     this.sleepData = null
+    this.cursor = null // wired by attachCursor (inventory overhaul)
+    this.cursorData = null
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -123,6 +128,17 @@ export class SaveManager {
     armor.onChange(() => (this.dirty = true))
   }
 
+  // The held cursor stack (inventory overhaul): serialize() reads it live so
+  // an autosave / beforeunload flush mid-drag can't lose the held items. On
+  // load the stack is returned to the INVENTORY (no screen is open yet), not
+  // restored to the cursor. Called once after load().
+  attachCursor(cursor) {
+    this.cursor = cursor
+    const s = this.cursorData
+    if (s?.id) this.inventory.add(s.id, s.count ?? 1, s.durability)
+    cursor.onChange(() => (this.dirty = true))
+  }
+
   // And for the bed spawn point (bed feature): called once after load().
   attachSleep(sleep) {
     this.sleep = sleep
@@ -159,6 +175,7 @@ export class SaveManager {
       this.furnaceData = data.furnaces ?? null
       this.armorData = data.armor ?? null
       this.sleepData = data.spawn ?? null
+      this.cursorData = data.cursor ?? null
       this.dirty = false
       return true
     } catch (err) {
@@ -183,6 +200,7 @@ export class SaveManager {
       furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),
       armor: this.armor ? this.armor.serialize() : (this.armorData ?? undefined),
       spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
+      cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,
     }
   }
 
