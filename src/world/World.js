@@ -259,9 +259,15 @@ export class World {
   // would rebuild the same chunk dozens of times. Water and air are left
   // alone (no flow simulation to fill a carved seabed), y 0 stays solid like
   // the cave floor, and any torches in the sphere unregister.
+  //
+  // Returns the carved cells as [{ x, y, z, id }] (id = the block that was
+  // there) so callers can notify per-block break handlers — exploded
+  // furnaces/chests spill their contents instead of orphaning them (see the
+  // blockBreakHandlers wiring in main.js).
   explode(cx, cy, cz, radius) {
     const r2 = radius * radius
     const dirty = new Set() // "cx,cz" chunk keys needing a remesh
+    const carved = []
     for (let wx = Math.floor(cx - radius); wx <= Math.floor(cx + radius); wx++) {
       for (let wy = Math.floor(cy - radius); wy <= Math.floor(cy + radius); wy++) {
         for (let wz = Math.floor(cz - radius); wz <= Math.floor(cz + radius); wz++) {
@@ -274,6 +280,7 @@ export class World {
           const block = BLOCKS[id]
           if (!block || (!block.solid && !block.targetable)) continue // air/water stay
           this.#recordEdit(wx, wy, wz, BLOCK_AIR, dirty)
+          carved.push({ x: wx, y: wy, z: wz, id })
         }
       }
     }
@@ -282,6 +289,7 @@ export class World {
       if (chunk) chunk.buildMesh(this.material)
     }
     if (dirty.size > 0) this.#emitEdit(Math.floor(cx), Math.floor(cy), Math.floor(cz))
+    return carved
   }
 
   // Shared write path for batched edits: record the overlay entry, keep the

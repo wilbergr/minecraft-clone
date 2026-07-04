@@ -194,8 +194,44 @@ body.touch-mode #hotbar {
   background: rgba(238, 242, 247, 0.12);
 }
 
-.slot.pending {
-  border-color: #f5c542;
+/* The held cursor stack's ghost (inventory overhaul): a slot-styled element
+   pinned to the pointer, above every screen (z 8) and modal (z 9). Position
+   is transform-only — no layout thrash on pointermove. */
+.slot.cursor-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 11;
+  pointer-events: none;
+  border-color: rgba(238, 242, 247, 0.55);
+  background: rgba(11, 14, 20, 0.75);
+}
+
+/* Styled hover tooltip shared by every slot (replaces the native title). */
+#slot-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 11;
+  pointer-events: none;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(11, 14, 20, 0.95);
+  border: 1px solid rgba(238, 242, 247, 0.25);
+  color: #eef2f7;
+  font-size: 0.8rem;
+  max-width: 240px;
+}
+
+#slot-tooltip .tooltip-detail {
+  color: #9aa7b8;
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+#slot-tooltip.hidden,
+.slot.cursor-ghost.hidden {
+  display: none;
 }
 
 .slot-icon {
@@ -505,6 +541,61 @@ body.touch-mode #hotbar {
 .craft-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* "Sort" sits right-aligned above its container grid (main inventory grid
+   and chest grids — never the hotbar). */
+.sort-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.sort-row.hidden {
+  display: none;
+}
+
+.sort-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+}
+
+/* --- Chest screen (inventory overhaul) -------------------------------------- */
+/* Same shell as the furnace screen: dim backdrop at z 8, centered panel. */
+
+#chest-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.65);
+  z-index: 8;
+}
+
+#chest-panel {
+  color: #eef2f7;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+#chest-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+#chest-panel .inv-hint {
+  margin: 0.5rem 0 0.9rem;
+}
+
+/* The player grids sit apart from the chest grid(s). */
+#chest-panel .inv-grid + .inv-grid:not(.inv-hotbar-row):not(.chest-neighbor-grid) {
+  margin-top: 14px;
 }
 
 /* --- Furnace / smelting screen (Phase 12) ---------------------------------- */
@@ -1006,7 +1097,8 @@ body.touch-mode .help-touch {
     font-size: 0.8rem;
   }
 
-  #furnace-panel {
+  #furnace-panel,
+  #chest-panel {
     padding: 1rem;
   }
 

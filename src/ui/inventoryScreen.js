@@ -2,28 +2,43 @@ import { INVENTORY } from '../config.js'
 import { ITEMS } from '../inventory/items.js'
 import { ARMOR_SLOTS } from '../combat/Armor.js'
 import { RECIPES, canCraft, craft } from '../inventory/recipes.js'
-import { createSlotEl, renderSlot } from './slots.js'
+import { sortedStacks } from '../inventory/stackOps.js'
+import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.js'
 
 // The inventory screen: a full-screen overlay (E to toggle) showing every
 // inventory slot plus the crafting panel. Opening releases pointer lock so
 // the mouse can click slots and craft buttons; closing re-locks it.
 //
-// Item moving is click-click: click a slot to pick it (highlight), click
-// another to swap/merge. Crafting is a recipe list drawing ingredients from
-// the whole inventory — see src/inventory/recipes.js.
+// Item moving is the shared cursor-stack model (inventory overhaul): left
+// click picks up / places / merges / swaps, right click splits half / places
+// one, shift-click quick-transfers between hotbar and main grid, double
+// click gathers — all via src/inventory/stackOps.js + the SlotCursor ghost.
+// Note the crafting list counts only slotted items: a held cursor stack is
+// invisible to countOf, exactly like Minecraft.
 //
 // Armor (Phase 13): a row of four wear slots above the grid shows what's
 // equipped; clicking a worn piece takes it off (equipping happens in-game —
 // right click the piece). `armor` is optional so bare setups keep working.
 export class InventoryScreen {
-  constructor(inventory, player, armor = null) {
+  constructor(inventory, player, armor = null, cursor = null, drops = null, camera = null) {
     this.inventory = inventory
     this.player = player
     this.armor = armor
+    this.cursor = cursor
+    this.drops = drops
+    this.camera = camera
     this.root = document.getElementById('inventory-screen')
     this.isOpen = false
-    this.pendingSlot = null // first slot of a click-click move, or null
     this.onToggle = null // callback(isOpen) — lets the play overlay stay away
+
+    // The player-inventory container adapter (see stackOps.js). setSlot
+    // emits, so the hotbar, save dirty flag, and open screens stay in sync.
+    this.invAdapter = {
+      size: inventory.size,
+      get: (i) => inventory.slots[i],
+      set: (i, stack) => inventory.setSlot(i, stack),
+      canAccept: () => true,
+    }
 
     this.#build()
     inventory.onChange(() => {
@@ -51,7 +66,6 @@ export class InventoryScreen {
 
   open() {
     this.isOpen = true
-    this.pendingSlot = null
     this.root.classList.remove('hidden')
     this.player.unlock()
     this.render()
@@ -60,9 +74,19 @@ export class InventoryScreen {
 
   close() {
     this.isOpen = false
+    // A held stack can't leak: it returns to the inventory (overflow is
+    // thrown at the player — see SlotCursor.flushInto).
+    this.cursor?.flushInto(this.inventory, this.drops, this.camera)
     this.root.classList.add('hidden')
     this.player.lock()
     this.onToggle?.(false)
+  }
+
+  // Shift-click rule here: hotbar ↔ main grid.
+  #quickTargets(i) {
+    return i < INVENTORY.hotbarSlots
+      ? [{ adapter: this.invAdapter, start: INVENTORY.hotbarSlots, end: this.inventory.size }]
+      : [{ adapter: this.invAdapter, start: 0, end: INVENTORY.hotbarSlots }]
   }
 
   #build() {
@@ -105,18 +129,31 @@ export class InventoryScreen {
       grid.className = `inv-grid${extraClass ? ` ${extraClass}` : ''}`
       for (let i = from; i < to; i++) {
         const el = createSlotEl()
-        el.addEventListener('click', () => this.#onSlotClick(i))
+        bindSlotPointer(el, {
+          cursor: this.cursor,
+          adapter: () => this.invAdapter,
+          index: i,
+          quickTargets: () => this.#quickTargets(i),
+          gatherAdapters: () => [this.invAdapter],
+        })
         this.slotEls[i] = el
         grid.appendChild(el)
       }
       return grid
     }
+    // Sort packs the MAIN grid only — players curate the hotbar themselves.
+    slotsCol.appendChild(
+      makeSortRow(() => {
+        const sorted = sortedStacks(this.inventory.slots.slice(INVENTORY.hotbarSlots))
+        this.inventory.setRange(INVENTORY.hotbarSlots, sorted)
+      }),
+    )
     slotsCol.appendChild(makeGrid(INVENTORY.hotbarSlots, this.inventory.size))
     slotsCol.appendChild(makeGrid(0, INVENTORY.hotbarSlots, 'inv-hotbar-row'))
     const hint = document.createElement('p')
     hint.className = 'inv-hint'
     hint.textContent =
-      'Tap a slot, then another, to move items. Bottom row is the hotbar.'
+      'Click picks up a stack, click again to place — right click splits or places one, Shift-click moves a stack between rows, double-click gathers. Bottom row is the hotbar.'
     slotsCol.appendChild(hint)
     columns.appendChild(slotsCol)
 
@@ -166,22 +203,9 @@ export class InventoryScreen {
     this.root.appendChild(panel)
   }
 
-  #onSlotClick(index) {
-    if (this.pendingSlot === null) {
-      if (!this.inventory.slots[index]) return // nothing to pick up
-      this.pendingSlot = index
-    } else {
-      const from = this.pendingSlot
-      this.pendingSlot = null
-      this.inventory.swap(from, index)
-    }
-    this.render()
-  }
-
   render() {
     this.slotEls.forEach((el, i) => {
       renderSlot(el, this.inventory.slots[i])
-      el.classList.toggle('pending', i === this.pendingSlot)
     })
     if (this.armor) {
       for (const { slot, el } of this.armorEls) {

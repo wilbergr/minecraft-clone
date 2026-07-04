@@ -378,8 +378,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   no longer pre-gates on `block.interactive` — the hook is consulted for
   EVERY targeted block (the dispatcher decides; unmatched ids fall through),
   which is how contextual cases like the siege core work. Sneak still
-  bypasses. main.js's `onBlockBroken` now checks `block.id ===
-  BLOCK_FURNACE` (not `interactive`) before spilling furnace slots.
+  bypasses. Break notifications mirror the shape since the inventory
+  overhaul: `blockBreakHandlers` in main.js is a per-id map (furnace and
+  chest rows spill contents) — see the inventory-overhaul section for the
+  explosion-carved path.
 - Sleep logic lives in `src/survival/Sleep.js` (tunables in `SLEEP`):
   night-only (`daynight.isNight`) — success sets `sleep.spawn = [x, y, z]`
   (bed block coords) and `setTime(SLEEP.wakeTime)`; a daytime click toasts
@@ -533,6 +535,61 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `'exploded' in m`, and setting `m.exploded = true` detonates it next
   frame. The siege freezes while the pointer is unlocked (like combat), so
   tests must hold the lock through waves.
+
+## Inventory overhaul: cursor stacks, drop/throw, chests, sort
+
+- One interaction model for every screen: `src/inventory/stackOps.js` (pure
+  ops over a *container adapter* `{ size, get, set, canAccept }`) +
+  `src/ui/slotCursor.js` (the shared held-stack ghost) + `bindSlotPointer`
+  in `src/ui/slots.js` (left pick/place/merge/swap, right split/place-one,
+  drag = pointerdown-pick + pointerup-place on a different slot, shift-click
+  `quickMove`, double-click `gather`). Inventory/furnace/chest screens all
+  build adapters and share ONE SlotCursor (main.js) — never reimplement slot
+  clicks. `Inventory.swap` is gone. Right click resets the double-click
+  window on purpose (fast split-then-pick must not gather).
+- Screen close calls `cursor.flushInto(inventory, drops, camera)` — held
+  stack returns to the inventory, overflow is thrown at the player. The held
+  stack also rides the optional `cursor` save key (`attachCursor`): on load
+  it's ADDED to the inventory, not restored to the cursor. `schemaVersion`
+  still 3.
+- Tool durability follows items everywhere now: `Inventory.add(id, count,
+  durability?)` third arg, ground-drop entities carry `durability`, and the
+  furnace/chest spill paths pass it — dropping a used tool can't refresh it.
+- Drop/throw: `Inventory.take(index, count)` (slot-addressed removal that
+  returns what it removed) + `GroundItems.throwFrom(camera, id, count,
+  durability?)`; `spawn` takes opts `{ vx, vy, vz, pickupDelay, durability }`
+  (per-entity `pickupDelay` beats the global — throws need `FEEDBACK.drops.
+  throw.pickupDelaySeconds` or they boomerang back through the magnet).
+  Q = drop one, Shift+Q = stack (`ui/dropKeys.js`, gated on `isLocked` AND
+  the main.js `anyUIOpen()` union — pointer-lock release is async, so
+  isLocked alone leaks a drop when a screen opens). Backdrop click in any
+  screen throws the held cursor stack (left all / right one).
+- Chests: block 16 (plain full cube), `src/crafting/Chests.js` is a Furnaces
+  sibling (Map by "x,y,z", `markChanged`, `onBroken` spill, optional
+  `chests` save key via `attachChests`) with NO update tick. The chest
+  screen's "double chest" is the lite adjacent view: `openAt` checks the 4
+  horizontal neighbors via `world.blockAt` and shows that chest's grid too —
+  state stays strictly per-block, no pairing metadata.
+- Explosion spill (orphan fix): `World.explode` returns its carved cells
+  `[{x, y, z, id}]`; `MobManager` forwards them to the optional
+  `mobs.onBlocksExploded` hook, which main.js routes through the same
+  `blockBreakHandlers` map as player mining. Without this, exploded
+  furnace/chest state stayed keyed in the map and resurrected into a newly
+  placed block at the same coordinates. New content blocks: add ONE row to
+  each map.
+- Sort: `sortedStacks(slots)` in stackOps (pure; merges stackables, orders
+  blocks/tools/food/misc) + `Inventory.setRange(start, stacks)` (single
+  emit). Buttons via `makeSortRow` on the main grid + chest grids — never
+  the hotbar.
+- Headless: `__mc.cursor` / `__mc.chests` / `__mc.chestScreen` are exposed;
+  drive slots by dispatching `PointerEvent`s on `screen.slotEls[i]` /
+  `chestScreen.chestEls[i]` (pointerdown acts; remember a document-level
+  pointerup between clicks to clear the drag origin). Double-click tests
+  must dispatch both pointerdowns in ONE `page.evaluate` — headless frames
+  run ~300ms, blowing the 0.4s window across CDP round trips. Thrown drops:
+  wait for `drops.items[i].landed` before teleporting onto them (airborne
+  items slide downhill). The old "collect output by clicking" rule still
+  holds: furnace output takes a press with an EMPTY cursor only.
 
 ## Sharp edges
 

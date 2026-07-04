@@ -48,6 +48,8 @@ const TILE_NAMES = [
   'snow_side',
   'bed_top',
   'bed_side',
+  'chest_top',
+  'chest_side',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -238,6 +240,38 @@ const PAINTERS = {
     }
     for (const fx of [0, 1, 14, 15]) {
       for (let y = 12; y < TILE; y++) px(fx, y, rgb(86, 58, 33)) // feet
+    }
+  },
+  // Chest lid seen from above: plank boards inside a dark frame.
+  chest_top(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 9
+        const frame = x === 0 || x === 15 || y === 0 || y === 15
+        const seam = !frame && y % 5 === 2
+        if (frame) px(x, y, rgb(96 + j, 66 + j, 36 + j))
+        else if (seam) px(x, y, rgb(128 + j, 96 + j, 54 + j))
+        else px(x, y, rgb(158 + j, 118 + j, 68 + j))
+      }
+    }
+  },
+  // Chest side: plank body, a dark lid band where the halves meet, and a
+  // brass latch cluster at the center.
+  chest_side(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 9
+        const frame = x === 0 || x === 15 || y === 0 || y === 15
+        const lid = y === 5 || y === 6
+        if (frame) px(x, y, rgb(96 + j, 66 + j, 36 + j))
+        else if (lid) px(x, y, rgb(74 + j, 50 + j, 28 + j))
+        else px(x, y, rgb(150 + j, 112 + j, 64 + j))
+      }
+    }
+    for (let y = 4; y < 9; y++) {
+      for (let x = 7; x < 9; x++) {
+        px(x, y, y === 6 ? rgb(160, 130, 50) : rgb(206, 172, 76)) // brass latch
+      }
     }
   },
 }

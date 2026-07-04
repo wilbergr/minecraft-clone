@@ -29,7 +29,11 @@ export class GroundItems {
   }
 
   // Drop `count` of an item at a world position (block or mob center).
-  spawn(x, y, z, itemId, count = 1) {
+  // `opts` (drop/throw feature) directs the spawn: { vx, vy, vz } overrides
+  // the random pop velocity, `pickupDelay` overrides the global vacuum delay
+  // (thrown items need a longer one or they boomerang straight back), and
+  // `durability` preserves a dropped tool's remaining uses through re-pickup.
+  spawn(x, y, z, itemId, count = 1, opts = {}) {
     const item = ITEMS[itemId]
     if (!item) return null
     const cfg = FEEDBACK.drops
@@ -44,17 +48,43 @@ export class GroundItems {
       mesh,
       itemId,
       count,
+      durability: opts.durability,
       age: 0,
       retryAt: 0, // backoff timestamp after a full-inventory pickup attempt
+      pickupDelay: opts.pickupDelay ?? cfg.pickupDelaySeconds,
       landed: false,
       restY: 0,
-      vx: Math.sin(angle) * cfg.pop.horizontal * pop,
-      vz: Math.cos(angle) * cfg.pop.horizontal * pop,
-      vy: cfg.pop.up * (0.7 + Math.random() * 0.3),
+      vx: opts.vx ?? Math.sin(angle) * cfg.pop.horizontal * pop,
+      vz: opts.vz ?? Math.cos(angle) * cfg.pop.horizontal * pop,
+      vy: opts.vy ?? cfg.pop.up * (0.7 + Math.random() * 0.3),
     }
     this.items.push(entity)
     this.scene.add(mesh)
     return entity
+  }
+
+  // Throw an item in the camera's look direction (Q-drop, backdrop-drop):
+  // spawned just below the eye so the cube doesn't clip the view, with
+  // enough velocity to clear the magnet radius before the (longer) pickup
+  // delay ends — see FEEDBACK.drops.throw.
+  throwFrom(camera, itemId, count = 1, durability = undefined) {
+    const cfg = FEEDBACK.drops.throw
+    const dir = new THREE.Vector3()
+    camera.getWorldDirection(dir)
+    return this.spawn(
+      camera.position.x + dir.x * 0.4,
+      camera.position.y - 0.2 + dir.y * 0.4,
+      camera.position.z + dir.z * 0.4,
+      itemId,
+      count,
+      {
+        vx: dir.x * cfg.speed,
+        vy: dir.y * cfg.speed + cfg.up,
+        vz: dir.z * cfg.speed,
+        pickupDelay: cfg.pickupDelaySeconds,
+        durability,
+      },
+    )
   }
 
   // playerPos is the camera (eye) position.
@@ -70,14 +100,15 @@ export class GroundItems {
       const pos = e.mesh.position
       e.mesh.rotation.y += cfg.spinSpeed * delta
 
-      // Vacuum: home on the player's waist once the pop has finished.
-      if (e.age >= cfg.pickupDelaySeconds && e.age >= e.retryAt) {
+      // Vacuum: home on the player's waist once the pop has finished (thrown
+      // items carry their own longer delay so they don't boomerang back).
+      if (e.age >= e.pickupDelay && e.age >= e.retryAt) {
         const dx = playerPos.x - pos.x
         const dy = playerPos.y - 0.9 - pos.y
         const dz = playerPos.z - pos.z
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
         if (dist <= cfg.collectRadius) {
-          const leftover = this.inventory.add(e.itemId, e.count)
+          const leftover = this.inventory.add(e.itemId, e.count, e.durability)
           if (leftover < e.count) this.sounds?.play('pickup')
           if (leftover === 0) this.#remove(i)
           else {

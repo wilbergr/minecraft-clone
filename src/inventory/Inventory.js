@@ -41,7 +41,9 @@ export class Inventory {
 
   // Add `count` of an item, filling existing stacks first, then empty slots
   // (hotbar first). Returns how many did NOT fit (0 = all added).
-  add(itemId, count = 1) {
+  // `durability` restores a used tool's remaining uses (drop re-pickup, the
+  // cursor flush); omitted, fresh tools start at full durability.
+  add(itemId, count = 1, durability = undefined) {
     const item = ITEMS[itemId]
     if (!item) return count
     let left = count
@@ -57,9 +59,8 @@ export class Inventory {
       if (!this.slots[i]) {
         const take = Math.min(left, item.maxStack)
         this.slots[i] = { id: itemId, count: take }
-        // Fresh tools start at full durability (tools never stack, so a new
-        // stack is always a single new tool).
-        if (item.tool) this.slots[i].durability = item.tool.durability
+        // Tools never stack, so a new stack is always a single tool.
+        if (item.tool) this.slots[i].durability = durability ?? item.tool.durability
         left -= take
       }
     }
@@ -115,31 +116,37 @@ export class Inventory {
     return true
   }
 
+  // Batch-write a run of slots starting at `start` with ONE emit (the Sort
+  // button rewrites 27 slots — per-slot setSlot would render 27 times).
+  setRange(start, stacks) {
+    for (let i = 0; i < stacks.length; i++) {
+      const index = start + i
+      if (index < 0 || index >= this.size) continue
+      this.slots[index] = stacks[i]
+    }
+    this.#emit()
+  }
+
+  // Remove up to `count` items from a slot, returning the removed stack
+  // ({ id, count, durability? }) or null. Unlike consume() it's
+  // slot-addressed and returns what it removed — the Q-drop path.
+  take(index, count) {
+    const stack = this.slots[index]
+    if (!stack || count <= 0) return null
+    const taken = Math.min(count, stack.count)
+    const removed = { ...stack, count: taken }
+    stack.count -= taken
+    if (stack.count === 0) this.slots[index] = null
+    this.#emit()
+    return removed
+  }
+
   // Replace a slot's stack outright (Phase 12: the furnace screen moves
   // stacks between the inventory and furnace slots). `stack` is
   // { id, count, durability? } or null; listeners are notified.
   setSlot(index, stack) {
     if (index < 0 || index >= this.size) return
     this.slots[index] = stack
-    this.#emit()
-  }
-
-  // Swap two slots; if both hold the same item, merge b into a instead (up
-  // to max stack). Inventory-screen click interaction.
-  swap(a, b) {
-    if (a === b) return
-    const sa = this.slots[a]
-    const sb = this.slots[b]
-    if (sa && sb && sa.id === sb.id) {
-      const max = ITEMS[sa.id].maxStack
-      const moved = Math.min(sa.count, max - sb.count)
-      sb.count += moved
-      sa.count -= moved
-      if (sa.count === 0) this.slots[a] = null
-    } else {
-      this.slots[a] = sb
-      this.slots[b] = sa
-    }
     this.#emit()
   }
 

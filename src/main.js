@@ -14,7 +14,10 @@ import { bindHotbar } from './ui/hotbar.js'
 import { bindHud } from './ui/hud.js'
 import { bindResetButton } from './ui/resetButton.js'
 import { InventoryScreen } from './ui/inventoryScreen.js'
+import { SlotCursor } from './ui/slotCursor.js'
+import { bindSlotTooltips } from './ui/slots.js'
 import { bindQuestLog } from './ui/questLog.js'
+import { bindDropKeys, bindBackdropDrop } from './ui/dropKeys.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
 import { bindHelp } from './ui/help.js'
@@ -27,11 +30,13 @@ import { GroundItems } from './fx/GroundItems.js'
 import { TorchLights } from './fx/TorchLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
-import { BLOCK_BED, BLOCK_FURNACE, isLiquid } from './world/blocks.js'
+import { BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, isLiquid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
 import { Sleep } from './survival/Sleep.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
+import { Chests } from './crafting/Chests.js'
+import { ChestScreen } from './ui/chestScreen.js'
 import { bindSleepFx } from './ui/sleepFx.js'
 import { bindHungerHud } from './ui/hungerHud.js'
 import { bindArmorHud } from './ui/armorHud.js'
@@ -94,6 +99,7 @@ hunger.onStarve = () => {
   if (combat.health.value > HUNGER.starve.minHealth) combat.health.damage(HUNGER.starve.damage)
 }
 const furnaces = new Furnaces()
+const chests = new Chests() // placed-chest contents (inventory overhaul); no tick — inert storage
 
 // Bed sleeping (bed feature): sleep at night to set the respawn point and
 // skip to dawn; Combat.respawn → player.respawn consults it via spawnHook.
@@ -103,12 +109,20 @@ player.spawnHook = () => sleep.respawnPoint()
 // Restore a saved game before anything renders: block edits must be in the
 // overlay before the first chunks generate, and the UI binders below pick up
 // the restored inventory/health through their initial renders.
+// The shared cursor stack (inventory overhaul): every screen moves items by
+// picking them up onto this cursor; its held stack rides the optional
+// `cursor` save key so a refresh mid-move can't lose it.
+const cursor = new SlotCursor()
+bindSlotTooltips()
+
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
+save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
 save.attachHunger(hunger)
 save.attachFurnaces(furnaces)
+save.attachChests(chests)
 save.attachArmor(combat.armor)
 save.attachSleep(sleep)
 
@@ -158,8 +172,9 @@ interaction.useItemHook = (item) => {
   return true
 }
 
-const screen = new InventoryScreen(inventory, player, combat.armor)
-const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
+const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drops, camera)
+const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
+const chestScreen = new ChestScreen(chests, inventory, player, world, cursor, drops, camera, sounds)
 // Use dispatcher for right clicks on blocks (touch ▦ too, sneak bypasses):
 // handlers keyed by block id, each returning true when the click was spent.
 // New interactive blocks register here — mark the block `interactive: true`
@@ -172,27 +187,48 @@ const blockUseHandlers = {
     return true
   },
   [BLOCK_BED]: (x, y, z) => sleep.tryAt(x, y, z),
+  [BLOCK_CHEST]: (x, y, z) => {
+    chestScreen.openAt(x, y, z)
+    return true
+  },
 }
 interaction.useBlockHook = (block, x, y, z) => {
   if (challenge.tryUseBlock(block, x, y, z)) return true
   return blockUseHandlers[block.id]?.(x, y, z) ?? false
 }
-interaction.onBlockBroken = (x, y, z, block) => {
-  // Breaking a furnace spills its slots (other interactive blocks keep no contents).
-  if (block.id !== BLOCK_FURNACE) return
-  furnaces.onBroken(x, y, z, (stack) =>
-    drops.spawn(x + 0.5, y + 0.7, z + 0.5, stack.id, stack.count),
-  )
+// Break handlers, keyed by block id like blockUseHandlers: blocks with
+// per-position contents spill them as ground drops. Fired for player mining
+// (interaction.onBlockBroken) AND for explosion-carved cells (below) — the
+// latter closes the old orphan bug where a creeper-blasted furnace kept its
+// contents in the map forever and resurrected them into a newly placed one.
+const spillAt = (x, y, z) => (stack) =>
+  drops.spawn(x + 0.5, y + 0.7, z + 0.5, stack.id, stack.count, { durability: stack.durability })
+const blockBreakHandlers = {
+  [BLOCK_FURNACE]: (x, y, z) => furnaces.onBroken(x, y, z, spillAt(x, y, z)),
+  [BLOCK_CHEST]: (x, y, z) => chests.onBroken(x, y, z, spillAt(x, y, z)),
+}
+interaction.onBlockBroken = (x, y, z, block) => blockBreakHandlers[block.id]?.(x, y, z)
+combat.mobs.onBlocksExploded = (cells) => {
+  for (const c of cells) blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
 }
 const reveal = bindTreasureReveal(hunt, player)
 const help = bindHelp(player)
 // The death screen, treasure reveal, furnace, and help panel count as open UI
 // so "click to play" stays out of their way.
-const refreshOverlay = bindOverlay(
-  player,
-  () =>
-    screen.isOpen || combat.health.isDead || reveal.isOpen || help.isOpen || furnaceScreen.isOpen,
-)
+const anyUIOpen = () =>
+  screen.isOpen ||
+  combat.health.isDead ||
+  reveal.isOpen ||
+  help.isOpen ||
+  furnaceScreen.isOpen ||
+  chestScreen.isOpen
+const refreshOverlay = bindOverlay(player, anyUIOpen)
+// Q / Shift+Q throw from the hotbar while playing; clicking a screen's
+// backdrop throws the held cursor stack (left = all, right = one).
+bindDropKeys(inventory, drops, camera, player, combat.health, sounds, anyUIOpen)
+bindBackdropDrop(screen.root, cursor, drops, camera)
+bindBackdropDrop(furnaceScreen.root, cursor, drops, camera)
+bindBackdropDrop(chestScreen.root, cursor, drops, camera)
 bindHotbar(inventory, player)
 bindHud(combat.health, () => {
   combat.respawn()
@@ -210,6 +246,7 @@ screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 furnaceScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+chestScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 
 // Audio wiring: browsers require a user gesture before audio starts, so the
 // context unlocks on the first pointer/key input (the click-to-play overlay
@@ -317,8 +354,11 @@ window.__mc = {
   hunger,
   furnaces,
   furnaceScreen,
+  chests,
+  chestScreen,
   torchLights,
   armor: combat.armor,
   projectiles: combat.projectiles,
   sleep,
+  cursor,
 }
