@@ -116,6 +116,17 @@ export class Inventory {
     return true
   }
 
+  // Batch-write a run of slots starting at `start` with ONE emit (the Sort
+  // button rewrites 27 slots — per-slot setSlot would render 27 times).
+  setRange(start, stacks) {
+    for (let i = 0; i < stacks.length; i++) {
+      const index = start + i
+      if (index < 0 || index >= this.size) continue
+      this.slots[index] = stacks[i]
+    }
+    this.#emit()
+  }
+
   // Remove up to `count` items from a slot, returning the removed stack
   // ({ id, count, durability? }) or null. Unlike consume() it's
   // slot-addressed and returns what it removed — the Q-drop path.

@@ -543,6 +543,23 @@ body.touch-mode #hotbar {
   cursor: default;
 }
 
+/* "Sort" sits right-aligned above its container grid (main inventory grid
+   and chest grids — never the hotbar). */
+.sort-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.sort-row.hidden {
+  display: none;
+}
+
+.sort-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+}
+
 /* --- Chest screen (inventory overhaul) -------------------------------------- */
 /* Same shell as the furnace screen: dim backdrop at z 8, centered panel. */
 

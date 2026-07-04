@@ -1,6 +1,7 @@
 import { CHEST, INVENTORY } from '../config.js'
 import { BLOCK_CHEST } from '../world/blocks.js'
-import { createSlotEl, renderSlot, bindSlotPointer } from './slots.js'
+import { sortedStacks } from '../inventory/stackOps.js'
+import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.js'
 
 // The chest screen (inventory overhaul): opened by right-clicking a placed
 // chest block (the blockUseHandlers dispatcher in main.js). One 27-slot
@@ -79,6 +80,7 @@ export class ChestScreen {
     this.neighborState = side ? this.chests.at(x + side.dx, y, z + side.dz) : null
     this.neighborLabel.textContent = side ? `Adjacent chest (${side.label})` : ''
     this.neighborLabel.classList.toggle('hidden', !side)
+    this.neighborSortRow.classList.toggle('hidden', !side)
     this.neighborGrid.classList.toggle('hidden', !side)
     this.isOpen = true
     this.root.classList.remove('hidden')
@@ -145,6 +147,13 @@ export class ChestScreen {
       return { grid, els }
     }
 
+    const sortState = (getState) => () => {
+      const state = getState()
+      if (!state) return
+      state.slots = sortedStacks(state.slots)
+      this.chests.markChanged()
+    }
+    panel.appendChild(makeSortRow(sortState(() => this.state)))
     const chest = makeGrid('chest', this.chestAdapter, CHEST.slots)
     this.chestEls = chest.els
     panel.appendChild(chest.grid)
@@ -154,6 +163,9 @@ export class ChestScreen {
     this.neighborLabel = document.createElement('p')
     this.neighborLabel.className = 'inv-hint hidden'
     panel.appendChild(this.neighborLabel)
+    this.neighborSortRow = makeSortRow(sortState(() => this.neighborState))
+    this.neighborSortRow.classList.add('hidden')
+    panel.appendChild(this.neighborSortRow)
     const neighbor = makeGrid('chest', this.neighborAdapter, CHEST.slots)
     this.neighborEls = neighbor.els
     this.neighborGrid = neighbor.grid

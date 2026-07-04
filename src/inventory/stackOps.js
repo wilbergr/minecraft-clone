@@ -110,6 +110,46 @@ export function quickMove(adapter, i, targets) {
   if (stack.count !== before) adapter.set(i, stack.count > 0 ? stack : null)
 }
 
+// Sort button order: blocks, then tools, then food, then everything else.
+function categoryRank(item) {
+  if (item.blockId !== undefined) return 0
+  if (item.tool) return 1
+  if (item.consumable) return 2
+  return 3
+}
+
+// Sort a slot range (the Sort button): merge stackables to full stacks,
+// order by category then item id, and pack from the front. Pure — returns a
+// new array the same length as `slots`; non-stackables (tools, with their
+// per-stack durability) ride through untouched.
+export function sortedStacks(slots) {
+  const totals = new Map() // id -> merged count
+  const singles = []
+  for (const s of slots) {
+    if (!s) continue
+    if (ITEMS[s.id].maxStack === 1) singles.push({ ...s })
+    else totals.set(s.id, (totals.get(s.id) ?? 0) + s.count)
+  }
+  const out = []
+  for (const [id, total] of totals) {
+    const max = ITEMS[id].maxStack
+    for (let left = total; left > 0; left -= max) {
+      out.push({ id, count: Math.min(left, max) })
+    }
+  }
+  out.push(...singles)
+  out.sort((a, b) => {
+    const ra = categoryRank(ITEMS[a.id])
+    const rb = categoryRank(ITEMS[b.id])
+    if (ra !== rb) return ra - rb
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1
+    return b.count - a.count
+  })
+  const result = new Array(slots.length).fill(null)
+  out.forEach((s, i) => (result[i] = s))
+  return result
+}
+
 // Double-click gather: drain every same-id stack across the open screen's
 // adapters into the held cursor stack (up to maxStack), smallest first so
 // part-stacks consolidate before full ones break.

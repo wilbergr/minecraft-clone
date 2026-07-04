@@ -2,7 +2,8 @@ import { INVENTORY } from '../config.js'
 import { ITEMS } from '../inventory/items.js'
 import { ARMOR_SLOTS } from '../combat/Armor.js'
 import { RECIPES, canCraft, craft } from '../inventory/recipes.js'
-import { createSlotEl, renderSlot, bindSlotPointer } from './slots.js'
+import { sortedStacks } from '../inventory/stackOps.js'
+import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.js'
 
 // The inventory screen: a full-screen overlay (E to toggle) showing every
 // inventory slot plus the crafting panel. Opening releases pointer lock so
@@ -140,6 +141,13 @@ export class InventoryScreen {
       }
       return grid
     }
+    // Sort packs the MAIN grid only — players curate the hotbar themselves.
+    slotsCol.appendChild(
+      makeSortRow(() => {
+        const sorted = sortedStacks(this.inventory.slots.slice(INVENTORY.hotbarSlots))
+        this.inventory.setRange(INVENTORY.hotbarSlots, sorted)
+      }),
+    )
     slotsCol.appendChild(makeGrid(INVENTORY.hotbarSlots, this.inventory.size))
     slotsCol.appendChild(makeGrid(0, INVENTORY.hotbarSlots, 'inv-hotbar-row'))
     const hint = document.createElement('p')

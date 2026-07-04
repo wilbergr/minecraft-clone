@@ -138,6 +138,14 @@ export class SoundEngine {
         this.#tone({ type: 'sawtooth', from: 150, to: 200, dur: 1.0, gain: 0.35 * v })
         this.#tone({ type: 'sawtooth', from: 100, to: 133, dur: 1.0, gain: 0.28 * v })
         break
+      case 'chestOpen': // wooden creak rising as the lid lifts
+        this.#burst({ type: 'lowpass', freq: 620, dur: 0.14, gain: 0.35 * v })
+        this.#tone({ type: 'triangle', from: 140, to: 260, dur: 0.18, gain: 0.22 * v })
+        break
+      case 'chestClose': // lid thump back down
+        this.#burst({ type: 'lowpass', freq: 480, dur: 0.1, gain: 0.4 * v })
+        this.#tone({ type: 'triangle', from: 240, to: 110, dur: 0.12, gain: 0.22 * v })
+        break
     }
   }
 

@@ -79,6 +79,20 @@ function renderDurability(el, stack) {
   el.style.background = `hsl(${Math.round(frac * 110)}, 75%, 48%)`
 }
 
+// A right-aligned "Sort" button row for a container grid (the main
+// inventory grid and chest grids — never the hotbar, players curate that).
+export function makeSortRow(onSort) {
+  const row = document.createElement('div')
+  row.className = 'sort-row'
+  const button = document.createElement('button')
+  button.className = 'craft-btn sort-btn'
+  button.type = 'button'
+  button.textContent = 'Sort'
+  button.addEventListener('click', onSort)
+  row.appendChild(button)
+  return row
+}
+
 // --- Cursor-model slot interaction (inventory overhaul) ----------------------
 // One binder shared by every screen grid. `ctx`:
 //   cursor            the shared SlotCursor
