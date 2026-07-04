@@ -155,14 +155,21 @@ export const CHALLENGE = {
       doneColor: 0x9fd8ff, // the completion burst
     },
   },
-  // Stage 3 — The Siege (PR 3, inert): survive escalating night waves on the
-  // arena ring, cleared before dawn.
+  // Stage 3 — The Siege: arm at the beacon's gold core, then survive the
+  // escalating night waves below, cleared before dawn (src/quest/SiegeEvent).
+  // Worst case (wave 3) is 8 mobs × ~6 parts ≈ 48 draw calls — comparable to
+  // the night cap of 6; ambient + passive spawns are suppressed during the
+  // event, so keep wave sizes modest for the same reason those caps are low.
   siege: {
     waves: [{ zombie: 4 }, { zombie: 3, skeleton: 3 }, { zombie: 3, skeleton: 3, creeper: 2 }],
     spawnRadius: 14, // waves crest this far from the anchor
     arenaRadius: 24, // leaving this ring too long disperses the horde
     leaveGraceSeconds: 6,
     breatherSeconds: 10, // pause between waves
+    // Telegraphed entrances: each spawn point flares (red particle column +
+    // horn) this long before the mobs actually rise, so the player can pre-aim.
+    flare: { leadSeconds: 1.2, color: 0xff4545, particles: 40 },
+    clearedBeamColor: 0xff6a3c, // blood-orange anchor beam once the siege is won — the King is ready
   },
   // Stage 4 — The Hollow King (PR 4, inert): the 3-phase end boss.
   boss: {

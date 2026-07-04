@@ -134,6 +134,10 @@ export class SoundEngine {
         this.#tone({ type: 'sine', from: 620, to: 310, dur: 0.5, gain: 0.25 * v })
         this.#tone({ type: 'sine', from: 460, to: 230, dur: 0.6, gain: 0.2 * v, when: 0.3 })
         break
+      case 'horn': // war horn — the siege's wave call (two rising saws a fifth apart)
+        this.#tone({ type: 'sawtooth', from: 150, to: 200, dur: 1.0, gain: 0.35 * v })
+        this.#tone({ type: 'sawtooth', from: 100, to: 133, dur: 1.0, gain: 0.28 * v })
+        break
     }
   }
 

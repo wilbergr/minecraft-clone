@@ -374,10 +374,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `interaction.useBlockHook` is wired in main.js to a **dispatcher keyed by
   block id** (`blockUseHandlers`): furnace → furnace screen, bed → sleep. To
   add an interactive block: `interactive: true` in blocks.js + one handler
-  row returning true when the click is spent. `useSelected` still gates on
-  `block.interactive` before consulting the hook, and sneak still bypasses.
-  main.js's `onBlockBroken` now checks `block.id === BLOCK_FURNACE` (not
-  `interactive`) before spilling furnace slots.
+  row returning true when the click is spent. Since Trial PR 3, `useSelected`
+  no longer pre-gates on `block.interactive` — the hook is consulted for
+  EVERY targeted block (the dispatcher decides; unmatched ids fall through),
+  which is how contextual cases like the siege core work. Sneak still
+  bypasses. main.js's `onBlockBroken` now checks `block.id ===
+  BLOCK_FURNACE` (not `interactive`) before spilling furnace slots.
 - Sleep logic lives in `src/survival/Sleep.js` (tunables in `SLEEP`):
   night-only (`daynight.isNight`) — success sets `sleep.spawn = [x, y, z]`
   (bed block coords) and `setTime(SLEEP.wakeTime)`; a daytime click toasts
@@ -478,6 +480,59 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   re-evaluates synchronously, so `s.satisfied`/`challenge.beaconBuilt` can be
   asserted right after. Stage 2 (siege) is the next inert stub — its tick
   seam is the stage-2 comment in `Challenge.update`.
+
+## The King's Trial, PR 3: The Siege (combat stage)
+
+- Arm trigger: `BlockInteraction.useSelected` no longer pre-gates the use
+  dispatcher on `block.interactive` — main.js's `useBlockHook` is consulted
+  for EVERY targeted block and decides: `challenge.tryUseBlock` first (the
+  contextual case — spends the click only when the block is the gold core ON
+  a core cell at the anchor AND `stage === 2`), then the id-keyed
+  `blockUseHandlers` (furnace/bed unchanged). Gold ore is never globally
+  interactive — cave veins stay plain mining targets. Sneak still bypasses.
+- `src/quest/SiegeEvent.js` is the wave runner (tunables in
+  `CHALLENGE.siege`): armed at the core → waits for `daynight.isNight` →
+  waves from `cfg.waves` spawn evenly on a ring (`spawnRadius`) with a flare
+  + horn `flare.leadSeconds` before the mobs rise. A wave's mobs are pinned
+  by OBJECT REFERENCE and the wave clears when none remain in `mobs.mobs` —
+  counts sword/arrow kills, creeper detonations, and void falls uniformly.
+  Deliberately NOT `onMobKilled` (single-slot, Combat's, silent on creeper
+  detonations). Its live deps (`mobs`/`daynight`/`health`/`player`) are
+  attached by main.js post-construction (the `mobs.daynight` pattern) — bare
+  runs leave the siege inert.
+- `MobManager.event` (set by the siege): suppresses ambient hostile AND
+  passive spawning (wave counts stay exact, draw calls bounded) and DEFERS
+  the dawn burn. Failure-first ordering: SiegeEvent checks dawn before
+  anything else, fails, clears `mobs.event` — the burn then eats the
+  leftover horde. `mobs.despawn(mob)` is the no-credit removal (leash fail
+  disperses the wave through it); never call it inside `mobs.update`.
+- Fail = dawn (leftovers burn), leaving `arenaRadius` for >
+  `leaveGraceSeconds` (wave despawns — "the horde disperses"), or death
+  (checked FIRST in update, before the isLocked freeze, because dying
+  unlocks the pointer; `Combat.respawn` clears the mobs anyway). All free
+  retries: re-arm at the core. Win latches `siegeCleared`, advances to
+  stage 3 (boss stub) and turns the anchor beam
+  `CHALLENGE.siege.clearedBeamColor` (re-applied on restore in
+  `#syncBeacon`).
+- Mid-siege state is deliberately NOT saved (mobs never persist): reload =
+  disarmed, siege stage (index 2) still active. Only latched `siegeCleared`
+  rides the
+  `challenge` slot (`schemaVersion` still 3). `skipToStage` calls
+  `siege.cancel()` so a jump never leaves `mobs.event` set.
+- Compass HUD: `challenge.compassTarget.name` carries the live readout
+  ("Wave 2 · 3 remain · dawn in ~2:40") via `siege.hudLabel`; quest log
+  stage row shows arm/hold instructions.
+- Headless: `__mc.player.lock()` from `page.evaluate` acquires pointer lock
+  directly (no overlay click needed). Drive: complete hunt →
+  `skipToStage(2)` + `setBlock` the two gold core cells at
+  `(s.anchorX, s.baseY+1..2, s.anchorZ)` → set `interaction.target` to the
+  core → `useSelected()` → `daynight.setTime(0.6)`. Shrink
+  `siege.cfg.breatherSeconds`/`cfg.flare.leadSeconds` for test speed; spy on
+  `mobs.spawnAt` for composition asserts; kill pinned mobs via
+  `mobs.hit(m, 9999, {x:1,y:0,z:0})`; a creeper in `pinned` is
+  `'exploded' in m`, and setting `m.exploded = true` detonates it next
+  frame. The siege freezes while the pointer is unlocked (like combat), so
+  tests must hold the lock through waves.
 
 ## Sharp edges
 

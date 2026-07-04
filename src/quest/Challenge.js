@@ -4,15 +4,17 @@ import { mulberry32 } from '../world/noise.js'
 import { cardinal8 } from '../treasure/TreasureHunt.js'
 import { RelicHunt } from './RelicHunt.js'
 import { StructureCheck } from './StructureCheck.js'
+import { SiegeEvent } from './SiegeEvent.js'
 
 // The King's Trial (endgame): a four-stage machine — scavenger → build →
 // siege → boss — mirroring TreasureHunt's shape so every established pattern
 // transfers: onChange listeners for the UI/save layers, update(delta,
 // playerPos) beside hunt.update in the main loop, serialize()/deserialize()
 // for the optional `challenge` save slot, and window.__mc.challenge as the
-// test seam. Stage 0 (Relics of the Deep) and stage 1 (Raise the Beacon —
-// StructureCheck) are live; stages 2–3 are declared in STAGES and the save
-// shape but inert — their PRs land SiegeEvent / Boss behind the same machine.
+// test seam. Stage 0 (Relics of the Deep), stage 1 (Raise the Beacon —
+// StructureCheck), and stage 2 (The Siege — SiegeEvent) are live; stage 3 is
+// declared in STAGES and the save shape but inert — its PR lands Boss behind
+// the same machine.
 //
 // The Trial unlocks when the treasure hunt completes (hunt.isComplete): the
 // anchor marker and relic meshes appear only then, and until then the quest
@@ -39,6 +41,7 @@ export class Challenge {
     this.onDeliver = null // callback(anchorPosition) — delivery fx
     this.onBeaconPulse = null // callback({x,y,z}) — a beacon cell satisfied
     this.onBeaconDone = null // callback(anchorPosition) — the beacon completed
+    this.onSiegeWon = null // callback(anchorPosition) — the final wave cleared
 
     this.stage = 0 // index into STAGES; STAGES.length = trial complete
     // Latched stage flags (report §9): once true they stay true — a creeper
@@ -69,6 +72,14 @@ export class Challenge {
     this.structure = new StructureCheck(world, scene, this.anchor)
     this.structure.onCellSatisfied = (pos) => this.onBeaconPulse?.(pos)
     world.onEdit((wx, wy, wz) => this.#onWorldEdit(wx, wz))
+
+    // Stage 3 — the siege wave runner. Its live deps (mobs, daynight, health,
+    // player) and fx hooks are attached by main.js after construction (the
+    // mobs.daynight pattern); bare runs leave them null and the siege inert.
+    this.siege = new SiegeEvent(this.anchorPosition)
+    this.siege.onToast = (text) => this.onToast?.(text)
+    this.siege.onChange = () => this.#emit()
+    this.siege.onWin = () => this.#onSiegeWin()
 
     this.activated = false // meshes built / trial live — flips on hunt completion
     this.marker = null // { ring, beam } scene meshes at the anchor
@@ -106,6 +117,14 @@ export class Challenge {
       return {
         position: this.anchorPosition,
         name: `Beacon ${this.structure.satisfied}/${this.structure.total}`,
+      }
+    }
+    if (this.stage === 2) {
+      // During the event the compass strip becomes the wave readout
+      // ("Wave 2 · 3 remain · dawn in ~2:40"); otherwise it points home.
+      return {
+        position: this.anchorPosition,
+        name: this.siege.hudLabel ?? 'Arm the siege at the beacon core',
       }
     }
     return { position: this.anchorPosition, name: 'Trial Grounds' }
@@ -214,7 +233,30 @@ export class Challenge {
       this.#checkDelivery(playerPos)
     }
     // Stage 1 (beacon) is edit-driven, not ticked — see #onWorldEdit.
-    // Stages 2–3 (siege / boss) tick here when their PRs land.
+    if (this.stage === 2) this.siege.update(delta, playerPos)
+    // Stage 3 (boss) ticks here when its PR lands.
+  }
+
+  // --- Stage 2: The Siege (SiegeEvent owns the waves) -------------------------
+
+  // The use-verb dispatcher (main.js) consults this for EVERY targeted block:
+  // right-clicking the beacon's gold core arms the siege. Gate hard on the
+  // core cells at the anchor AND the siege stage — gold ore is never globally
+  // interactive, so cave veins stay plain mining targets.
+  tryUseBlock(block, x, y, z) {
+    if (!this.activated || this.stage !== 2) return false
+    if (block.id !== this.structure.cfg.shape.coreId) return false
+    const s = this.structure
+    if (x !== s.anchorX || z !== s.anchorZ) return false
+    const dy = y - s.baseY
+    if (dy < 1 || dy > s.cfg.shape.coreHeight) return false
+    return this.siege.arm()
+  }
+
+  #onSiegeWin() {
+    this.siegeCleared = true // latched, like beaconBuilt
+    this.onSiegeWon?.(this.anchorPosition)
+    this.#advance('The siege is broken! The beam burns blood-orange — the Hollow King stirs.')
   }
 
   // Delivery: all shards found and the player standing inside the marker
@@ -269,6 +311,11 @@ export class Challenge {
       const base = CHALLENGE.site.marker.beam.opacity
       this.marker.beam.material.opacity = Math.min(1, base * 2)
     }
+    // Siege won (live or restored): the beam shifts blood-orange — the
+    // "boss ready" signal the boss stage will answer.
+    if (this.siegeCleared && this.marker) {
+      this.marker.beam.material.color.setHex(CHALLENGE.siege.clearedBeamColor)
+    }
   }
 
   // World-edit listener (all edits, any source): re-check only while the
@@ -312,6 +359,7 @@ export class Challenge {
     if (stage >= 3) this.siegeCleared = true
     if (stage >= 4) this.bossDefeated = true
     this.stage = stage
+    this.siege.cancel() // never jump away leaving mobs.event set
     this.#syncBeacon()
     this.#emit()
   }

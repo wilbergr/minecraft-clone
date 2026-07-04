@@ -46,6 +46,12 @@ export class MobManager {
     // through it. Null in bare runs: skeletons then simply never fire.
     this.projectiles = null
     this.burnTimer = 0
+    // Event mode (King's Trial siege): while set, ambient hostile spawning is
+    // suppressed (wave counts stay exact), the passive spawner rests
+    // (draw-call headroom), and the dawn burn defers — failure-first
+    // ordering: at dawn the event fails and CLEARS this flag first, then the
+    // burn cleans up whatever the event left behind, for free.
+    this.event = false
   }
 
   get count() {
@@ -71,14 +77,16 @@ export class MobManager {
           : COMBAT.mobs.maxCount
       // Hostiles only — passive mobs must not eat into the hostile cap.
       const hostiles = this.mobs.filter((m) => !m.passive).length
-      if (night && hostiles < cap) this.#spawnNear(playerPos)
+      if (night && !this.event && hostiles < cap) this.#spawnNear(playerPos)
     }
 
     // Dawn burn (Phase 10): daylight ignites the night's hostiles one at a
     // time — an ember burst each (reusing the pooled particles), staggered so
     // sunrise reads as a wave of little pyres rather than a mass vanish.
     // Hostiles only: farm animals (Phase 12) graze on through the day.
-    if (this.daynight && !night) {
+    // Event mode defers the burn — the siege's dawn check fails the event
+    // (clearing the flag) before any of its mobs ignite.
+    if (this.daynight && !night && !this.event) {
       this.burnTimer -= delta
       if (this.burnTimer <= 0) {
         const i = this.mobs.findLastIndex((m) => !m.passive)
@@ -98,7 +106,7 @@ export class MobManager {
     if (this.passiveSpawnTimer <= 0) {
       this.passiveSpawnTimer = PASSIVE_MOBS.spawnIntervalSeconds
       const passives = this.mobs.filter((m) => m.passive).length
-      if (passives < PASSIVE_MOBS.maxCount) this.#spawnPassiveNear(playerPos)
+      if (!this.event && passives < PASSIVE_MOBS.maxCount) this.#spawnPassiveNear(playerPos)
     }
 
     // Ambient groans (Phase 9): every so often one random growling mob
@@ -226,6 +234,14 @@ export class MobManager {
     if (i === -1) return
     this.#remove(i)
     this.onMobKilled?.(mob)
+  }
+
+  // Remove a mob without kill credit (no onMobKilled, no drops) — the siege
+  // disperses its leftover wave when it fails. Safe from the main loop; never
+  // call it from inside an update() callback (the Phase 4 rule).
+  despawn(mob) {
+    const i = this.mobs.indexOf(mob)
+    if (i !== -1) this.#remove(i)
   }
 
   clear() {
