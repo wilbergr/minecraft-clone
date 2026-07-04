@@ -37,6 +37,12 @@ export class BlockInteraction {
     // after any block breaks (the furnace spills its contents).
     this.useBlockHook = null
     this.onBlockBroken = null
+    // Phase 13 seams (both optional): useItemHook(item) claims the use verb
+    // for special items (armor equipping, wired in main.js); bowHook(phase)
+    // receives 'start' / 'release' (desktop hold-to-draw) or 'tap' (touch,
+    // fixed charge) — Combat owns the charge state and firing.
+    this.useItemHook = null
+    this.bowHook = null
     this.mining = false // left button held — accumulate break progress
     this.progress = 0 // 0..1 toward breaking the current mining target
     this.miningKey = null // target block + hotbar slot the progress belongs to
@@ -64,11 +70,12 @@ export class BlockInteraction {
         if (this.attackHook?.()) return // swung at a mob — click is spent
         this.mining = true
       } else if (e.button === 2) {
-        this.useSelected()
+        this.useSelected('hold') // a held bow draws until mouseup
       }
     })
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mining = false
+      if (e.button === 2) this.bowHook?.('release') // no-op unless drawing
     })
     document.addEventListener('contextmenu', (e) => e.preventDefault())
   }
@@ -187,9 +194,11 @@ export class BlockInteraction {
   }
 
   // The "use" verb for the held item (right click / touch ▦): interactive
-  // blocks (furnace) open first (sneak to bypass, MC-style), consumables are
-  // eaten, placeable blocks are placed, tools do nothing on use.
-  useSelected() {
+  // blocks (furnace) open first (sneak to bypass, MC-style), then special
+  // items — the bow draws/fires (bowMode 'hold' waits for mouseup, 'tap'
+  // fires a fixed charge), armor equips (useItemHook) — then consumables are
+  // eaten, placeable blocks are placed, other tools do nothing on use.
+  useSelected(bowMode = 'tap') {
     if (this.target && this.useBlockHook && !this.player.keys?.sneak) {
       const block = BLOCKS[this.world.blockAt(this.target.x, this.target.y, this.target.z)]
       if (block.interactive && this.useBlockHook(block, this.target.x, this.target.y, this.target.z)) {
@@ -197,6 +206,11 @@ export class BlockInteraction {
       }
     }
     const item = this.inventory.selectedItem
+    if (item?.tool?.kind === 'bow') {
+      this.bowHook?.(bowMode === 'hold' ? 'start' : 'tap')
+      return true
+    }
+    if (item && this.useItemHook?.(item)) return true
     if (item?.consumable) return this.#consumeSelected()
     const placed = this.placeAtTargeted()
     if (placed) this.fx.viewmodel?.use()

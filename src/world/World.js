@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { WATER, WORLD } from '../config.js'
-import { BLOCK_AIR, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
+import { createAtlasTexture } from './atlas.js'
 import { Chunk } from './Chunk.js'
 
 // Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
@@ -14,7 +15,15 @@ export class World {
     this.scene = scene
     this.chunks = new Map() // "cx,cz" -> Chunk
     this.edits = new Map() // "cx,cz" -> Map(blockIndex -> blockId)
-    this.material = new THREE.MeshLambertMaterial({ vertexColors: true })
+    // Textured chunks (Phase 13): the procedural atlas is the albedo map and
+    // vertexColors stays ON as the tint layer (face shade × Phase 11 depth
+    // darkening × biome tint) — the shader multiplies map × vertex color.
+    // The texture is null only without a DOM (node generator probes).
+    this.atlas = createAtlasTexture()
+    this.material = new THREE.MeshLambertMaterial({
+      map: this.atlas,
+      vertexColors: true,
+    })
     // Sea water pass (Phase 10): translucent and double-sided so the surface
     // reads from below too; depthWrite off keeps chunk-to-chunk transparency
     // sorting artifact-free. Chunks build their water mesh with this.
@@ -29,6 +38,15 @@ export class World {
     // Cave field (Phase 11): two octaves of 3D value noise, seeded off the
     // world seed so caves are as deterministic as the rest of the terrain.
     this.caveNoise = createValueNoise3D(WORLD.seed ^ WORLD.terrain.caves.seedSalt)
+    // Biome field (Phase 13): a second, much lower-frequency FBM. Bands get
+    // their tints pre-parsed into THREE.Colors once (the mesher multiplies
+    // them into vertex colors every face).
+    this.biomeNoise = createFBM2D(WORLD.seed ^ WORLD.terrain.biomes.seedSalt, WORLD.terrain.biomes)
+    this.biomeBands = WORLD.terrain.biomes.bands.map((band) => ({
+      ...band,
+      grassColor: new THREE.Color(band.grassTint),
+      leafColor: new THREE.Color(band.leafTint),
+    }))
     // Placed torches, "x,y,z" -> {x, y, z} — kept in lockstep with the edit
     // overlay (torches only ever come from player edits, never generation)
     // and consumed by TorchLights to position its point-light pool.
@@ -44,22 +62,45 @@ export class World {
 
   // --- Terrain generator (pure functions of world position) ---------------
 
+  // Biome of the column at (wx, wz): the first band whose `max` covers the
+  // low-frequency biome noise. Pure function of (seed, x, z), like all
+  // terrain — the mesher, generator, and unloaded-chunk queries all agree.
+  biomeAt(wx, wz) {
+    const f = WORLD.terrain.biomes.frequency
+    const n = this.biomeNoise(wx * f, wz * f)
+    for (const band of this.biomeBands) {
+      if (n <= band.max) return band
+    }
+    return this.biomeBands[this.biomeBands.length - 1]
+  }
+
   // Surface height (number of solid blocks) of the column at (wx, wz).
+  // The biome noise scales relief SMOOTHLY from its raw value (desert end
+  // flat, snow end mountainous) — using the continuous noise rather than the
+  // discrete band means biome borders never step-cliff.
   terrainHeight(wx, wz) {
-    const { baseHeight, amplitude, frequency } = WORLD.terrain
+    const { baseHeight, amplitude, frequency, biomes } = WORLD.terrain
     const n = this.fbm(wx * frequency, wz * frequency)
-    const h = Math.round(baseHeight + n * amplitude)
+    const b = this.biomeNoise(wx * biomes.frequency, wz * biomes.frequency)
+    const scale =
+      biomes.amplitude.min + (biomes.amplitude.max - biomes.amplitude.min) * (b + 1) / 2
+    const h = Math.round(baseHeight + n * amplitude * scale)
     return Math.max(2, Math.min(h, WORLD.chunkHeight - 8))
   }
 
   // Block id at height y of an untouched column with surface height h:
-  // grass (or sand near "sea level") on top, dirt below, stone deeper.
-  blockForDepth(y, h) {
+  // the biome's surface block (grass / sand / snow-over-dirt) on top — sand
+  // near "sea level" regardless, so beaches ring the water in every climate —
+  // dirt-family below, stone deeper.
+  blockForDepth(y, h, biome) {
     if (y >= h) return BLOCK_AIR
     const { dirtDepth, sandLevel } = WORLD.terrain
-    const beach = h - 1 <= sandLevel
-    if (y === h - 1) return beach ? 4 : 1 // sand : grass
-    if (y >= h - 1 - dirtDepth) return beach ? 4 : 2 // sand : dirt
+    const sandy = h - 1 <= sandLevel || biome.surface === 'sand'
+    if (y === h - 1) {
+      if (sandy) return 4 // sand
+      return biome.surface === 'snow' ? 14 : 1 // snow : grass
+    }
+    if (y >= h - 1 - dirtDepth) return sandy ? 4 : 2 // sand : dirt
     return 3 // stone
   }
 
@@ -84,9 +125,11 @@ export class World {
   // Below-surface block including scattered features: cave carving first,
   // then the base layering, with deep stone occasionally replaced by an ore
   // from the depth-banded WORLD.terrain.ores table (first matching band wins).
-  terrainBlock(wx, wy, wz, h) {
+  // Callers looping a column pass `biome` (one lookup per column instead of
+  // per block); single-block queries let it default.
+  terrainBlock(wx, wy, wz, h, biome = this.biomeAt(wx, wz)) {
     if (this.caveAt(wx, wy, wz, h)) return BLOCK_AIR
-    const id = this.blockForDepth(wy, h)
+    const id = this.blockForDepth(wy, h, biome)
     if (id !== 3) return id
     for (const ore of WORLD.terrain.ores) {
       if (wy < ore.minY || wy > ore.maxY) continue
@@ -98,10 +141,13 @@ export class World {
   // Does a tree stand on the column at (wx, wz)? Trees are a pure function of
   // position (cheap hash first, terrain checks only on a hit): trunk fills
   // y in [base, top), a leaf cap sits at y == top, and a 3x3 canopy wraps the
-  // top two trunk levels. Grass columns only — beaches stay bare.
+  // top two trunk levels. Tree density is the biome's (forests thick, plains
+  // sparse, deserts bare); beaches stay bare in every climate.
   treeAt(wx, wz) {
     const { trees, sandLevel } = WORLD.terrain
-    if (hash2D(WORLD.seed ^ 0x51ab, wx, wz) >= trees.chance) return null
+    const biome = this.biomeAt(wx, wz)
+    if (hash2D(WORLD.seed ^ 0x51ab, wx, wz) >= biome.treeChance) return null
+    if (biome.surface === 'sand') return null
     const h = this.terrainHeight(wx, wz)
     if (h - 1 <= sandLevel) return null
     const span = trees.maxTrunk - trees.minTrunk + 1
@@ -193,6 +239,69 @@ export class World {
     return true
   }
 
+  // Carve a sphere of blocks to air (Phase 13: creeper explosions), batched:
+  // every removed block lands in the edit overlay (and loaded chunk data)
+  // first, then each affected chunk remeshes ONCE — a blast through setBlock
+  // would rebuild the same chunk dozens of times. Water and air are left
+  // alone (no flow simulation to fill a carved seabed), y 0 stays solid like
+  // the cave floor, and any torches in the sphere unregister.
+  explode(cx, cy, cz, radius) {
+    const r2 = radius * radius
+    const dirty = new Set() // "cx,cz" chunk keys needing a remesh
+    for (let wx = Math.floor(cx - radius); wx <= Math.floor(cx + radius); wx++) {
+      for (let wy = Math.floor(cy - radius); wy <= Math.floor(cy + radius); wy++) {
+        for (let wz = Math.floor(cz - radius); wz <= Math.floor(cz + radius); wz++) {
+          const dx = wx + 0.5 - cx
+          const dy = wy + 0.5 - cy
+          const dz = wz + 0.5 - cz
+          if (dx * dx + dy * dy + dz * dz > r2) continue
+          if (wy < 1 || wy >= WORLD.chunkHeight) continue
+          const id = this.blockAt(wx, wy, wz)
+          const block = BLOCKS[id]
+          if (!block || (!block.solid && !block.targetable)) continue // air/water stay
+          this.#recordEdit(wx, wy, wz, BLOCK_AIR, dirty)
+        }
+      }
+    }
+    for (const key of dirty) {
+      const chunk = this.chunks.get(key)
+      if (chunk) chunk.buildMesh(this.material)
+    }
+    if (dirty.size > 0) this.onEdit?.()
+  }
+
+  // Shared write path for batched edits: record the overlay entry, keep the
+  // torch registry in lockstep, update loaded chunk data, and mark the chunk
+  // (plus border neighbors) as needing a remesh — without remeshing yet.
+  #recordEdit(wx, wy, wz, id, dirty) {
+    const cx = Math.floor(wx / WORLD.chunkSize)
+    const cz = Math.floor(wz / WORLD.chunkSize)
+    const lx = wx - cx * WORLD.chunkSize
+    const lz = wz - cz * WORLD.chunkSize
+    const key = this.#key(cx, cz)
+
+    let chunkEdits = this.edits.get(key)
+    if (!chunkEdits) {
+      chunkEdits = new Map()
+      this.edits.set(key, chunkEdits)
+    }
+    chunkEdits.set((lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy, id)
+
+    const torchKey = `${wx},${wy},${wz}`
+    if (id === BLOCK_TORCH) this.torches.set(torchKey, { x: wx, y: wy, z: wz })
+    else this.torches.delete(torchKey)
+
+    const chunk = this.chunks.get(key)
+    if (chunk) {
+      chunk.setBlock(lx, wy, lz, id)
+      dirty.add(key)
+      if (lx === 0) dirty.add(this.#key(cx - 1, cz))
+      if (lx === WORLD.chunkSize - 1) dirty.add(this.#key(cx + 1, cz))
+      if (lz === 0) dirty.add(this.#key(cx, cz - 1))
+      if (lz === WORLD.chunkSize - 1) dirty.add(this.#key(cx, cz + 1))
+    }
+  }
+
   // --- Persistence seam (Phase 5) -------------------------------------------
   // Only the edit overlay is saved — terrain regenerates from the seed, so a
   // world of any size costs storage proportional to player changes only.
@@ -272,11 +381,12 @@ export class World {
       return -1
     }
     const h = this.terrainHeight(wx, wz)
+    const biome = this.biomeAt(wx, wz)
     // Nothing solid sits above h + maxTrunk (the tallest possible leaf cap);
     // above-surface cells are tree blocks, below-surface the terrain block.
     for (let y = h + WORLD.terrain.trees.maxTrunk; y >= 0; y--) {
       const id =
-        y < h ? this.terrainBlock(wx, y, wz, h) : this.#treeBlockAt(wx, y, wz)
+        y < h ? this.terrainBlock(wx, y, wz, h, biome) : this.#treeBlockAt(wx, y, wz)
       if (isSolid(id)) return y
     }
     return -1

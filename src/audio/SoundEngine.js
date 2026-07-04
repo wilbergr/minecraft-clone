@@ -111,6 +111,25 @@ export class SoundEngine {
         this.#burst({ type: 'lowpass', freq: 450, dur: 0.08, gain: 0.4 * v })
         this.#burst({ type: 'lowpass', freq: 380, dur: 0.08, gain: 0.4 * v, when: 0.14 })
         break
+      case 'bow': // string twang + a short air whoosh (Phase 13)
+        this.#tone({ type: 'triangle', from: 480, to: 180, dur: 0.12, gain: 0.35 * v })
+        this.#burst({ type: 'highpass', freq: 1800, dur: 0.18, gain: 0.2 * v })
+        break
+      case 'arrowHit': // thock into a block
+        this.#burst({ type: 'bandpass', freq: 900, dur: 0.05, gain: 0.35 * v })
+        this.#tone({ type: 'triangle', from: 220, to: 140, dur: 0.07, gain: 0.25 * v })
+        break
+      case 'fuse': // creeper hiss — a long airy sizzle
+        this.#burst({ type: 'highpass', freq: 3200, dur: 1.4, gain: 0.4 * v })
+        break
+      case 'explosion': // deep boom under a wide noise blast
+        this.#burst({ type: 'lowpass', freq: 300, dur: 0.7, gain: 0.9 * v })
+        this.#tone({ type: 'sine', from: 110, to: 30, dur: 0.6, gain: 0.7 * v })
+        break
+      case 'equip': // armor clink
+        this.#burst({ type: 'bandpass', freq: 1400, dur: 0.06, gain: 0.3 * v })
+        this.#tone({ type: 'square', from: 900, to: 700, dur: 0.06, gain: 0.15 * v })
+        break
     }
   }
 

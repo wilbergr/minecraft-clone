@@ -81,6 +81,30 @@ export const WORLD = {
       { blockId: 8, chance: 0.045, minY: 4, maxY: 40, salt: 0x1e55 }, // iron: mid band
       { blockId: 11, chance: 0.06, minY: 24, maxY: 72, salt: 0xc0a1 }, // coal: shallow + common
     ],
+    // Biomes (Phase 13): a second, very low-frequency FBM picks a climate
+    // band per column — a pure function of (seed, x, z) like all terrain.
+    // Bands are ordered cold→hot along the noise axis so only neighboring
+    // climates ever touch. `amplitude` scales terrain relief SMOOTHLY from
+    // the raw noise value (not the discrete band), so biome borders never
+    // cliff; grass/leaf tints ride the vertex-color tint layer (Phase 13
+    // textures multiply texture × vertex color).
+    biomes: {
+      seedSalt: 0xb105,
+      frequency: 1 / 240, // biome patches span many chunks
+      octaves: 2,
+      lacunarity: 2,
+      gain: 0.5,
+      // Terrain relief scaling across the biome-noise axis [-1, 1]:
+      // desert end flat, snow end mountainous. Lerped from the raw noise.
+      amplitude: { min: 0.5, max: 1.6 },
+      // First band whose `max` >= the biome noise value wins.
+      bands: [
+        { name: 'desert', max: -0.3, treeChance: 0, surface: 'sand', grassTint: 0xbfb755, leafTint: 0x8a9a4a },
+        { name: 'plains', max: 0.12, treeChance: 0.004, surface: 'grass', grassTint: 0x82c05a, leafTint: 0x55a03a },
+        { name: 'forest', max: 0.45, treeChance: 0.03, surface: 'grass', grassTint: 0x4e9e3d, leafTint: 0x3c8a2e },
+        { name: 'snow', max: Infinity, treeChance: 0.008, surface: 'snow', grassTint: 0x8fb987, leafTint: 0x5a8a52 },
+      ],
+    },
   },
 }
 
@@ -141,6 +165,42 @@ export const COMBAT = {
     toolDamage: 2, // pickaxes and axes (any tier) — better than a fist
     swordDamage: { 1: 4, 2: 5, 3: 7 }, // by tool tier (wood/stone/iron)
     knockback: 6, // horizontal impulse applied to a hit mob
+    // Jump-attack crit (Phase 13): hits landed while falling (airborne and
+    // descending, not swimming) deal extra damage, MC-style.
+    critMultiplier: 1.5,
+  },
+  // Player knockback (Phase 13): a mob hit / arrow / explosion shoves the
+  // player — a decaying horizontal impulse plus a small pop-up, so a hit at
+  // a cliff or cave edge is real danger.
+  playerKnockback: {
+    horizontal: 7, // impulse along the hit direction, blocks/s
+    vertical: 4.5, // upward pop (applied as a velocity floor)
+  },
+  // Armor (Phase 13): equipped pieces (right-click to wear) sum their
+  // `armor.points`; incoming mob/arrow/explosion damage is reduced by
+  // points * reductionPerPoint, capped. Fall/void/starvation ignore armor.
+  armor: {
+    reductionPerPoint: 0.04, // 4% per point (full iron = 15 pts = 60%)
+    maxReduction: 0.8,
+  },
+  // Bow (Phase 13): hold right click to draw, release to loose an arrow —
+  // speed and damage scale with charge. Touch ▦ fires a fixed mid-charge
+  // shot (no hold-release on a tap).
+  bow: {
+    fullChargeSeconds: 1.0, // held this long = full power
+    minCharge: 0.15, // releases earlier than this fire nothing (mis-clicks)
+    tapCharge: 0.65, // charge used by tap-to-fire (touch / breakTargeted-style hooks)
+    speed: { min: 10, max: 30 }, // arrow launch speed, blocks/s, by charge
+    damage: { min: 1, max: 7 }, // by charge (full draw ≈ an iron sword)
+    cooldownSeconds: 0.3, // min time between shots
+  },
+  // Arrow projectiles (Phase 13, player and skeleton): ballistic point
+  // entities integrated against world.blockAt — see src/combat/Projectiles.js.
+  projectiles: {
+    gravity: 18, // blocks/s² — floatier than bodies, so arcs read as archery
+    lifeSeconds: 10, // arrows despawn after this long (stuck or flying)
+    stickSeconds: 3, // how long a landed arrow stays visible
+    maxCount: 24, // oldest arrow despawns past this
   },
   mining: {
     // Matching tool speed: break cooldown = hardness / (1 + tier * this).
@@ -154,6 +214,8 @@ export const COMBAT = {
     spawnRadiusMin: 10, // spawn ring around the player, in blocks
     spawnRadiusMax: 18,
     despawnRadius: 48, // mobs farther than this from the player are removed
+    // Night spawn mix (Phase 13): relative weights per hostile kind.
+    hostileWeights: { zombie: 0.5, skeleton: 0.3, creeper: 0.2 },
     zombie: {
       health: 10,
       chaseSpeed: 2.8, // blocks/sec while chasing (player walks at 5)
@@ -165,6 +227,42 @@ export const COMBAT = {
       attackCooldownSeconds: 1.2,
       drop: 'rotten_flesh', // added straight to the inventory (no ground items)
     },
+    // Skeleton (Phase 13): ranged hostile — keeps its distance and shoots
+    // ballistic arrows (the same projectile system as the player's bow).
+    skeleton: {
+      health: 8,
+      speed: 2.2,
+      wanderSpeed: 1,
+      wanderSeconds: 3,
+      aggroRange: 15, // notices the player this far away
+      minRange: 7, // backs away when the player is closer than this
+      maxRange: 12, // steps closer when the player is farther than this
+      shootIntervalSeconds: 2.4,
+      arrowSpeed: 18,
+      arrowDamage: 3,
+      drop: 'arrow',
+      dropCount: [1, 3],
+    },
+    // Creeper (Phase 13): walks up close, hisses through a fuse, then
+    // explodes — carving a sphere of blocks and damaging the player by
+    // proximity. Leaving fuse range mid-hiss lets the fuse tick back down.
+    creeper: {
+      health: 10,
+      chaseSpeed: 3.0,
+      wanderSpeed: 1,
+      wanderSeconds: 3,
+      aggroRange: 14,
+      fuseRange: 3, // fuse advances while the player is this close
+      fuseSeconds: 1.5,
+      drop: null, // no TNT tier yet — nothing useful to drop
+      explosion: {
+        radius: 2.4, // blocks carved to air around the blast center
+        maxDamage: 16, // at point-blank, before armor; falls off linearly
+        damageRadius: 6, // no damage beyond this distance
+        particles: 80,
+        color: 0x9a9a9a,
+      },
+    },
   },
 }
 
@@ -172,7 +270,10 @@ export const COMBAT = {
 // localStorage key — see src/save/SaveManager.js for the schema.
 export const SAVE = {
   storageKey: 'minecraft-clone-save',
-  schemaVersion: 2, // bump (and migrate in SaveManager.load) when the shape changes
+  schemaVersion: 3, // bump (and migrate in SaveManager.load) when the shape changes
+  // v2 → v3 (Phase 13): biomes reshape the terrain under the same seed, so
+  // v2 edit overlays no longer sit on the blocks they were made against.
+  // No migration — old saves start fresh, as the load guard does.
   // v1 → v2 (Phase 11): chunkHeight 48 → 96 moved the terrain surface, so v1
   // edit overlays (indexed by the old chunkHeight) no longer map to the same
   // blocks. No migration — old saves start fresh, as the load guard does.
@@ -361,6 +462,8 @@ export const PASSIVE_MOBS = {
       scale: 1.15,
       drop: 'raw_beef',
       dropCount: [1, 2],
+      // Phase 13: cows also shed leather — the leather-armor ingredient.
+      extraDrop: { id: 'leather', count: [1, 2] },
       colors: { body: 0x6b4a33, head: 0x7a5640, legs: 0x54402e },
     },
     sheep: {

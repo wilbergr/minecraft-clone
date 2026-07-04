@@ -1,0 +1,306 @@
+import * as THREE from 'three'
+import { mulberry32 } from './noise.js'
+
+// Procedural 16×16 block-texture atlas (Phase 13). Every tile is DRAWN onto
+// one canvas at boot — noise-speckled stone, striated bark, a grass overhang
+// strip — so the repo ships zero binary assets. The canvas becomes the chunk
+// material's `map` with NearestFilter and no mipmaps (bilinear filtering and
+// mip blending both smear the pixel-art look into mud).
+//
+// The texture is multiplied by the mesh's vertex colors (the material keeps
+// `vertexColors: true`), which is exactly the Phase 11 contract: vertex color
+// carries face shade × depth darkening × biome tint, the map carries albedo.
+// Tiles for biome-tinted faces (grass top, leaves — `biomeTint` in blocks.js)
+// are drawn GRAYSCALE bright, so the tint provides their color.
+//
+// Tile painters are seeded (mulberry32) per tile name, so the atlas is
+// deterministic across boots. UV rects come from `uvRect(name)`; item/hotbar
+// icons reuse the same tiles via `tileURL(name)` (a per-tile data URL).
+//
+// Everything canvas/texture is guarded behind `typeof document` so node
+// scripts can still import World with a scene stub to probe the generator.
+
+const TILE = 16
+const GRID = 8 // 8×8 tiles = 128×128 px — room to grow
+// Inset UV lookups by half a texel so NearestFilter never bleeds a neighbor
+// tile's edge row into a face.
+const PAD = 0.5 / (GRID * TILE)
+
+// Tile order fixes each tile's atlas slot; painters draw into a 16×16
+// ImageData-like context. `ctx` is pre-translated to the tile origin.
+const TILE_NAMES = [
+  'stone',
+  'dirt',
+  'grass_top',
+  'grass_side',
+  'sand',
+  'wood_side',
+  'wood_top',
+  'leaves',
+  'planks',
+  'iron_ore',
+  'coal_ore',
+  'gold_ore',
+  'furnace_side',
+  'furnace_top',
+  'torch',
+  'snow',
+  'snow_side',
+]
+
+// --- Per-tile painters -------------------------------------------------------
+// Each painter gets (px, rand): px(x, y, cssColor) sets one pixel, rand() is
+// the tile's seeded PRNG. Helpers below keep them terse.
+
+const rgb = (r, g, b) => `rgb(${r | 0},${g | 0},${b | 0})`
+
+// Base color with per-pixel brightness jitter — the workhorse noise fill.
+function speckle(px, rand, [r, g, b], jitter) {
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const j = (rand() * 2 - 1) * jitter
+      px(x, y, rgb(r + j, g + j, b + j))
+    }
+  }
+}
+
+// Scatter `count` little 2×2-ish blobs of a color (ore flecks, pebbles).
+function blobs(px, rand, [r, g, b], count) {
+  for (let i = 0; i < count; i++) {
+    const bx = 1 + Math.floor(rand() * (TILE - 3))
+    const by = 1 + Math.floor(rand() * (TILE - 3))
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        if (rand() < 0.85) {
+          const j = (rand() * 2 - 1) * 12
+          px(bx + dx, by + dy, rgb(r + j, g + j, b + j))
+        }
+      }
+    }
+  }
+}
+
+const stoneBase = (px, rand) => {
+  speckle(px, rand, [141, 141, 141], 14)
+  blobs(px, rand, [120, 120, 120], 4) // darker patches so it isn't pure static
+}
+
+const PAINTERS = {
+  stone: stoneBase,
+  dirt(px, rand) {
+    speckle(px, rand, [138, 95, 60], 16)
+    blobs(px, rand, [110, 74, 44], 4)
+    blobs(px, rand, [160, 118, 80], 2)
+  },
+  // Grayscale — the mesher multiplies in the biome grass tint.
+  grass_top(px, rand) {
+    speckle(px, rand, [205, 205, 205], 28)
+  },
+  // Dirt body with a pre-tinted grass overhang strip along the top edge, its
+  // lower edge ragged per column. (Baked mid-green: side faces don't ride the
+  // biome tint — tinting would color the dirt too.)
+  grass_side(px, rand) {
+    PAINTERS.dirt(px, rand)
+    for (let x = 0; x < TILE; x++) {
+      const depth = 2 + Math.floor(rand() * 3)
+      for (let y = 0; y < depth; y++) {
+        const j = (rand() * 2 - 1) * 14
+        px(x, y, rgb(93 + j, 156 + j, 63 + j))
+      }
+    }
+  },
+  sand(px, rand) {
+    speckle(px, rand, [210, 196, 137], 12)
+    blobs(px, rand, [190, 176, 120], 3)
+  },
+  // Bark: vertical striations with occasional breaks.
+  wood_side(px, rand) {
+    for (let x = 0; x < TILE; x++) {
+      const dark = x % 3 === 1
+      for (let y = 0; y < TILE; y++) {
+        const j = (rand() * 2 - 1) * 10
+        const [r, g, b] = dark && rand() > 0.15 ? [86, 58, 33] : [107, 74, 43]
+        px(x, y, rgb(r + j, g + j, b + j))
+      }
+    }
+  },
+  // Cut trunk: concentric rings around the center.
+  wood_top(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5))
+        const ring = Math.floor(d) % 2 === 0
+        const j = (rand() * 2 - 1) * 8
+        const [r, g, b] = ring ? [156, 127, 78] : [128, 100, 60]
+        px(x, y, rgb(r + j, g + j, b + j))
+      }
+    }
+  },
+  // Grayscale with strong contrast — tinted per biome like grass_top.
+  leaves(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const v = 150 + rand() * 90 - (rand() < 0.2 ? 70 : 0)
+        px(x, y, rgb(v, v, v))
+      }
+    }
+  },
+  // Horizontal boards with seam lines and the odd nail.
+  planks(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      const seam = y % 4 === 3
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 10
+        const [r, g, b] = seam ? [125, 96, 56] : [165, 129, 78]
+        px(x, y, rgb(r + j, g + j, b + j))
+      }
+    }
+    blobs(px, rand, [140, 108, 62], 2)
+  },
+  iron_ore(px, rand) {
+    stoneBase(px, rand)
+    blobs(px, rand, [216, 168, 120], 5)
+  },
+  coal_ore(px, rand) {
+    stoneBase(px, rand)
+    blobs(px, rand, [46, 46, 46], 5)
+  },
+  gold_ore(px, rand) {
+    stoneBase(px, rand)
+    blobs(px, rand, [232, 200, 74], 5)
+  },
+  // Worked dark stone with a smelting mouth near the bottom.
+  furnace_side(px, rand) {
+    speckle(px, rand, [95, 95, 95], 10)
+    for (let y = 9; y < 14; y++) {
+      for (let x = 5; x < 11; x++) {
+        const ember = y > 10 && rand() < 0.35
+        px(x, y, ember ? rgb(214, 120, 40) : rgb(35, 35, 35))
+      }
+    }
+  },
+  furnace_top(px, rand) {
+    speckle(px, rand, [74, 74, 74], 10)
+    blobs(px, rand, [58, 58, 58], 3)
+  },
+  // Handle wood filling the lower tile, a flame band on top: the mesher maps
+  // the whole tile onto the slim post, so the top of the post glows.
+  torch(px, rand) {
+    for (let y = 5; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 12
+        px(x, y, rgb(138 + j, 95 + j, 60 + j))
+      }
+    }
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < TILE; x++) {
+        px(x, y, y < 2 ? rgb(255, 233, 168) : rgb(240, 158, 60))
+      }
+    }
+  },
+  snow(px, rand) {
+    speckle(px, rand, [242, 245, 247], 8)
+  },
+  snow_side(px, rand) {
+    PAINTERS.dirt(px, rand)
+    for (let x = 0; x < TILE; x++) {
+      const depth = 3 + Math.floor(rand() * 3)
+      for (let y = 0; y < depth; y++) {
+        const j = (rand() * 2 - 1) * 8
+        px(x, y, rgb(238 + j, 242 + j, 245 + j))
+      }
+    }
+  },
+}
+
+// --- Atlas assembly ----------------------------------------------------------
+
+const SLOT = new Map(TILE_NAMES.map((name, i) => [name, i]))
+
+// UV rect (half-texel inset) for a tile, in atlas coordinates. Pure math —
+// safe to call in node scripts that never build the canvas. Canvas y runs
+// down while UV v runs up (flipY), so v0 addresses the tile's bottom edge.
+export function uvRect(name) {
+  const slot = SLOT.get(name) ?? 0
+  const col = slot % GRID
+  const row = Math.floor(slot / GRID)
+  const u0 = col / GRID
+  const v1 = 1 - row / GRID // top of the tile in UV space
+  return {
+    u0: u0 + PAD,
+    v0: v1 - 1 / GRID + PAD,
+    u1: u0 + 1 / GRID - PAD,
+    v1: v1 - PAD,
+  }
+}
+
+let atlasCanvas = null
+const iconURLs = new Map() // tile name -> data URL, lazily rendered
+
+function drawTile(ctx, name) {
+  const slot = SLOT.get(name)
+  const ox = (slot % GRID) * TILE
+  const oy = Math.floor(slot / GRID) * TILE
+  const rand = mulberry32(0x7e50 ^ slot) // per-tile deterministic stream
+  const px = (x, y, color) => {
+    ctx.fillStyle = color
+    ctx.fillRect(ox + x, oy + y, 1, 1)
+  }
+  PAINTERS[name](px, rand)
+}
+
+function buildCanvas() {
+  if (atlasCanvas) return atlasCanvas
+  atlasCanvas = document.createElement('canvas')
+  atlasCanvas.width = atlasCanvas.height = GRID * TILE
+  const ctx = atlasCanvas.getContext('2d')
+  for (const name of TILE_NAMES) drawTile(ctx, name)
+  return atlasCanvas
+}
+
+// The chunk material's map: NearestFilter both ways and no mipmaps — the two
+// settings the pixel-art look depends on. sRGB so tile colors match how the
+// old vertex-color palette rendered. Returns null without a DOM (node).
+export function createAtlasTexture() {
+  if (typeof document === 'undefined') return null
+  const texture = new THREE.CanvasTexture(buildCanvas())
+  texture.magFilter = THREE.NearestFilter
+  texture.minFilter = THREE.NearestFilter
+  texture.generateMipmaps = false
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+// Data URL of one tile, for DOM item icons (hotbar/inventory/recipes) — the
+// same pixels the world renders, scaled up crisply by image-rendering:
+// pixelated in CSS. `tint` (css color) multiplies grayscale tiles (grass).
+export function tileURL(name, tint = null) {
+  if (typeof document === 'undefined' || !SLOT.has(name)) return ''
+  const key = tint ? `${name}:${tint}` : name
+  let url = iconURLs.get(key)
+  if (!url) {
+    const slot = SLOT.get(name)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = TILE
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(
+      buildCanvas(),
+      (slot % GRID) * TILE,
+      Math.floor(slot / GRID) * TILE,
+      TILE,
+      TILE,
+      0,
+      0,
+      TILE,
+      TILE,
+    )
+    if (tint) {
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.fillStyle = tint
+      ctx.fillRect(0, 0, TILE, TILE)
+    }
+    url = canvas.toDataURL()
+    iconURLs.set(key, url)
+  }
+  return url
+}

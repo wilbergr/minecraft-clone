@@ -294,6 +294,76 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   (`findLastIndex((m) => !m.passive)`), and night gating never touches the
   passive spawn timer — passives spawn day and night.
 
+## Depth & variety (Phase 13): textures, combat depth, biomes
+
+- Textures: `src/world/atlas.js` DRAWS every 16×16 tile onto one canvas at
+  boot (seeded mulberry32 per tile — deterministic, zero binary assets).
+  The chunk material is `map: atlas + vertexColors: true` — the shader
+  multiplies texture × vertex color, so vertex colors are now a pure TINT
+  layer: face shade × Phase 11 depth darkening × biome tint. NearestFilter
+  both ways and `generateMipmaps: false` are load-bearing (bilinear/mips
+  smear the pixel art); UV rects are half-texel inset against bleed. Blocks
+  name their tiles via `tex: { top, side, bottom }` in blocks.js;
+  `biomeTint: 'top'|'all'` marks faces whose tile is drawn GRAYSCALE and
+  colored per biome at mesh time (grass tops, leaves). Item icons reuse the
+  tiles (`tileURL(name, tint?)` → data URL + `image-rendering: pixelated`);
+  `BLOCKS[id].color` still feeds particles/drops/viewmodel/water. Atlas
+  canvas/texture creation is guarded behind `typeof document` so node
+  generator probes keep working; `uvRect()` is pure math.
+- Biomes: a second low-frequency FBM (`WORLD.terrain.biomes`) bands columns
+  desert / plains / forest / snow, ordered along the noise axis so only
+  climate neighbors touch. `World.biomeAt(wx, wz)` is pure like all terrain;
+  bands set the surface block (sand / grass / snow block 14), tree chance,
+  and grass/leaf tints. Terrain relief scales SMOOTHLY from the raw biome
+  noise (`biomes.amplitude` lerp), never from the discrete band — discrete
+  would step-cliff at borders. `terrainBlock` takes an optional per-column
+  `biome` arg (column loops pass it; single queries default). Reshaped
+  terrain ⇒ `SAVE.schemaVersion` 3 (old saves reset via the load guard).
+- Mob base: `src/combat/Mob.js` owns body-part building, per-mob cloned
+  materials + hurt flash, decaying knockback, and `locomote()`.
+  Zombie/Skeleton/Creeper/PassiveMob all extend it. `damagePlayer(amount,
+  mob)` passes the attacker — Combat shoves the player away from it.
+- Skeleton (`COMBAT.mobs.skeleton`): ranged kiter — holds [minRange,
+  maxRange], shoots only with line of sight (`world.raycast`), arrows via
+  the shared `src/combat/Projectiles.js` (`fromPlayer: false`). Combat
+  attaches `mobs.projectiles`; when null (bare runs) skeletons never fire.
+- Creeper: fuse ticks inside `fuseRange` (decays back outside), swells and
+  flashes via emissive, then sets `mob.exploded` — DETONATION RUNS IN
+  MobManager (world.explode + proximity damage + fx), never inside the
+  mob's own update, honoring the no-mid-iteration-mutation rule.
+  `World.explode(x, y, z, r)` is the batched carve: overlay + chunk writes
+  first, then ONE remesh per affected chunk (per-block setBlock would
+  remesh the same chunk dozens of times); water/air survive, y 0 stays
+  solid, sphere torches unregister.
+- Weighted night spawns: `COMBAT.mobs.hostileWeights`; `mobs.spawnAt(x, z,
+  kind?)` defaults to zombie so old hooks/tests hold. Dawn burn ignites ALL
+  hostiles (creepers too — a deliberate MC divergence that keeps the
+  population managed). Ambient groans gate on `mob.growls` (zombies only).
+- Bow: hold right click to draw — `interaction.bowHook('start'/'release')`;
+  touch ▦ and other tap paths send `'tap'` (fixed `COMBAT.bow.tapCharge`).
+  Charge accumulates in `Combat.update` (menus freeze the draw with
+  everything else), scales speed/damage, consumes an `arrow` item + bow
+  durability. The bow is `tool: { kind: 'bow' }` — tool infra gives
+  durability for free, and the kind matches no block so it can't mine.
+- Armor: `src/combat/Armor.js`, four wear slots; right click equips
+  (`interaction.useItemHook`, wired in main.js), the inventory-screen armor
+  row unequips. `Combat.hurtPlayer(amount, knockDir)` is the ONE path for
+  combat damage — armor reduction (`COMBAT.armor`) + player knockback
+  (`player.applyKnockback`: a decaying `knock` vector ADDED on top of
+  control velocity each frame, because PlayerControls overwrites the body's
+  horizontal velocity). Fall/void/starve damage bypass hurtPlayer on
+  purpose. Saves under the optional `armor` key (attachArmor, still v3).
+  Jump-crit: falling (+!grounded, !inWater) swings in `tryAttack` ⇒
+  ×`COMBAT.attack.critMultiplier`.
+- Headless: `__mc.armor` / `__mc.projectiles` are exposed;
+  `interaction.bowHook('start'…'release')` fires without real mouse input;
+  spawn kinds via `__mc.mobs.spawnAt(x, z, 'creeper'|'skeleton')`. After
+  spawning/moving a mob inside an evaluate, call
+  `__mc.scene.updateMatrixWorld(true)` before `combat.tryAttack()` —
+  matrices otherwise refresh only at render. Biome scans should prefer
+  inland un-caved columns (beaches are sand in EVERY biome, and caves can
+  puncture any surface).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

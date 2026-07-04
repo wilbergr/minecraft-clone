@@ -1,6 +1,13 @@
-import { ITEMS, itemSwatch } from '../inventory/items.js'
+import { ITEMS } from '../inventory/items.js'
+import { BLOCKS } from '../world/blocks.js'
+import { tileURL } from '../world/atlas.js'
 
 // Shared slot rendering for the hotbar and the inventory screen.
+//
+// Placeable items draw their block's atlas tile (Phase 13) — the same pixels
+// the world renders, scaled up crisply by image-rendering: pixelated. Side
+// tiles read best (grass shows its overhang strip); biome-tinted grayscale
+// tiles get a neutral tint baked into the icon.
 
 // Create an empty slot element: icon layer + count badge + durability bar.
 export function createSlotEl() {
@@ -16,14 +23,17 @@ export function createSlotEl() {
   return slot
 }
 
-// Paint an item icon into an element: placeable items get a two-tone block
-// swatch, other items a tinted glyph.
+// Paint an item icon into an element: placeable items get their block's
+// atlas tile, other items a tinted glyph.
 function renderIcon(iconEl, itemId) {
   const item = ITEMS[itemId]
-  const swatch = itemSwatch(item)
-  if (swatch) {
+  if (item.blockId !== undefined) {
+    const block = BLOCKS[item.blockId]
+    // Grayscale biome-tinted tiles (leaves) get a neutral green baked in;
+    // side tiles already carry their own color.
+    const tint = block.biomeTint === 'all' ? '#4e9e3d' : null
     iconEl.textContent = ''
-    iconEl.style.background = `linear-gradient(160deg, ${swatch.top} 35%, ${swatch.side} 35%)`
+    iconEl.style.background = `url(${tileURL(block.tex.side, tint)}) center / cover`
     iconEl.style.color = ''
   } else {
     iconEl.textContent = item.glyph
