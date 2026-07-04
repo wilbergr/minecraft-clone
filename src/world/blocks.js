@@ -227,6 +227,26 @@ export const BLOCKS = {
     material: 'wood',
     tool: { kind: 'axe', minTier: 0 },
   },
+  17: {
+    id: 17,
+    name: "King's Cache",
+    // The King's Trial's tangible reward (ender-style personal chest): every
+    // placed cache opens the SAME global 27-slot store (src/crafting/
+    // EnderStore.js), so breaking it drops only the block — the contents
+    // persist and follow the player to the next placement. `blastResistant`
+    // exempts it from World.explode carving: the block is a one-time
+    // completion grant with no recipe, so a creeper vaporizing it would lock
+    // the store's contents away forever.
+    solid: true,
+    interactive: true,
+    blastResistant: true,
+    color: { top: 0x4a3a63, side: 0x3e3054, bottom: 0x322645 },
+    tex: { top: 'kings_cache_top', side: 'kings_cache_side', bottom: 'kings_cache_bottom' },
+    drop: 'kings_cache',
+    hardness: 2.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -234,6 +254,7 @@ export const BLOCK_FURNACE = 10
 export const BLOCK_TORCH = 13
 export const BLOCK_BED = 15
 export const BLOCK_CHEST = 16
+export const BLOCK_KINGS_CACHE = 17
 
 export function isSolid(id) {
   const block = BLOCKS[id]

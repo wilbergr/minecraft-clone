@@ -33,12 +33,13 @@ import { GroundItems } from './fx/GroundItems.js'
 import { TorchLights } from './fx/TorchLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
-import { BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, isLiquid } from './world/blocks.js'
+import { BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, isLiquid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
 import { Sleep } from './survival/Sleep.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
 import { Chests } from './crafting/Chests.js'
+import { EnderStore } from './crafting/EnderStore.js'
 import { ChestScreen } from './ui/chestScreen.js'
 import { bindSleepFx } from './ui/sleepFx.js'
 import { bindHungerHud } from './ui/hungerHud.js'
@@ -103,6 +104,7 @@ hunger.onStarve = () => {
 }
 const furnaces = new Furnaces()
 const chests = new Chests() // placed-chest contents (inventory overhaul); no tick — inert storage
+const enderStore = new EnderStore() // the King's Cache global store; also inert
 
 // Bed sleeping (bed feature): sleep at night to set the respawn point and
 // skip to dawn; Combat.respawn → player.respawn consults it via spawnHook.
@@ -126,6 +128,7 @@ save.attachDayNight(daynight)
 save.attachHunger(hunger)
 save.attachFurnaces(furnaces)
 save.attachChests(chests)
+save.attachEnderStore(enderStore)
 save.attachArmor(combat.armor)
 save.attachSleep(sleep)
 
@@ -227,6 +230,13 @@ const blockUseHandlers = {
     chestScreen.openAt(x, y, z)
     return true
   },
+  // The King's Cache: every placed cache opens the SAME global store, so
+  // there's no break handler row — breaking the block drops it while the
+  // contents persist in enderStore (the whole point of an ender-style chest).
+  [BLOCK_KINGS_CACHE]: () => {
+    chestScreen.openStore(enderStore)
+    return true
+  },
 }
 interaction.useBlockHook = (block, x, y, z) => {
   if (challenge.tryUseBlock(block, x, y, z)) return true
@@ -307,6 +317,23 @@ const guidance = bindGuidance({
   sounds,
   particles,
 })
+
+// The King's Cache grant: completing the Trial hands the player ONE cache
+// block (grant-item rather than a gated recipe — the crafting panel has no
+// conditional-recipe machinery, and the block is blast-resistant so the one
+// copy can't be destroyed; only mined and re-placed). The latch rides the
+// enderChest save key, so reloads never re-grant — and a save that finished
+// the Trial before this reward existed grants once on load via the boot
+// call. Wired after bindGuidance: challenge.onToast is the Herald banner now.
+const grantKingsCache = () => {
+  if (!challenge.isComplete || enderStore.granted) return
+  enderStore.markGranted()
+  const leftover = inventory.add('kings_cache', 1)
+  if (leftover > 0) drops.throwFrom(camera, 'kings_cache', leftover)
+  challenge.onToast?.("The King's Cache is yours — one vault, wherever you place it.")
+}
+challenge.onChange(grantKingsCache)
+grantKingsCache()
 
 // Audio wiring: browsers require a user gesture before audio starts, so the
 // context unlocks on the first pointer/key input (the click-to-play overlay
@@ -423,6 +450,7 @@ window.__mc = {
   furnaceScreen,
   chests,
   chestScreen,
+  enderStore,
   torchLights,
   armor: combat.armor,
   projectiles: combat.projectiles,

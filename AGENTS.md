@@ -688,6 +688,34 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   localStorage does NOT survive across separate puppeteer launches (each
   gets a fresh profile).
 
+## The King's Cache (Trial reward, ender-style global chest)
+
+- Block 17 (`BLOCK_KINGS_CACHE`): every placed cache opens the SAME global
+  27-slot store — `src/crafting/EnderStore.js`, a Chests sibling minus
+  everything positional (one shared `slots` array, `markChanged` seam, no
+  tick). Breaking the block drops only the block item; there is deliberately
+  NO `blockBreakHandlers` row — contents persist in the store. Rides the
+  optional `enderChest` save key (`attachEnderStore`, `schemaVersion` still
+  3) as `{ granted, slots }`.
+- The grant is item-not-recipe: `grantKingsCache` in main.js gives ONE
+  `kings_cache` block when `challenge.isComplete`, latched by
+  `enderStore.granted` (pre-reward completed saves grant once on load via
+  the boot call; reloads never re-grant). Wired AFTER bindGuidance so the
+  grant toast rides the Herald banner. Chosen over a gated recipe because
+  the crafting panel renders RECIPES statically — no conditional-recipe
+  machinery exists.
+- Because the one copy is unrecoverable if destroyed, the block is
+  `blastResistant: true` — a generic blocks.js flag `World.explode` skips
+  (currently its only user). Mining still works normally.
+- The cache reuses ChestScreen: `openStore(store, title)` fronts any
+  `{ slots }` container with `markChanged()`/`onChange()`; `screen.owner`
+  tracks whose markChanged the slot adapters call, and the store view hides
+  the adjacent-chest grid. Don't build a second chest-like screen.
+- Headless: `__mc.enderStore` (`slots`/`granted`); open by setting
+  `interaction.target` to a placed cache cell + `useSelected()`, or call
+  `chestScreen.openStore(__mc.enderStore)` directly; drive the grant with
+  `challenge.skipToStage(4)` (fires onChange).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

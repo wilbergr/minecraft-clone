@@ -50,6 +50,9 @@ const TILE_NAMES = [
   'bed_side',
   'chest_top',
   'chest_side',
+  'kings_cache_top',
+  'kings_cache_side',
+  'kings_cache_bottom',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -273,6 +276,50 @@ const PAINTERS = {
         px(x, y, y === 6 ? rgb(160, 130, 50) : rgb(206, 172, 76)) // brass latch
       }
     }
+  },
+  // The King's Cache (Trial reward): deep royal-purple stone inside a gold
+  // frame, a gold crown motif centered on the lid.
+  kings_cache_top(px, rand) {
+    speckle(px, rand, [74, 58, 99], 12)
+    for (let i = 0; i < TILE; i++) {
+      for (const [x, y] of [[i, 0], [i, 15], [0, i], [15, i]]) {
+        const j = (rand() * 2 - 1) * 14
+        px(x, y, rgb(206 + j, 172 + j, 76 + j)) // gold frame
+      }
+    }
+    // Crown: three points over a band, drawn in bright gold.
+    const gold = () => {
+      const j = (rand() * 2 - 1) * 10
+      return rgb(232 + j, 200 + j, 84 + j)
+    }
+    for (let x = 5; x <= 10; x++) for (let y = 8; y <= 9; y++) px(x, y, gold())
+    for (const cx of [5, 7, 8, 10]) for (let y = 6; y < 8; y++) px(cx, y, gold())
+    for (const cx of [5, 10]) px(cx, 5, gold())
+  },
+  // Side: the purple body with the gold frame and a dark seam where the lid
+  // meets the base, echoing the chest_side layout so it reads as a chest.
+  kings_cache_side(px, rand) {
+    speckle(px, rand, [62, 48, 84], 12)
+    for (let i = 0; i < TILE; i++) {
+      for (const [x, y] of [[i, 0], [i, 15], [0, i], [15, i]]) {
+        const j = (rand() * 2 - 1) * 14
+        px(x, y, rgb(196 + j, 162 + j, 70 + j))
+      }
+    }
+    for (let x = 1; x < 15; x++) {
+      const j = (rand() * 2 - 1) * 8
+      px(x, 5, rgb(34 + j, 26 + j, 48 + j)) // lid seam
+      px(x, 6, rgb(34 + j, 26 + j, 48 + j))
+    }
+    for (let y = 4; y < 9; y++) {
+      for (let x = 7; x < 9; x++) {
+        px(x, y, y === 6 ? rgb(170, 138, 54) : rgb(232, 200, 84)) // gold latch
+      }
+    }
+  },
+  kings_cache_bottom(px, rand) {
+    speckle(px, rand, [50, 38, 69], 10)
+    blobs(px, rand, [38, 28, 54], 4)
   },
 }
 

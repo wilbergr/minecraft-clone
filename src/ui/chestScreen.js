@@ -9,6 +9,11 @@ import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.
 // shared cursor-stack model (src/inventory/stackOps.js). Shift-click sends
 // player stacks into the chest and chest stacks back to the inventory.
 //
+// The same screen also fronts the King's Cache global store (openStore):
+// any `{ slots }` container with a markChanged() seam can stand in for a
+// positional chest entry — `owner` tracks whose markChanged the adapters
+// call. The store view never shows the adjacent-chest grid.
+//
 // Double chests are the "lite" adjacent view: when the opened chest has a
 // chest block in one of its four horizontal neighbor cells, that neighbor's
 // 27 slots are shown as a second, direction-labeled grid. State stays
@@ -34,9 +39,11 @@ export class ChestScreen {
     this.sounds = sounds
     this.root = document.getElementById('chest-screen')
     this.isOpen = false
-    this.state = null // the opened chest's Chests state entry
+    this.state = null // the opened container: a Chests entry or a global store
+    this.owner = chests // whose markChanged() the adapters call for this.state
     this.neighborState = null // adjacent chest's state (lite double view), or null
     this.onToggle = null // callback(isOpen) — keeps the play overlay away
+    this.boundStores = new Set() // global stores whose onChange already re-renders us
 
     this.invAdapter = {
       size: inventory.size,
@@ -65,7 +72,7 @@ export class ChestScreen {
       get: (i) => getState()?.slots[i] ?? null,
       set: (i, stack) => {
         getState().slots[i] = stack
-        this.chests.markChanged()
+        this.owner.markChanged()
       },
       canAccept: () => true,
     }
@@ -73,6 +80,7 @@ export class ChestScreen {
 
   // Open on the chest block at (x, y, z), creating its state on first use.
   openAt(x, y, z) {
+    this.owner = this.chests
     this.state = this.chests.at(x, y, z)
     // Lite double chest: show the first horizontal neighbor that is also a
     // chest. blockAt answers from the edit overlay even for unloaded chunks.
@@ -82,6 +90,30 @@ export class ChestScreen {
     this.neighborLabel.classList.toggle('hidden', !side)
     this.neighborSortRow.classList.toggle('hidden', !side)
     this.neighborGrid.classList.toggle('hidden', !side)
+    this.#present('Chest')
+  }
+
+  // Open on a global store (the King's Cache): any `{ slots }` container
+  // with markChanged()/onChange() — same grid, same cursor ops, no
+  // position, so no adjacent-chest view.
+  openStore(store, title = "King's Cache") {
+    if (!this.boundStores.has(store)) {
+      this.boundStores.add(store)
+      store.onChange(() => {
+        if (this.isOpen && this.state === store) this.render()
+      })
+    }
+    this.owner = store
+    this.state = store
+    this.neighborState = null
+    this.neighborLabel.classList.add('hidden')
+    this.neighborSortRow.classList.add('hidden')
+    this.neighborGrid.classList.add('hidden')
+    this.#present(title)
+  }
+
+  #present(title) {
+    this.titleEl.textContent = title
     this.isOpen = true
     this.root.classList.remove('hidden')
     this.player.unlock()
@@ -125,7 +157,8 @@ export class ChestScreen {
     const panel = document.createElement('div')
     panel.id = 'chest-panel'
     panel.innerHTML =
-      '<h2>Chest <button id="chest-close-btn" class="panel-close-btn" type="button" aria-label="Close">✕</button></h2>'
+      '<h2><span id="chest-title">Chest</span> <button id="chest-close-btn" class="panel-close-btn" type="button" aria-label="Close">✕</button></h2>'
+    this.titleEl = panel.querySelector('#chest-title')
     panel.querySelector('#chest-close-btn').addEventListener('click', () => this.close())
 
     const makeGrid = (which, adapter, count, from = 0) => {
@@ -151,7 +184,7 @@ export class ChestScreen {
       const state = getState()
       if (!state) return
       state.slots = sortedStacks(state.slots)
-      this.chests.markChanged()
+      this.owner.markChanged()
     }
     panel.appendChild(makeSortRow(sortState(() => this.state)))
     const chest = makeGrid('chest', this.chestAdapter, CHEST.slots)
