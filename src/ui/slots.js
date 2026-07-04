@@ -114,12 +114,17 @@ export function bindSlotPointer(el, ctx) {
     e.preventDefault()
     const adapter = ctx.adapter()
     if (!adapter) return
-    const now = performance.now() / 1000
-    const doubled = e.button === 0 && now - (el._lastDownAt ?? -Infinity) < DOUBLE_CLICK_SECONDS
-    el._lastDownAt = now
     if (e.button === 2) {
+      // A split (right click) never begins a double-click: a fast
+      // right-then-left on the same slot must not read as a gather.
+      el._lastDownAt = -Infinity
       if (rightClick(ctx.cursor, adapter, ctx.index) === 'picked') dragOrigin = el
-    } else if (e.shiftKey) {
+      return
+    }
+    const now = performance.now() / 1000
+    const doubled = now - (el._lastDownAt ?? -Infinity) < DOUBLE_CLICK_SECONDS
+    el._lastDownAt = now
+    if (e.shiftKey) {
       quickMove(adapter, ctx.index, ctx.quickTargets())
     } else if (doubled && ctx.cursor.stack) {
       gather(ctx.cursor, ctx.gatherAdapters())
