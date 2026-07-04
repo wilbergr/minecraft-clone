@@ -192,10 +192,30 @@ export const BLOCKS = {
     hardness: 0.3,
     material: 'dirt',
   },
+  15: {
+    id: 15,
+    name: 'Bed',
+    // A 1-cell bed (deliberate simplification of MC's 2-cell bed): walk-
+    // through like the torch — non-solid but targetable so it can be aimed
+    // at, used, and broken. `shape: 'bed'` makes the mesher emit a low
+    // mattress box instead of a full cube; `interactive` routes right click
+    // to the use dispatcher in main.js (sleep / set spawn).
+    solid: false,
+    targetable: true,
+    shape: 'bed',
+    interactive: true,
+    color: { top: 0xb03a3a, side: 0xa5814e, bottom: 0x997747 },
+    tex: { top: 'bed_top', side: 'bed_side', bottom: 'planks' },
+    drop: 'bed',
+    hardness: 0.4,
+    material: 'wood',
+  },
 }
 
 export const BLOCK_WATER = 9
+export const BLOCK_FURNACE = 10
 export const BLOCK_TORCH = 13
+export const BLOCK_BED = 15
 
 export function isSolid(id) {
   const block = BLOCKS[id]

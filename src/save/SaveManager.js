@@ -14,11 +14,13 @@ import { SAVE, WORLD } from '../config.js'
 //     hunger,                   // number in [0, HUNGER.max] (Phase 12; absent = full)
 //     furnaces: { "x,y,z": { input, fuel, output, ... } },  // Furnaces.serialize()
 //     armor: { head, chest, legs, feet },  // Armor.serialize() (Phase 13; item ids or null)
+//     spawn: [x, y, z],          // bed respawn point, block coords (bed feature; absent/null = origin)
 //   }
 //
-// `hunger`, `furnaces`, and `armor` are optional keys (Phases 12–13): older
-// saves simply lack them and load with a full bar / no furnace contents /
-// nothing worn — absent keys never invalidate a save on their own.
+// `hunger`, `furnaces`, `armor`, and `spawn` are optional keys (Phases 12–13,
+// bed feature): older saves simply lack them and load with a full bar / no
+// furnace contents / nothing worn / the origin spawn — absent keys never
+// invalidate a save on their own.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -44,6 +46,8 @@ export class SaveManager {
     this.furnaceData = null
     this.armor = null // wired by attachArmor (Phase 13)
     this.armorData = null
+    this.sleep = null // wired by attachSleep (bed feature)
+    this.sleepData = null
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -104,6 +108,13 @@ export class SaveManager {
     armor.onChange(() => (this.dirty = true))
   }
 
+  // And for the bed spawn point (bed feature): called once after load().
+  attachSleep(sleep) {
+    this.sleep = sleep
+    if (this.sleepData !== null) sleep.deserialize(this.sleepData)
+    sleep.onChange = () => (this.dirty = true)
+  }
+
   // Restore a saved game, if one exists and matches the current seed and
   // schema. Any failure — absent, corrupt JSON, wrong shape — lands on a
   // fresh game, never a crash. Returns true when a save was applied.
@@ -131,6 +142,7 @@ export class SaveManager {
       this.hungerData = data.hunger ?? null
       this.furnaceData = data.furnaces ?? null
       this.armorData = data.armor ?? null
+      this.sleepData = data.spawn ?? null
       this.dirty = false
       return true
     } catch (err) {
@@ -153,6 +165,7 @@ export class SaveManager {
       hunger: this.hunger ? this.hunger.serialize() : (this.hungerData ?? undefined),
       furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),
       armor: this.armor ? this.armor.serialize() : (this.armorData ?? undefined),
+      spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
     }
   }
 

@@ -17,6 +17,8 @@ export const RECIPES = [
   { id: 'stone_axe', input: [['stone', 3], ['stick', 2]], output: ['stone_axe', 1] },
   { id: 'stone_sword', input: [['stone', 2], ['stick', 1]], output: ['stone_sword', 1] },
   { id: 'furnace', input: [['stone', 8]], output: ['furnace', 1] },
+  // Bed (sleep to set your spawn point): wool comes from sheep, MC-style.
+  { id: 'bed', input: [['planks', 3], ['wool', 3]], output: ['bed', 1] },
   { id: 'iron_pickaxe', input: [['iron_ingot', 3], ['stick', 2]], output: ['iron_pickaxe', 1] },
   { id: 'iron_axe', input: [['iron_ingot', 3], ['stick', 2]], output: ['iron_axe', 1] },
   { id: 'iron_sword', input: [['iron_ingot', 2], ['stick', 1]], output: ['iron_sword', 1] },

@@ -46,6 +46,8 @@ const TILE_NAMES = [
   'torch',
   'snow',
   'snow_side',
+  'bed_top',
+  'bed_side',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -209,6 +211,33 @@ const PAINTERS = {
         const j = (rand() * 2 - 1) * 8
         px(x, y, rgb(238 + j, 242 + j, 245 + j))
       }
+    }
+  },
+  // Bed seen from above: a white pillow band at the head, red blanket below,
+  // with a darker fold line where they meet.
+  bed_top(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 8
+        if (y < 4) px(x, y, rgb(232 + j, 230 + j, 223 + j)) // pillow
+        else if (y === 4) px(x, y, rgb(122 + j, 30 + j, 30 + j)) // fold
+        else px(x, y, rgb(176 + j, 58 + j, 58 + j)) // blanket
+      }
+    }
+  },
+  // Bed seen from the side: blanket over a plank frame with dark feet. The
+  // mesher squashes the tile onto the low bed box, so bands read as layers.
+  bed_side(px, rand) {
+    for (let y = 0; y < TILE; y++) {
+      const frame = y >= 10
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 9
+        if (frame) px(x, y, rgb(140 + j, 108 + j, 62 + j))
+        else px(x, y, rgb(176 + j, 58 + j, 58 + j))
+      }
+    }
+    for (const fx of [0, 1, 14, 15]) {
+      for (let y = 12; y < TILE; y++) px(fx, y, rgb(86, 58, 33)) // feet
     }
   },
 }

@@ -26,10 +26,12 @@ import { GroundItems } from './fx/GroundItems.js'
 import { TorchLights } from './fx/TorchLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
-import { isLiquid } from './world/blocks.js'
+import { BLOCK_BED, BLOCK_FURNACE, isLiquid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
+import { Sleep } from './survival/Sleep.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
+import { bindSleepFx } from './ui/sleepFx.js'
 import { bindHungerHud } from './ui/hungerHud.js'
 import { bindArmorHud } from './ui/armorHud.js'
 
@@ -92,6 +94,11 @@ hunger.onStarve = () => {
 }
 const furnaces = new Furnaces()
 
+// Bed sleeping (bed feature): sleep at night to set the respawn point and
+// skip to dawn; Combat.respawn → player.respawn consults it via spawnHook.
+const sleep = new Sleep(world, daynight)
+player.spawnHook = () => sleep.respawnPoint()
+
 // Restore a saved game before anything renders: block edits must be in the
 // overlay before the first chunks generate, and the UI binders below pick up
 // the restored inventory/health through their initial renders.
@@ -102,6 +109,7 @@ save.attachDayNight(daynight)
 save.attachHunger(hunger)
 save.attachFurnaces(furnaces)
 save.attachArmor(combat.armor)
+save.attachSleep(sleep)
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
 interaction.useItemHook = (item) => {
@@ -112,13 +120,22 @@ interaction.useItemHook = (item) => {
 
 const screen = new InventoryScreen(inventory, player, combat.armor)
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
-// Right click on a furnace block opens its UI; breaking one spills its slots.
-interaction.useBlockHook = (block, x, y, z) => {
-  furnaceScreen.openAt(x, y, z)
-  return true
+// Use dispatcher for `interactive` blocks (right click / touch ▦, sneak
+// bypasses): handlers keyed by block id, each returning true when the click
+// was spent. New interactive blocks register here — mark the block
+// `interactive: true` in blocks.js and add a row.
+const blockUseHandlers = {
+  [BLOCK_FURNACE]: (x, y, z) => {
+    furnaceScreen.openAt(x, y, z)
+    return true
+  },
+  [BLOCK_BED]: (x, y, z) => sleep.tryAt(x, y, z),
 }
+interaction.useBlockHook = (block, x, y, z) =>
+  blockUseHandlers[block.id]?.(x, y, z) ?? false
 interaction.onBlockBroken = (x, y, z, block) => {
-  if (!block.interactive) return
+  // Breaking a furnace spills its slots (other interactive blocks keep no contents).
+  if (block.id !== BLOCK_FURNACE) return
   furnaces.onBroken(x, y, z, (stack) =>
     drops.spawn(x + 0.5, y + 0.7, z + 0.5, stack.id, stack.count),
   )
@@ -139,6 +156,7 @@ bindHud(combat.health, () => {
 })
 bindHungerHud(hunger)
 bindArmorHud(combat.armor)
+bindSleepFx(sleep, sounds)
 bindResetButton(save)
 const toggleQuestLog = bindQuestLog(hunt)
 const updateTreasureHud = bindTreasureHud(hunt, camera)
@@ -256,4 +274,5 @@ window.__mc = {
   torchLights,
   armor: combat.armor,
   projectiles: combat.projectiles,
+  sleep,
 }
