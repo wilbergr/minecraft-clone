@@ -442,6 +442,43 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Torch recipe exists now (`stick + coal → 4 torches` in recipes.js) — the
   Phase 11 "no torch recipe yet" note is obsolete.
 
+## The King's Trial, PR 2: Raise the Beacon (building stage)
+
+- `world.onEdit` is now a LISTENER LIST: subscribe with `world.onEdit(fn)`
+  (never assign — assignment throws now that it's a method). Listeners get
+  the edit's world coords `(wx, wy, wz)`; `World.explode` reports its blast
+  center once, not per carved block. SaveManager's dirty flag and the
+  challenge's beacon re-check both subscribe.
+- The beacon spec is captain-retunable in `src/config.js`: edit
+  `BEACON_SHAPE` (platform size, pillar height/materials, torch/core ids),
+  never `CHALLENGE.beacon.cells` — `beaconCells()` expands the shape into
+  the 43-cell list `StructureCheck` walks. `ids: null` on a cell means "any
+  solid block" (forgiving); explicit lists are strict (torches + gold core
+  are the signature cells).
+- Cell dy 0 is the anchor column's SURFACE BLOCK layer
+  (`StructureCheck.baseY = anchor.y - 1`), so natural terrain satisfies
+  platform cells for free — deliberate ("forgiving in terrain").
+- The check runs once on every beacon-stage entry path (delivery advance,
+  deserialize, skipToStage — all funnel through `Challenge.#syncBeacon`) and
+  on world edits within `CHALLENGE.beacon.checkRadius` of the anchor.
+  `evaluate()` uses `world.blockAt`, which answers from the edit overlay even
+  for unloaded chunks, so checks are correct at any distance.
+- `beaconBuilt` is LATCHED: once the stage completes, later damage (creeper,
+  PR 3 siege) never regresses it — `#onWorldEdit` early-returns on the flag.
+  Completion doubles the anchor beam's opacity (also re-applied on restore).
+- The ghost preview is one `THREE.InstancedMesh` (satisfied cells collapse
+  to zero-scale matrices — InstancedMesh has no per-instance visibility),
+  built lazily on stage entry and disposed on completion. Cubes are 1.02³ so
+  a wrong-material block reads as haloed instead of z-fighting.
+- Stage indexes are 0-based: `skipToStage(1)` lands ON the beacon stage
+  (relics auto-completed) and shows the ghost immediately; `skipToStage(2)`
+  latches `beaconBuilt` and skips past it. Headless: drive builds with
+  `__mc.world.setBlock(s.anchorX + cell.dx, s.baseY + cell.dy, s.anchorZ +
+  cell.dz, id)` where `s = __mc.challenge.structure`; each setBlock
+  re-evaluates synchronously, so `s.satisfied`/`challenge.beaconBuilt` can be
+  asserted right after. Stage 2 (siege) is the next inert stub — its tick
+  seam is the stage-2 comment in `Challenge.update`.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

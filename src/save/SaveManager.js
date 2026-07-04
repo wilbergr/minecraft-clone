@@ -58,7 +58,7 @@ export class SaveManager {
     this.warnedSize = false
 
     const markDirty = () => (this.dirty = true)
-    world.onEdit = markDirty
+    world.onEdit(markDirty)
     inventory.onChange(markDirty)
     health.onChange(markDirty)
     window.addEventListener('beforeunload', () => {

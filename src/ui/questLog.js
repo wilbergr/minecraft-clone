@@ -80,6 +80,19 @@ export function bindQuestLog(hunt, challenge) {
     }
   }
 
+  // Stage 2's live detail row: cell progress plus the bill of materials,
+  // both derived from the config shape so captain retunes never drift.
+  const renderBeacon = () => {
+    const s = challenge.structure
+    const li = item(
+      'quest-active',
+      `<span class="quest-mark">◈</span> Build to the blueprint — ${s.satisfied}/${s.total} cells raised<p class="quest-clue"></p>`,
+    )
+    li.querySelector('.quest-clue').textContent =
+      `The ghost shows what remains: ${s.billOfMaterials().join(', ')}.`
+    trialList.appendChild(li)
+  }
+
   const renderTrial = () => {
     trialList.innerHTML = ''
     if (!challenge.activated) {
@@ -98,6 +111,7 @@ export function bindQuestLog(hunt, challenge) {
       } else if (index === challenge.stage) {
         trialList.appendChild(item('quest-active', `<span class="quest-mark">◈</span> ${stage.name}`))
         if (index === 0) renderRelics()
+        if (index === 1) renderBeacon()
       } else {
         trialList.appendChild(item('quest-locked', `<span class="quest-mark">·</span> ${stage.name} — sealed`))
       }

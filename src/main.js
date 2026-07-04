@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { GRAPHICS, HUNGER } from './config.js'
+import { CHALLENGE, GRAPHICS, HUNGER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
@@ -124,6 +124,16 @@ challenge.onCollect = (relic) => {
 challenge.onDeliver = (pos) => {
   sounds.play('pickup')
   particles.burst(pos.x, pos.y + 1, pos.z, 0xffb066, 60)
+}
+// Stage 2 beacon juice: a green pulse as each ghost cell satisfies, a big
+// burst (the placement sound already covers audio per block) when the whole
+// structure completes.
+challenge.onBeaconPulse = (pos) => {
+  particles.burst(pos.x, pos.y, pos.z, CHALLENGE.beacon.ghost.pulseColor, 10)
+}
+challenge.onBeaconDone = (pos) => {
+  sounds.play('pickup')
+  particles.burst(pos.x, pos.y + 2, pos.z, CHALLENGE.beacon.ghost.doneColor, 80)
 }
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.

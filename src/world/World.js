@@ -52,12 +52,26 @@ export class World {
     // and consumed by TorchLights to position its point-light pool.
     this.torches = new Map()
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
-    this.onEdit = null // callback() — set by SaveManager to mark the save dirty
+    // Edit listeners (King's Trial PR 2 promoted the old single-assignment
+    // onEdit callback to a list): SaveManager marks the save dirty, the
+    // challenge re-checks the beacon. Subscribe via onEdit(fn).
+    this.editListeners = []
     this.#buildLights()
   }
 
   #key(cx, cz) {
     return `${cx},${cz}`
+  }
+
+  // Subscribe to world edits. Listeners receive the edit's world coords —
+  // per block for setBlock, once with the blast center for explode — so
+  // subscribers can filter by proximity without walking the overlay.
+  onEdit(fn) {
+    this.editListeners.push(fn)
+  }
+
+  #emitEdit(wx, wy, wz) {
+    for (const fn of this.editListeners) fn(wx, wy, wz)
   }
 
   // --- Terrain generator (pure functions of world position) ---------------
@@ -235,7 +249,7 @@ export class World {
       if (lz === 0) this.#remesh(cx, cz - 1)
       if (lz === WORLD.chunkSize - 1) this.#remesh(cx, cz + 1)
     }
-    this.onEdit?.()
+    this.#emitEdit(wx, wy, wz)
     return true
   }
 
@@ -267,7 +281,7 @@ export class World {
       const chunk = this.chunks.get(key)
       if (chunk) chunk.buildMesh(this.material)
     }
-    if (dirty.size > 0) this.onEdit?.()
+    if (dirty.size > 0) this.#emitEdit(Math.floor(cx), Math.floor(cy), Math.floor(cz))
   }
 
   // Shared write path for batched edits: record the overlay entry, keep the

@@ -3,15 +3,16 @@ import { CHALLENGE, PLAYER, WATER, WORLD } from '../config.js'
 import { mulberry32 } from '../world/noise.js'
 import { cardinal8 } from '../treasure/TreasureHunt.js'
 import { RelicHunt } from './RelicHunt.js'
+import { StructureCheck } from './StructureCheck.js'
 
 // The King's Trial (endgame): a four-stage machine — scavenger → build →
 // siege → boss — mirroring TreasureHunt's shape so every established pattern
 // transfers: onChange listeners for the UI/save layers, update(delta,
 // playerPos) beside hunt.update in the main loop, serialize()/deserialize()
 // for the optional `challenge` save slot, and window.__mc.challenge as the
-// test seam. This PR ships the framework plus stage 0 (Relics of the Deep);
-// stages 1–3 are declared in STAGES and the save shape but inert — their
-// PRs land StructureCheck / SiegeEvent / Boss behind the same machine.
+// test seam. Stage 0 (Relics of the Deep) and stage 1 (Raise the Beacon —
+// StructureCheck) are live; stages 2–3 are declared in STAGES and the save
+// shape but inert — their PRs land SiegeEvent / Boss behind the same machine.
 //
 // The Trial unlocks when the treasure hunt completes (hunt.isComplete): the
 // anchor marker and relic meshes appear only then, and until then the quest
@@ -36,6 +37,8 @@ export class Challenge {
     this.onToast = null // callback(text) — HUD toast line
     this.onCollect = null // callback(relic) — collect fx (sound/particles)
     this.onDeliver = null // callback(anchorPosition) — delivery fx
+    this.onBeaconPulse = null // callback({x,y,z}) — a beacon cell satisfied
+    this.onBeaconDone = null // callback(anchorPosition) — the beacon completed
 
     this.stage = 0 // index into STAGES; STAGES.length = trial complete
     // Latched stage flags (report §9): once true they stay true — a creeper
@@ -58,6 +61,14 @@ export class Challenge {
 
     this.relics = new RelicHunt(world, scene)
     this.relics.onCollect = (relic) => this.#onRelicCollect(relic)
+
+    // Stage 2 — the beacon spec/checker + ghost preview. Cells anchor at the
+    // Trial Grounds column; the ghost builds only while the stage is active
+    // (#syncBeacon). World edits near the site re-run the check (world.onEdit
+    // is a listener list — SaveManager's dirty flag subscribes alongside us).
+    this.structure = new StructureCheck(world, scene, this.anchor)
+    this.structure.onCellSatisfied = (pos) => this.onBeaconPulse?.(pos)
+    world.onEdit((wx, wy, wz) => this.#onWorldEdit(wx, wz))
 
     this.activated = false // meshes built / trial live — flips on hunt completion
     this.marker = null // { ring, beam } scene meshes at the anchor
@@ -90,6 +101,12 @@ export class Challenge {
     if (this.stage === 0) {
       const relic = this.relics.activeRelic
       if (relic) return { position: relic.position, name: relic.name }
+    }
+    if (this.stage === 1) {
+      return {
+        position: this.anchorPosition,
+        name: `Beacon ${this.structure.satisfied}/${this.structure.total}`,
+      }
     }
     return { position: this.anchorPosition, name: 'Trial Grounds' }
   }
@@ -147,6 +164,7 @@ export class Challenge {
     this.activated = true
     this.#buildMarker()
     if (!this.relics.delivered) this.relics.show()
+    this.#syncBeacon() // restores landing past stage 0 need the ghost/bright beam
     if (loud) {
       this.onToast?.('The Heart of the World stirs — five relics answer it.')
       this.#emit()
@@ -195,7 +213,8 @@ export class Challenge {
       this.relics.update(delta, playerPos)
       this.#checkDelivery(playerPos)
     }
-    // Stages 1–3 (beacon / siege / boss) tick here when their PRs land.
+    // Stage 1 (beacon) is edit-driven, not ticked — see #onWorldEdit.
+    // Stages 2–3 (siege / boss) tick here when their PRs land.
   }
 
   // Delivery: all shards found and the player standing inside the marker
@@ -227,8 +246,50 @@ export class Challenge {
 
   #advance(toast) {
     this.stage++
+    this.#syncBeacon()
     if (toast) this.onToast?.(toast)
     this.#emit()
+  }
+
+  // --- Stage 1: Raise the Beacon (StructureCheck owns the spec/ghost) --------
+
+  // Every entry/exit path for the beacon stage funnels here: show the ghost
+  // and take a first reading while the stage is live (natural or pre-placed
+  // cells count immediately), tear the ghost down otherwise, and keep the
+  // anchor beam bright once the beacon is built (restores included).
+  #syncBeacon() {
+    if (!this.activated) return
+    if (this.stage === 1 && !this.beaconBuilt) {
+      this.structure.show()
+      this.#evaluateBeacon()
+    } else {
+      this.structure.hide()
+    }
+    if (this.beaconBuilt && this.marker) {
+      const base = CHALLENGE.site.marker.beam.opacity
+      this.marker.beam.material.opacity = Math.min(1, base * 2)
+    }
+  }
+
+  // World-edit listener (all edits, any source): re-check only while the
+  // beacon stage is live and the edit landed near the anchor. Once built the
+  // stage is latched — later damage never regresses it, so no re-checks.
+  #onWorldEdit(wx, wz) {
+    if (!this.activated || this.stage !== 1 || this.beaconBuilt) return
+    if (!this.structure.near(wx, wz)) return
+    this.#evaluateBeacon()
+  }
+
+  #evaluateBeacon() {
+    const before = this.structure.satisfied
+    const done = this.structure.evaluate()
+    if (done) {
+      this.beaconBuilt = true // latched — the win survives any later damage
+      this.onBeaconDone?.(this.anchorPosition)
+      this.#advance('The beacon blazes! The Trial Grounds brace for a siege.')
+    } else if (this.structure.satisfied !== before) {
+      this.#emit() // quest-log progress line
+    }
   }
 
   // --- Test seam (dev-only): jump the machine for headless runs --------------
@@ -251,6 +312,7 @@ export class Challenge {
     if (stage >= 3) this.siegeCleared = true
     if (stage >= 4) this.bossDefeated = true
     this.stage = stage
+    this.#syncBeacon()
     this.#emit()
   }
 
@@ -278,5 +340,9 @@ export class Challenge {
     this.siegeCleared = data.siegeCleared === true
     this.bossDefeated = data.bossDefeated === true
     this.celebrated = data.celebrated === true
+    // Restored mid-beacon: rebuild the ghost against the restored edit
+    // overlay (load() applied it before we were constructed). Restored past
+    // it: keep the beam bright.
+    this.#syncBeacon()
   }
 }

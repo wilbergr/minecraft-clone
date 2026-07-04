@@ -44,6 +44,44 @@ export const TREASURE = {
   toastSeconds: 4, // how long the "found it" banner lingers
 }
 
+// Stage 2 beacon shape (captain-retunable): a 5×5 platform flush with the
+// ground, four corner pillars with a torch atop each, and a two-block gold-ore
+// core at the center — the gold is the intended difficulty gate (iron pickaxe
+// + deep mining). `beaconCells` expands this readable description into the
+// cell list the structure checker walks; edit the shape here, never the cells.
+const BEACON_SHAPE = {
+  platformSize: 5, // odd — centered on the anchor column, at ground level
+  pillarHeight: 3, // pillar cells dy 1..pillarHeight at the four corners
+  pillarIds: [3, 7, 5], // each pillar cell: stone / planks / wood
+  torchId: 13, // atop each pillar — exact block, the "lit" signature
+  coreId: 12, // gold ore — the progression gate
+  coreHeight: 2, // core cells dy 1..coreHeight at the center
+}
+
+// Expand the shape into [{ dx, dy, dz, ids }] — offsets from the anchor
+// column's surface block (dy 0 = the ground layer, so natural terrain can
+// satisfy platform cells). `ids: null` means "any solid block" (forgiving);
+// explicit id lists are strict. 5×5 + 4×(3+1) + 2 = 43 cells.
+function beaconCells(shape) {
+  const cells = []
+  const r = Math.floor(shape.platformSize / 2)
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dz = -r; dz <= r; dz++) {
+      cells.push({ dx, dy: 0, dz, ids: null }) // platform: any solid block
+    }
+  }
+  for (const [dx, dz] of [[-r, -r], [-r, r], [r, -r], [r, r]]) {
+    for (let dy = 1; dy <= shape.pillarHeight; dy++) {
+      cells.push({ dx, dy, dz, ids: shape.pillarIds })
+    }
+    cells.push({ dx, dy: shape.pillarHeight + 1, dz, ids: [shape.torchId] })
+  }
+  for (let dy = 1; dy <= shape.coreHeight; dy++) {
+    cells.push({ dx: 0, dy, dz: 0, ids: [shape.coreId] })
+  }
+  return cells
+}
+
 // The King's Trial (endgame challenge chain): a four-stage quest — scavenger
 // → build → siege → boss — that unlocks when the treasure hunt completes.
 // It anchors at the Trial Grounds, a seed-deterministic site ringed off the
@@ -100,11 +138,22 @@ export const CHALLENGE = {
   // boss attempts cost nothing — re-arm at the core and try again. Later
   // stage PRs read this; 'free' is the only implemented value.
   retry: 'free',
-  // Stage 2 — Raise the Beacon (PR 2, inert): voxel-checked build at the
-  // anchor. The cell spec helper lands with the stage.
+  // Stage 2 — Raise the Beacon: voxel-checked build at the anchor. The ghost
+  // preview shows every unsatisfied cell; the checker is forgiving in
+  // materials (per-cell id sets, null = any solid), extras (blocks outside
+  // the spec ignored), and terrain (natural blocks count) but strict in shape
+  // and the signature cells (torches + gold core). Completion latches
+  // `beaconBuilt` — later damage never regresses the stage.
   beacon: {
     checkRadius: 12, // world edits within this of the anchor re-run the structure check
-    ghostOpacity: 0.35, // translucent preview cells
+    shape: BEACON_SHAPE, // the readable spec — retune the build here
+    cells: beaconCells(BEACON_SHAPE), // expanded cell list the checker walks
+    ghost: {
+      color: 0x5fb4ff, // translucent blue — a missing cell
+      opacity: 0.35,
+      pulseColor: 0x7dff9e, // green burst when a cell is satisfied
+      doneColor: 0x9fd8ff, // the completion burst
+    },
   },
   // Stage 3 — The Siege (PR 3, inert): survive escalating night waves on the
   // arena ring, cleared before dawn.
