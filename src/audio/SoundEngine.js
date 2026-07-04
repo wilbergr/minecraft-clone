@@ -155,6 +155,18 @@ export class SoundEngine {
         this.#burst({ type: 'lowpass', freq: 480, dur: 0.1, gain: 0.4 * v })
         this.#tone({ type: 'triangle', from: 240, to: 110, dur: 0.12, gain: 0.22 * v })
         break
+      case 'herald': // the Herald's voice — a breathy whisper-chord, one motif per line
+        this.#whisper(220, 1.7, 0.2 * v)
+        break
+      case 'runeIgnite': // a stele rune line catching ember — rising chime + crackle
+        this.#tone({ type: 'sine', from: 520, to: 1040, dur: 0.35, gain: 0.25 * v })
+        this.#burst({ type: 'highpass', freq: 2400, dur: 0.4, gain: 0.15 * v })
+        break
+      case 'trialComplete': // three ascending chimes — the rite fulfilled
+        this.#tone({ type: 'sine', from: 440, to: 442, dur: 0.5, gain: 0.25 * v })
+        this.#tone({ type: 'sine', from: 554, to: 556, dur: 0.5, gain: 0.25 * v, when: 0.22 })
+        this.#tone({ type: 'sine', from: 659, to: 662, dur: 0.9, gain: 0.3 * v, when: 0.44 })
+        break
     }
   }
 
@@ -220,6 +232,34 @@ export class SoundEngine {
     osc.connect(g).connect(this.master)
     osc.start(t)
     osc.stop(t + dur + 0.02)
+  }
+
+  // Herald voice: the #groan structure transposed up and softened — breathy
+  // sine/triangle partials on a minor chord, a slow shimmer LFO, long decay.
+  #whisper(freq, dur, gain) {
+    const t = this.ctx.currentTime
+    const pitch = this.#pitch()
+    const g = this.ctx.createGain()
+    g.gain.setValueAtTime(0.001, t)
+    g.gain.exponentialRampToValueAtTime(gain, t + dur * 0.25)
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur)
+    const lfo = this.ctx.createOscillator()
+    const lfoGain = this.ctx.createGain()
+    lfo.frequency.value = 2.2
+    lfoGain.gain.value = gain * 0.35
+    lfo.connect(lfoGain).connect(g.gain)
+    g.connect(this.master)
+    // Root, minor third, fifth — a hollow chord rather than a single voice.
+    for (const [ratio, type] of [[1, 'sine'], [1.189, 'triangle'], [1.498, 'sine']]) {
+      const osc = this.ctx.createOscillator()
+      osc.type = type
+      osc.frequency.value = freq * pitch * ratio
+      osc.connect(g)
+      osc.start(t)
+      osc.stop(t + dur)
+    }
+    lfo.start(t)
+    lfo.stop(t + dur)
   }
 
   // Zombie voice: two detuned saws with a tremolo LFO — a wobbly groan.

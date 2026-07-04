@@ -21,6 +21,7 @@ import { bindDropKeys, bindBackdropDrop } from './ui/dropKeys.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
 import { bindChallengeReveal } from './ui/challengeReveal.js'
+import { bindGuidance } from './quest/guidance.js'
 import { bindBossHud } from './ui/bossHud.js'
 import { bindHelp } from './ui/help.js'
 import { bindMuteButton } from './ui/muteButton.js'
@@ -287,6 +288,26 @@ help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 
 furnaceScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 chestScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 
+// The King's Trial guidance layer (Herald / wisps / stele / banner): one
+// contiguous block, bound AFTER the reveals and their onToggle assignments —
+// it wraps reveal.onToggle (unlock apparition), bossFight.onBossEvent
+// (boss-stage lines), and challenge.onComplete (farewell ceremony before the
+// challengeReveal modal). It also takes over challenge.onToast: every trial
+// message rides the queued Herald banner, not the single-slot toast.
+const guidance = bindGuidance({
+  scene,
+  world,
+  camera,
+  player,
+  challenge,
+  hunt,
+  reveal,
+  challengeReveal,
+  health: combat.health,
+  sounds,
+  particles,
+})
+
 // Audio wiring: browsers require a user gesture before audio starts, so the
 // context unlocks on the first pointer/key input (the click-to-play overlay
 // counts). Hurt plays on any health drop; every UI button clicks.
@@ -351,6 +372,7 @@ renderer.setAnimationLoop(() => {
   if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
   hunt.update(delta, camera.position)
   challenge.update(delta, camera.position)
+  guidance.update(delta, camera.position)
   particles.update(delta)
   drops.update(delta, camera.position)
   fx.viewmodel.update(delta)
@@ -384,6 +406,10 @@ window.__mc = {
   challenge,
   bossFight: challenge.bossFight,
   challengeReveal,
+  herald: guidance.herald,
+  wisps: guidance.wisps,
+  stele: guidance.stele,
+  heraldBanner: guidance.banner,
   touch,
   help,
   sounds,

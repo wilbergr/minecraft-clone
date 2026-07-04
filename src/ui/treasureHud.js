@@ -28,9 +28,11 @@ export function bindTreasureHud(hunt, challenge, camera) {
       TREASURE.toastSeconds * 1000,
     )
   }
+  // Treasure-hunt messages only: the King's Trial routes ALL its messages
+  // through the queued Herald banner (bindGuidance owns challenge.onToast) —
+  // this single-slot 4s toast used to eat the trial's back-to-back beats.
   hunt.onCollect = (token) =>
     showToast(`✦ You found the ${token.name}! (${hunt.foundCount}/${hunt.tokens.length})`)
-  challenge.onToast = showToast
 
   let lastText = ''
   const forward = new THREE.Vector3()

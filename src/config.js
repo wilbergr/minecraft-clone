@@ -217,6 +217,163 @@ export const CHALLENGE = {
   },
 }
 
+// The King's Trial guidance layer (Herald / wisps / stele / testament): all
+// player-facing lines and every visual knob live here — purely additive, no
+// keys inside CHALLENGE. The Herald's lines carry a deliberate TONE ARC:
+// empathetic and encouraging at the unlock and early stages, gaining urgency
+// with each stage latch, and lightly scolding (a weary champion, never harsh)
+// on boss-stage deaths. Keep that arc when editing. Each line is one sentence
+// (`text`) plus one flavor line (`flavor`) — the banner renders both.
+export const GUIDANCE = {
+  banner: {
+    minSeconds: 3.5, // each queued line holds the banner at least this long
+    lingerSeconds: 7, // the final line fades after this
+    maxQueue: 5, // oldest queued (unshown) message drops past this
+  },
+  herald: {
+    offset: { x: 0, z: -3.5 }, // resident spot relative to the anchor column
+    speakRadius: 8, // walking within this of the figure re-speaks the stage line
+    faceRadius: 24, // the figure turns to face the player inside this
+    hearRadius: 28, // whisper volume fades to zero at this distance
+    hover: 0.15, // the figure floats this far above the ground
+    apparitionDistance: 4, // the unlock ghost materializes this far ahead
+    apparitionSeconds: 6, // …lingers this long, then flows to the Trial Grounds
+    dissolveSeconds: 2.5, // completion farewell fade-out
+    moteBursts: 6, // wisp bursts along the dissolve stream
+    color: 0x9fd8ff, // spectral ghost-blue (the beacon-ghost family)
+    opacity: 0.5,
+    flicker: { amount: 0.12, speed: 2.1 }, // slow spectral opacity shimmer
+    bob: { amplitude: 0.1, speed: 1.5 },
+    // The stage script. Keys are derived from challenge/siege/boss state
+    // (Herald.lineKeyFor); `unlock`/`bossRetry`/`bossLeash`/`bossPhase2`/
+    // `bossPhase3`/`complete` are scripted beats.
+    lines: {
+      unlock: {
+        text: 'Champion… the Heart you carry has woken something old.',
+        flavor: 'Come — follow the light. The Trial Grounds remember, and so do I.',
+      },
+      relics: {
+        text: 'Five shards the rite asks — the compass already knows the first.',
+        flavor: 'I gathered them once, long ago. Take heart; the way is kinder than it looks.',
+      },
+      deliver: {
+        text: 'You carry all five — lay them within the ring.',
+        flavor: 'How they hum. Mine did too.',
+      },
+      beacon: {
+        text: 'Raise the pyre as the blue memory shows — gold at its heart, fire at its corners.',
+        flavor: 'Build it true, champion. The night is already watching.',
+      },
+      siegeDisarmed: {
+        text: 'When your walls and nerve are ready, wake the gold core — the horde answers at dusk.',
+        flavor: 'Do not linger. The King grows no weaker while you wait.',
+      },
+      siegeArmed: {
+        text: 'It is done — they come at dusk. Do not leave the ring.',
+        flavor: 'Steel yourself. This is where I faltered.',
+      },
+      siegeActive: {
+        text: 'Hold the ring, champion — dawn decides it!',
+        flavor: 'Every wave announces itself. Meet them.',
+      },
+      siegeFailed: {
+        text: 'The horde is only beaten by standing — wake the core and stand again.',
+        flavor: 'Dusk returns. So must you.',
+      },
+      boss: {
+        text: 'Wake the core once more, and the Hollow King himself answers.',
+        flavor: 'No more errands, champion. The crown, or the dark.',
+      },
+      bossRumble: {
+        text: 'He comes. Stand ready!',
+        flavor: 'Do not blink.',
+      },
+      bossFight: {
+        text: 'Watch him — every blow is announced before it lands.',
+        flavor: 'Strike after the telegraph. Bait the charge into stone.',
+      },
+      bossPhase2: {
+        text: 'He calls the dead to him — cut the minions down fast!',
+        flavor: 'Faster now. He is angry.',
+      },
+      bossPhase3: {
+        text: 'The Breaker wakes — the ground itself is no longer safe!',
+        flavor: 'Keep moving. Nothing he marks survives.',
+      },
+      bossRetry: {
+        text: 'Again? The crown does not wait forever.',
+        flavor: 'I have watched a hundred fall. Do not make me remember you the same way.',
+      },
+      bossLeash: {
+        text: 'You fled the ring, and so he fled you.',
+        flavor: 'Summon him again — and this time, stay.',
+      },
+      complete: {
+        text: 'It is done. The crown dims, the realm breathes… and I may finally rest.',
+        flavor: 'Farewell, champion. Wear it better than the last king did.',
+      },
+    },
+  },
+  // The in-world compass: faint motes drifting a few blocks ahead of the
+  // player along the bearing to the current objective, color-keyed per stage
+  // (colors match the beams/flares already established in TREASURE/CHALLENGE
+  // so the palette teaches itself). Supplements the HUD compass, never
+  // replaces it. Also owns the gold-core "wake me" shimmer.
+  wisps: {
+    intervalSeconds: 0.4, // one mote volley this often (~7 particles/s)
+    distances: [3, 5, 7], // blocks ahead of the player along the bearing
+    jitter: 0.9, // random offset per mote, blocks
+    dropBelowEye: 0.6, // motes spawn this far under eye height (waist-high)
+    suppressRadius: 12, // inside this of the target the beams/ghost take over
+    colors: {
+      treasure: 0xffd75e, // gold — the original hunt
+      relics: 0x7fe7d0, // sea-glass green (stage 0)
+      beacon: 0x5fb4ff, // ghost-blue (stage 1)
+      siege: 0xff4545, // flare-red (stage 2)
+      boss: 0xff6a3c, // blood-orange (stage 3)
+    },
+    // While the core waits to be clicked (siege disarmed / King summonable),
+    // an ember shimmer pulses on the two gold-core cells: "this glows, use it".
+    coreShimmer: { intervalSeconds: 1.1, color: 0xffd75e, count: 2 },
+  },
+  // The Prophecy Stele: a rune-carved monolith on the anchor ring whose four
+  // glyph lines (one per stage) ignite as stages latch — the glanceable
+  // "where am I in the arc" board. Glyphs only, never English: the Herald is
+  // the translator (stand near and it speaks the active line's meaning).
+  stele: {
+    offset: { x: 0, z: 4 }, // beside the ring, clear of the beacon footprint
+    width: 1.2,
+    height: 3.6,
+    depth: 0.5,
+    stoneColor: 0x201d28, // dark basalt monolith
+    faceColor: '#151019', // canvas background behind the runes
+    litColor: '#ffb066', // completed lines burn ember-orange
+    activeColor: '#8a6a45', // the current stage's line, faintly warm
+    dimColor: '#241d16', // future lines: near-black engravings
+    glyphsPerLine: 9,
+    igniteParticles: 26, // burst when a line catches
+    pulse: { speed: 2.2, min: 0.04, max: 0.3 }, // active-line glow plane
+  },
+  // The Champion's Testament: the quest log's Trial rows reskinned in the
+  // fallen champion's first-person voice. Index-matched to STAGES; `closings`
+  // append to completed rows, `sealedStub` teases unreached pages.
+  testament: {
+    passages: [
+      'From my testament: “Five shards I sought where sun, root, frost, stone and tide keep them. Each one hummed louder as the next drew near.”',
+      '“I raised the pyre by the old blue memory — gold at its heart, flame at its corners. The night noticed.”',
+      '“At dusk they came, wave upon wave. Hold the ring, whatever it costs. I did not.”',
+      '“The King wears a hollow crown. Every blow he strikes, he announces first — that is his pride, and his weakness.”',
+    ],
+    closings: [
+      '“The shards are laid. The grounds are awake.”',
+      '“The beacon burns. Let them come.”',
+      '“The horde is broken. He knows your name now.”',
+      '“The crown has fallen.”',
+    ],
+    sealedStub: '…the rest of the page is ash.',
+  },
+}
+
 // World layout (Phase 2: chunked procedural terrain).
 export const WORLD = {
   blockSize: 1,

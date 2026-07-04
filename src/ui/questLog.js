@@ -1,4 +1,4 @@
-import { CHALLENGE_MESSAGE, TREASURE_MESSAGE } from '../config.js'
+import { CHALLENGE_MESSAGE, GUIDANCE, TREASURE_MESSAGE } from '../config.js'
 import { STAGES } from '../quest/Challenge.js'
 
 // Quest log (J to toggle; 🗺 button on touch): a non-modal panel — it never
@@ -136,17 +136,32 @@ export function bindQuestLog(hunt, challenge) {
     trialProgress.textContent = challenge.isComplete
       ? 'complete'
       : `stage ${challenge.stage + 1}/${STAGES.length}`
+    // The Champion's Testament (guidance layer): each stage row carries a
+    // first-person passage from the fallen champion — recovered pages, so the
+    // instructions double as lore. Strings live in GUIDANCE.testament.
+    const testament = (className, text) => {
+      const p = document.createElement('p')
+      p.className = `testament ${className}`
+      p.textContent = text
+      return p
+    }
     for (const [index, stage] of STAGES.entries()) {
       if (index < challenge.stage) {
-        trialList.appendChild(item('quest-found', `<span class="quest-mark">✦</span> ${stage.name} — complete`))
+        const li = item('quest-found', `<span class="quest-mark">✦</span> ${stage.name} — complete`)
+        li.appendChild(testament('testament-closed', GUIDANCE.testament.closings[index]))
+        trialList.appendChild(li)
       } else if (index === challenge.stage) {
-        trialList.appendChild(item('quest-active', `<span class="quest-mark">◈</span> ${stage.name}`))
+        const li = item('quest-active', `<span class="quest-mark">◈</span> ${stage.name}`)
+        li.appendChild(testament('testament-active', GUIDANCE.testament.passages[index]))
+        trialList.appendChild(li)
         if (index === 0) renderRelics()
         if (index === 1) renderBeacon()
         if (index === 2) renderSiege()
         if (index === 3) renderBoss()
       } else {
-        trialList.appendChild(item('quest-locked', `<span class="quest-mark">·</span> ${stage.name} — sealed`))
+        const li = item('quest-locked', `<span class="quest-mark">·</span> ${stage.name} — sealed`)
+        li.appendChild(testament('testament-sealed', GUIDANCE.testament.sealedStub))
+        trialList.appendChild(li)
       }
     }
     if (challenge.isComplete) {

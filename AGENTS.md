@@ -648,6 +648,46 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   items slide downhill). The old "collect output by clicking" rule still
   holds: furnace output takes a press with an EMPTY cursor only.
 
+## The King's Trial guidance layer (Herald, wisps, stele, testament)
+
+- All strings and knobs live in the `GUIDANCE` block in src/config.js —
+  purely additive, nothing inside `CHALLENGE`, zero save keys, zero
+  `Challenge.js` changes. The Herald's lines carry a deliberate TONE ARC
+  (empathetic at unlock → urgent by the siege → lightly scolding on boss
+  deaths → warm farewell); keep the arc when editing lines.
+- `bindGuidance` (src/quest/guidance.js) is the single main.js touch point.
+  It must bind AFTER bindTreasureReveal/bindChallengeReveal and their
+  onToggle assignments: it WRAPS three single-slot hooks — `reveal.onToggle`
+  (unlock apparition fires on dismiss), `bossFight.onBossEvent` (boss-stage
+  lines on top of the fx handler), and `challenge.onComplete` (Herald
+  farewell + dissolve, THEN the existing challengeReveal modal — the modal
+  itself is untouched). It also takes over `challenge.onToast`: every trial
+  message rides the QUEUED `#herald-line` banner (each message holds ≥
+  `GUIDANCE.banner.minSeconds`), never the single-slot `#treasure-toast` —
+  treasureHud keeps only hunt.onCollect.
+- `src/quest/Herald.js`: NOT a Mob (plain Group, no `userData.mob` ⇒
+  intangible to combat raycasts). `lineKeyFor(challenge)` is the pure
+  stage→key derivation; scripted beats (`unlock`/`bossRetry`/`bossLeash`/
+  `bossPhase2/3`/`complete`) arrive via hooks. Failure detection is
+  STAGE-gated (`c.stage === 2/3` on the active→idle transition), never the
+  latched flags — `skipToStage` leaves stale latches (siegeCleared stays
+  true after a skip past-and-back) that would mask real fails.
+- `src/fx/WispTrail.js` reads `hunt.activeToken ?? challenge.compassTarget`
+  (the compass HUD's exact expression) and bursts into the existing particle
+  pool — no new draw calls. It also owns the gold-core shimmer (stage 2
+  disarmed / stage 3 idle). `src/quest/RuneStele.js` draws its rune face on
+  one seeded canvas (atlas.js technique, `typeof document`-guarded); lit
+  lines ⇔ `challenge.stage > i`, so restores are correct with no code.
+- Headless seams: `__mc.herald` (`lineKey`, `state`:
+  hidden/apparition/resident/dissolving/gone), `__mc.wisps.stats`
+  (`bursts`/`shimmers`), `__mc.stele` (`litCount`, `redraws`),
+  `__mc.heraldBanner.current`, sound counters `herald`/`runeIgnite`/
+  `trialComplete`. The apparition takes `GUIDANCE.herald.apparitionSeconds`
+  of GAME time (~3× real headless) — shrink `__mc.herald.cfg.
+  apparitionSeconds` before dismissing the treasure reveal, and remember
+  localStorage does NOT survive across separate puppeteer launches (each
+  gets a fresh profile).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE
