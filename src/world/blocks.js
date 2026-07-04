@@ -210,12 +210,30 @@ export const BLOCKS = {
     hardness: 0.4,
     material: 'wood',
   },
+  16: {
+    id: 16,
+    name: 'Chest',
+    // Item storage (inventory overhaul): a plain full cube — no custom
+    // mesher shape. `interactive` routes right click to the use dispatcher
+    // in main.js (opens the chest screen); contents live in
+    // src/crafting/Chests.js keyed by world position, and spill as ground
+    // drops when the block breaks (mined OR exploded).
+    solid: true,
+    interactive: true,
+    color: { top: 0xa5814e, side: 0x9c7444, bottom: 0x8a6238 },
+    tex: { top: 'chest_top', side: 'chest_side', bottom: 'planks' },
+    drop: 'chest',
+    hardness: 1,
+    material: 'wood',
+    tool: { kind: 'axe', minTier: 0 },
+  },
 }
 
 export const BLOCK_WATER = 9
 export const BLOCK_FURNACE = 10
 export const BLOCK_TORCH = 13
 export const BLOCK_BED = 15
+export const BLOCK_CHEST = 16
 
 export function isSolid(id) {
   const block = BLOCKS[id]

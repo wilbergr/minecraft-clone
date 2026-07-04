@@ -45,6 +45,11 @@ export class MobManager {
     // Projectile system (Phase 13), attached by Combat — skeletons shoot
     // through it. Null in bare runs: skeletons then simply never fire.
     this.projectiles = null
+    // Optional hook (inventory overhaul): receives World.explode's carved
+    // cells [{ x, y, z, id }] after a detonation — main.js routes carved
+    // interactive blocks (furnaces, chests) through the same break handlers
+    // as player mining, so their contents spill instead of orphaning.
+    this.onBlocksExploded = null
     this.burnTimer = 0
     // Event mode (King's Trial siege): while set, ambient hostile spawning is
     // suppressed (wave counts stay exact), the passive spawner rests
@@ -154,7 +159,8 @@ export class MobManager {
     const bx = p.x
     const by = p.y + 0.8 // blast centered on the body, not the feet
     const bz = p.z
-    this.world.explode(bx, by, bz, e.radius)
+    const carved = this.world.explode(bx, by, bz, e.radius)
+    this.onBlocksExploded?.(carved)
     const dist = Math.sqrt(
       (playerPos.x - bx) ** 2 +
         (playerPos.y - PHYSICS.playerAABB.height / 2 - by) ** 2 +

@@ -543,6 +543,44 @@ body.touch-mode #hotbar {
   cursor: default;
 }
 
+/* --- Chest screen (inventory overhaul) -------------------------------------- */
+/* Same shell as the furnace screen: dim backdrop at z 8, centered panel. */
+
+#chest-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.65);
+  z-index: 8;
+}
+
+#chest-panel {
+  color: #eef2f7;
+  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+#chest-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+}
+
+#chest-panel .inv-hint {
+  margin: 0.5rem 0 0.9rem;
+}
+
+/* The player grids sit apart from the chest grid(s). */
+#chest-panel .inv-grid + .inv-grid:not(.inv-hotbar-row):not(.chest-neighbor-grid) {
+  margin-top: 14px;
+}
+
 /* --- Furnace / smelting screen (Phase 12) ---------------------------------- */
 
 #furnace-screen {
@@ -1042,7 +1080,8 @@ body.touch-mode .help-touch {
     font-size: 0.8rem;
   }
 
-  #furnace-panel {
+  #furnace-panel,
+  #chest-panel {
     padding: 1rem;
   }
 

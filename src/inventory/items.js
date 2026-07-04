@@ -58,6 +58,8 @@ export const ITEMS = {
   snow: blockItem('snow', 14, 'Snow'),
   // Bed feature: sleep at night to set your respawn point (see src/survival/Sleep.js).
   bed: blockItem('bed', 15, 'Bed'),
+  // Item storage (inventory overhaul): right click a placed chest to open it.
+  chest: blockItem('chest', 16, 'Chest'),
   // Sheep bonus drop — the bed-crafting ingredient.
   wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into

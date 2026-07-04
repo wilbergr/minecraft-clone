@@ -261,6 +261,11 @@ export const INVENTORY = {
   maxStack: 64, // default max items per stack (tools override to 1)
 }
 
+// Placed chests (inventory overhaul) — see src/crafting/Chests.js.
+export const CHEST = {
+  slots: 27, // 3×9: reuses the 9-column inventory grid CSS as-is
+}
+
 // Player movement tunables.
 export const PLAYER = {
   eyeHeight: 1.7, // camera height above the player's feet, in blocks

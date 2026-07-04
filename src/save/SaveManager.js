@@ -19,13 +19,14 @@ import { SAVE, WORLD } from '../config.js'
 //                               // Challenge.serialize() (King's Trial)
 //     cursor: { id, count, durability? },  // held cursor stack (inventory overhaul);
 //                               // returned to the inventory on load
+//     chests: { "x,y,z": { slots: [...] } },  // Chests.serialize() (inventory overhaul)
 //   }
 //
-// `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, and `cursor` are
-// optional keys (Phase 12 onward): older saves simply lack them and load
-// with a full bar / no furnace contents / nothing worn / the origin spawn /
-// a fresh trial / an empty hand — absent keys never invalidate a save on
-// their own.
+// `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, `cursor`, and
+// `chests` are optional keys (Phase 12 onward): older saves simply lack
+// them and load with a full bar / no furnace contents / nothing worn / the
+// origin spawn / a fresh trial / an empty hand / empty chests — absent keys
+// never invalidate a save on their own.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -50,6 +51,8 @@ export class SaveManager {
     this.hungerData = null // loaded value held until attachHunger applies it
     this.furnaces = null // wired by attachFurnaces (Phase 12)
     this.furnaceData = null
+    this.chests = null // wired by attachChests (inventory overhaul)
+    this.chestData = null
     this.armor = null // wired by attachArmor (Phase 13)
     this.armorData = null
     this.sleep = null // wired by attachSleep (bed feature)
@@ -121,6 +124,14 @@ export class SaveManager {
     furnaces.onChange(() => (this.dirty = true))
   }
 
+  // And for placed-chest contents (inventory overhaul): called once after
+  // load() — the exact attachFurnaces pattern.
+  attachChests(chests) {
+    this.chests = chests
+    if (this.chestData !== null) chests.deserialize(this.chestData)
+    chests.onChange(() => (this.dirty = true))
+  }
+
   // And for worn armor (Phase 13): called once after load().
   attachArmor(armor) {
     this.armor = armor
@@ -173,6 +184,7 @@ export class SaveManager {
       this.daynightData = data.daynight ?? null
       this.hungerData = data.hunger ?? null
       this.furnaceData = data.furnaces ?? null
+      this.chestData = data.chests ?? null
       this.armorData = data.armor ?? null
       this.sleepData = data.spawn ?? null
       this.cursorData = data.cursor ?? null
@@ -198,6 +210,7 @@ export class SaveManager {
       daynight: this.daynight ? this.daynight.serialize() : this.daynightData,
       hunger: this.hunger ? this.hunger.serialize() : (this.hungerData ?? undefined),
       furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),
+      chests: this.chests ? this.chests.serialize() : (this.chestData ?? undefined),
       armor: this.armor ? this.armor.serialize() : (this.armorData ?? undefined),
       spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
       cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,
