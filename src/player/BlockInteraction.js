@@ -31,11 +31,13 @@ export class BlockInteraction {
     this.fx = fx
     this.target = null
     this.attackHook = null // set by Combat: () => true if a mob took the click
-    // Phase 12 seams (both optional): useBlockHook(block, x, y, z) handles a
-    // right click on an `interactive` block — main.js wires it to a
-    // dispatcher keyed by block id (furnace UI, bed sleep, ...) — sneaking
-    // bypasses it so you can still place against one; onBlockBroken fires
-    // after any block breaks (the furnace spills its contents).
+    // Phase 12 seams (both optional): useBlockHook(block, x, y, z) offers a
+    // right click on ANY targeted block to main.js's dispatcher — keyed by
+    // block id for `interactive` blocks (furnace UI, bed sleep, ...) plus
+    // contextual cases (the King's Trial gold core); it returns false to let
+    // the click fall through. Sneaking bypasses it so you can still place
+    // against an interactive block; onBlockBroken fires after any block
+    // breaks (the furnace spills its contents).
     this.useBlockHook = null
     this.onBlockBroken = null
     // Phase 13 seams (both optional): useItemHook(item) claims the use verb
@@ -194,15 +196,18 @@ export class BlockInteraction {
     this.crack.hide()
   }
 
-  // The "use" verb for the held item (right click / touch ▦): interactive
-  // blocks (furnace) open first (sneak to bypass, MC-style), then special
-  // items — the bow draws/fires (bowMode 'hold' waits for mouseup, 'tap'
-  // fires a fixed charge), armor equips (useItemHook) — then consumables are
-  // eaten, placeable blocks are placed, other tools do nothing on use.
+  // The "use" verb for the held item (right click / touch ▦): the targeted
+  // block gets first claim via useBlockHook (sneak to bypass, MC-style) —
+  // main.js's dispatcher handles `interactive` blocks (furnace, bed) by id
+  // plus contextual cases like the King's Trial gold core, returning false to
+  // fall through. Then special items — the bow draws/fires (bowMode 'hold'
+  // waits for mouseup, 'tap' fires a fixed charge), armor equips
+  // (useItemHook) — then consumables are eaten, placeable blocks are placed,
+  // other tools do nothing on use.
   useSelected(bowMode = 'tap') {
     if (this.target && this.useBlockHook && !this.player.keys?.sneak) {
       const block = BLOCKS[this.world.blockAt(this.target.x, this.target.y, this.target.z)]
-      if (block.interactive && this.useBlockHook(block, this.target.x, this.target.y, this.target.z)) {
+      if (this.useBlockHook(block, this.target.x, this.target.y, this.target.z)) {
         return true
       }
     }

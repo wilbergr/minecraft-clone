@@ -93,6 +93,21 @@ export function bindQuestLog(hunt, challenge) {
     trialList.appendChild(li)
   }
 
+  // Stage 3's live detail row: how to start the siege, or where it stands.
+  const renderSiege = () => {
+    const siege = challenge.siege
+    const li = item(
+      'quest-active',
+      `<span class="quest-mark">◈</span> Hold the Trial Grounds<p class="quest-clue"></p>`,
+    )
+    li.querySelector('.quest-clue').textContent = siege.active
+      ? `Wave ${siege.waveIndex + 1} of ${siege.cfg.waves.length} — clear every wave before dawn.`
+      : siege.armed
+        ? 'The siege is armed — the horde comes at dusk. Hold the ring.'
+        : "Right-click the beacon's gold core to arm the siege. It begins at dusk; clear all three waves before dawn."
+    trialList.appendChild(li)
+  }
+
   const renderTrial = () => {
     trialList.innerHTML = ''
     if (!challenge.activated) {
@@ -112,6 +127,7 @@ export function bindQuestLog(hunt, challenge) {
         trialList.appendChild(item('quest-active', `<span class="quest-mark">◈</span> ${stage.name}`))
         if (index === 0) renderRelics()
         if (index === 1) renderBeacon()
+        if (index === 2) renderSiege()
       } else {
         trialList.appendChild(item('quest-locked', `<span class="quest-mark">·</span> ${stage.name} — sealed`))
       }

@@ -135,6 +135,21 @@ challenge.onBeaconDone = (pos) => {
   sounds.play('pickup')
   particles.burst(pos.x, pos.y + 2, pos.z, CHALLENGE.beacon.ghost.doneColor, 80)
 }
+// Stage 3 siege wiring: the wave runner's live deps (the mobs.daynight
+// attachment pattern) and its telegraph/victory juice.
+challenge.siege.mobs = combat.mobs
+challenge.siege.daynight = daynight
+challenge.siege.health = combat.health
+challenge.siege.player = player
+challenge.siege.onHorn = () => sounds.play('horn')
+challenge.siege.onFlare = (x, y, z) => {
+  const { color, particles: count } = CHALLENGE.siege.flare
+  particles.burst(x, y, z, color, count)
+}
+challenge.onSiegeWon = (pos) => {
+  sounds.play('pickup')
+  particles.burst(pos.x, pos.y + 2, pos.z, CHALLENGE.siege.clearedBeamColor, 80)
+}
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
 interaction.useItemHook = (item) => {
@@ -145,10 +160,12 @@ interaction.useItemHook = (item) => {
 
 const screen = new InventoryScreen(inventory, player, combat.armor)
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player)
-// Use dispatcher for `interactive` blocks (right click / touch ▦, sneak
-// bypasses): handlers keyed by block id, each returning true when the click
-// was spent. New interactive blocks register here — mark the block
-// `interactive: true` in blocks.js and add a row.
+// Use dispatcher for right clicks on blocks (touch ▦ too, sneak bypasses):
+// handlers keyed by block id, each returning true when the click was spent.
+// New interactive blocks register here — mark the block `interactive: true`
+// in blocks.js and add a row. Contextual cases (the King's Trial gold core,
+// which must NOT make cave gold veins interactive) are consulted first and
+// gate themselves on position + stage.
 const blockUseHandlers = {
   [BLOCK_FURNACE]: (x, y, z) => {
     furnaceScreen.openAt(x, y, z)
@@ -156,8 +173,10 @@ const blockUseHandlers = {
   },
   [BLOCK_BED]: (x, y, z) => sleep.tryAt(x, y, z),
 }
-interaction.useBlockHook = (block, x, y, z) =>
-  blockUseHandlers[block.id]?.(x, y, z) ?? false
+interaction.useBlockHook = (block, x, y, z) => {
+  if (challenge.tryUseBlock(block, x, y, z)) return true
+  return blockUseHandlers[block.id]?.(x, y, z) ?? false
+}
 interaction.onBlockBroken = (x, y, z, block) => {
   // Breaking a furnace spills its slots (other interactive blocks keep no contents).
   if (block.id !== BLOCK_FURNACE) return
