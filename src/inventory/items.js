@@ -45,6 +45,11 @@ export const ITEMS = {
   planks: blockItem('planks', 7, 'Planks'),
   iron_ore: blockItem('iron_ore', 8, 'Iron Ore'),
   furnace: blockItem('furnace', 10, 'Furnace'),
+  gold_ore: blockItem('gold_ore', 12, 'Gold Ore'),
+  torch: blockItem('torch', 13, 'Torch'),
+  // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into
+  // the Phase 12 furnace is a follow-up.
+  coal: { id: 'coal', name: 'Coal', maxStack: INVENTORY.maxStack, glyph: '◆', tint: '#3a3a3a' },
   stick: { id: 'stick', name: 'Stick', maxStack: INVENTORY.maxStack, glyph: '/', tint: '#a5814e' },
   // Zombie drop. Real food since Phase 12 (barely: it's zombie).
   rotten_flesh: {

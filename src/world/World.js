@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { WATER, WORLD } from '../config.js'
-import { BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
-import { createFBM2D, hash2D, hash3D } from './noise.js'
+import { BLOCK_AIR, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
+import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { Chunk } from './Chunk.js'
 
 // Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
@@ -26,6 +26,13 @@ export class World {
       depthWrite: false,
     })
     this.fbm = createFBM2D(WORLD.seed, WORLD.terrain)
+    // Cave field (Phase 11): two octaves of 3D value noise, seeded off the
+    // world seed so caves are as deterministic as the rest of the terrain.
+    this.caveNoise = createValueNoise3D(WORLD.seed ^ WORLD.terrain.caves.seedSalt)
+    // Placed torches, "x,y,z" -> {x, y, z} — kept in lockstep with the edit
+    // overlay (torches only ever come from player edits, never generation)
+    // and consumed by TorchLights to position its point-light pool.
+    this.torches = new Map()
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
     this.onEdit = null // callback() — set by SaveManager to mark the save dirty
     this.#buildLights()
@@ -56,14 +63,34 @@ export class World {
     return 3 // stone
   }
 
-  // Below-surface block including scattered features: the base layering,
-  // with deep stone occasionally replaced by iron ore.
+  // Is (wx, wy, wz) inside a carved cave? Pure function of (seed, x, y, z) —
+  // called for every below-surface block, so both Chunk.generate and the
+  // unloaded-chunk blockAt path agree (the purity rule border meshing needs).
+  // Sea/beach columns keep their top blocks solid so caves never puncture
+  // the seabed (there is no water flow to fill the hole).
+  caveAt(wx, wy, wz, h) {
+    const { frequency, ySquash, threshold, minY, seabedKeep } = WORLD.terrain.caves
+    if (wy < minY) return false
+    const keep = h - 1 <= WATER.level + 1 ? seabedKeep : 0
+    if (wy >= h - keep) return false
+    const fx = wx * frequency
+    const fy = wy * frequency * ySquash
+    const fz = wz * frequency
+    const n =
+      0.6 * this.caveNoise(fx, fy, fz) + 0.4 * this.caveNoise(fx * 2, fy * 2, fz * 2)
+    return n > threshold
+  }
+
+  // Below-surface block including scattered features: cave carving first,
+  // then the base layering, with deep stone occasionally replaced by an ore
+  // from the depth-banded WORLD.terrain.ores table (first matching band wins).
   terrainBlock(wx, wy, wz, h) {
+    if (this.caveAt(wx, wy, wz, h)) return BLOCK_AIR
     const id = this.blockForDepth(wy, h)
     if (id !== 3) return id
-    const { ironOre } = WORLD.terrain
-    if (wy <= ironOre.maxY && hash3D(WORLD.seed ^ 0x1e55, wx, wy, wz) < ironOre.chance) {
-      return 8 // iron ore
+    for (const ore of WORLD.terrain.ores) {
+      if (wy < ore.minY || wy > ore.maxY) continue
+      if (hash3D(WORLD.seed ^ ore.salt, wx, wy, wz) < ore.chance) return ore.blockId
     }
     return id
   }
@@ -146,6 +173,12 @@ export class World {
     }
     chunkEdits.set((lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy, id)
 
+    // Torch registry (Phase 11): placing a torch lights it, any other write
+    // to the cell (breaking it, replacing it) unlights it.
+    const torchKey = `${wx},${wy},${wz}`
+    if (id === BLOCK_TORCH) this.torches.set(torchKey, { x: wx, y: wy, z: wz })
+    else this.torches.delete(torchKey)
+
     const chunk = this.chunks.get(key)
     if (chunk) {
       chunk.setBlock(lx, wy, lz, id)
@@ -176,6 +209,27 @@ export class World {
       if (!Array.isArray(entries)) continue
       this.edits.set(key, new Map(entries))
     }
+    this.#rebuildTorches()
+  }
+
+  // Recover torch world positions from the loaded edit overlay (torches only
+  // exist as edits, so the overlay is the complete source of truth).
+  #rebuildTorches() {
+    this.torches = new Map()
+    const S = WORLD.chunkSize
+    const H = WORLD.chunkHeight
+    for (const [key, chunkEdits] of this.edits) {
+      const [cx, cz] = key.split(',').map(Number)
+      for (const [idx, id] of chunkEdits) {
+        if (id !== BLOCK_TORCH) continue
+        const wy = idx % H
+        const lz = Math.floor(idx / H) % S
+        const lx = Math.floor(idx / (H * S))
+        const wx = cx * S + lx
+        const wz = cz * S + lz
+        this.torches.set(`${wx},${wy},${wz}`, { x: wx, y: wy, z: wz })
+      }
+    }
   }
 
   editCount() {
@@ -197,6 +251,35 @@ export class World {
       if (isSolid(this.blockAt(wx, y, wz))) return y + 1
     }
     return 0
+  }
+
+  // y of the highest solid block in the column at (wx, wz), or -1 for an
+  // all-air column. Feeds depth lighting (Phase 11): a face's brightness is
+  // how far its air cell sits below this. Loaded chunks answer from live
+  // block data (so digging open a shaft lets the light in on remesh);
+  // unloaded neighbors fall back to the pure generator — trees, then the
+  // terrain surface walked down past any cave carving.
+  topSolidY(wx, wz) {
+    const cx = Math.floor(wx / WORLD.chunkSize)
+    const cz = Math.floor(wz / WORLD.chunkSize)
+    const chunk = this.chunks.get(this.#key(cx, cz))
+    if (chunk) {
+      const lx = wx - cx * WORLD.chunkSize
+      const lz = wz - cz * WORLD.chunkSize
+      for (let y = WORLD.chunkHeight - 1; y >= 0; y--) {
+        if (isSolid(chunk.getBlock(lx, y, lz))) return y
+      }
+      return -1
+    }
+    const h = this.terrainHeight(wx, wz)
+    // Nothing solid sits above h + maxTrunk (the tallest possible leaf cap);
+    // above-surface cells are tree blocks, below-surface the terrain block.
+    for (let y = h + WORLD.terrain.trees.maxTrunk; y >= 0; y--) {
+      const id =
+        y < h ? this.terrainBlock(wx, y, wz, h) : this.#treeBlockAt(wx, y, wz)
+      if (isSolid(id)) return y
+    }
+    return -1
   }
 
   // True once the chunk containing world column (x, z) has been generated.
@@ -306,7 +389,9 @@ export class World {
         tMaxZ += tDeltaZ
         normal = [0, 0, -stepZ]
       }
-      if (isSolid(this.blockAt(x, y, z))) return { x, y, z, normal }
+      // Solid blocks plus targetable non-solids (torches) stop the ray, so
+      // torches can be aimed at and broken like anything else.
+      if (isTargetable(this.blockAt(x, y, z))) return { x, y, z, normal }
     }
   }
 

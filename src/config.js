@@ -40,27 +40,47 @@ export const WORLD = {
   blockSize: 1,
   seed: 1337, // terrain seed — same seed always yields the same world
   chunkSize: 16, // blocks per chunk along x and z
-  chunkHeight: 48, // world height in blocks (y = 0..chunkHeight-1)
+  // Phase 11 doubled the world height (48 → 96) and shifted the surface up
+  // (baseHeight 14 → 62) so there is ~60 blocks of stone to mine into. All
+  // height-anchored tunables moved with it: sandLevel, WATER.level,
+  // DAYNIGHT.clouds.height, and the ore bands below.
+  chunkHeight: 96, // world height in blocks (y = 0..chunkHeight-1)
   renderDistance: 3, // chunks loaded in each direction around the player
   chunkGenBudgetPerFrame: 2, // max chunks generated+meshed per frame
   terrain: {
-    baseHeight: 14, // average surface height, in blocks
+    baseHeight: 62, // average surface height, in blocks
     amplitude: 9, // hills rise/fall this far around baseHeight
     frequency: 1 / 56, // horizontal noise scale (smaller = wider hills)
     octaves: 4, // FBM octaves — more = more small detail
     lacunarity: 2, // frequency multiplier per octave
     gain: 0.5, // amplitude multiplier per octave
     dirtDepth: 3, // dirt layers under the grass surface before stone
-    sandLevel: 11, // surfaces at or below this height are sand ("beaches")
+    sandLevel: 59, // surfaces at or below this height are sand ("beaches")
     trees: {
       chance: 0.012, // per grass column probability of spawning a tree
       minTrunk: 4, // trunk height range, in blocks
       maxTrunk: 6,
     },
-    ironOre: {
-      chance: 0.05, // per stone block probability of being iron ore
-      maxY: 12, // ore only spawns at or below this height
+    // Caves (Phase 11): stone is carved to air where a squashed 3D value
+    // noise field exceeds `threshold` — a pure function of (seed, x, y, z)
+    // like all terrain, so unloaded-chunk queries and border meshing agree.
+    caves: {
+      seedSalt: 0xca5e, // mixed into WORLD.seed for the cave field
+      frequency: 1 / 16, // horizontal noise scale (smaller = larger caverns)
+      ySquash: 1.7, // vertical frequency multiplier — flattens caves into tunnels
+      threshold: 0.70, // carve where 2-octave noise [0,1] exceeds this
+      minY: 4, // never carve at/below this — keeps a solid world floor
+      // Columns whose surface touches the sea keep this many top blocks
+      // solid so caves never puncture the seabed (there is no water flow).
+      seabedKeep: 4,
     },
+    // Ore bands (Phase 11, MC-style depth tiers): deep stone rolls against
+    // each band in order — first hit wins — so overlapping bands stay cheap.
+    ores: [
+      { blockId: 12, chance: 0.018, minY: 1, maxY: 16, salt: 0x601d }, // gold: deep + rare
+      { blockId: 8, chance: 0.045, minY: 4, maxY: 40, salt: 0x1e55 }, // iron: mid band
+      { blockId: 11, chance: 0.06, minY: 24, maxY: 72, salt: 0xc0a1 }, // coal: shallow + common
+    ],
   },
 }
 
@@ -152,7 +172,10 @@ export const COMBAT = {
 // localStorage key — see src/save/SaveManager.js for the schema.
 export const SAVE = {
   storageKey: 'minecraft-clone-save',
-  schemaVersion: 1, // bump (and migrate in SaveManager.load) when the shape changes
+  schemaVersion: 2, // bump (and migrate in SaveManager.load) when the shape changes
+  // v1 → v2 (Phase 11): chunkHeight 48 → 96 moved the terrain surface, so v1
+  // edit overlays (indexed by the old chunkHeight) no longer map to the same
+  // blocks. No migration — old saves start fresh, as the load guard does.
   autosaveSeconds: 5, // how often dirty state is flushed to localStorage
   // localStorage holds ~5MB of UTF-16 per origin. Past this payload size the
   // save is still attempted but a console warning fires (once), so a
@@ -269,7 +292,7 @@ export const DAYNIGHT = {
   },
   clouds: {
     count: 12, // quads per tile (geometry repeats 3x3 tiles — one draw call)
-    height: 60, // cloud layer altitude (above chunkHeight, in blocks)
+    height: 110, // cloud layer altitude (above chunkHeight, in blocks)
     tile: 220, // pattern repeat size, blocks
     speed: 1.5, // eastward drift, blocks/sec
     opacity: 0.5,
@@ -282,7 +305,7 @@ export const DAYNIGHT = {
 // raycasts, and mining ignore it; physics switches to the constants below
 // while a body's midsection is submerged.
 export const WATER = {
-  level: 9, // water surface height; keep below WORLD.terrain.sandLevel so beaches ring the sea
+  level: 57, // water surface height; keep below WORLD.terrain.sandLevel so beaches ring the sea
   opacity: 0.62, // translucent chunk water pass (see Chunk buildMesh)
   surfaceDrop: 0.12, // open-air water tops render this far below the block top
   physics: {
@@ -347,6 +370,26 @@ export const PASSIVE_MOBS = {
       dropCount: [1, 2],
       colors: { body: 0xe8e6df, head: 0xcbb9a4, legs: 0xbfae99 },
     },
+  },
+}
+
+// Depth lighting (Phase 11) — the budget version, no flood-fill: chunk vertex
+// colors darken with how far the face's air cell sits below its column's top
+// solid block (sky light by depth), and placed torches are lit by a small
+// fixed pool of real THREE point lights that tracks the nearest torches (a
+// constant pool size keeps the shader program stable — no recompiles).
+export const LIGHTING = {
+  depth: {
+    falloffBlocks: 20, // sky light fades to minSkyLight over this depth
+    minSkyLight: 0.15, // floor brightness factor for unlit cave faces
+  },
+  torch: {
+    poolSize: 6, // point lights available — the nearest N torches get one
+    maxTrackDistance: 40, // torches farther than this from the camera unlight
+    color: 0xffb066, // warm flame
+    intensity: 40, // three r155+ physical falloff: candela-ish, decay 2
+    distance: 14, // hard cutoff radius, blocks
+    decay: 2,
   },
 }
 

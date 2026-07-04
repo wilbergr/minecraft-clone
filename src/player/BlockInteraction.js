@@ -131,7 +131,9 @@ export class BlockInteraction {
   #advanceMining(seconds) {
     const { x, y, z } = this.target
     const block = BLOCKS[this.world.blockAt(x, y, z)]
-    if (!block.solid) return false // stale target (block already edited away)
+    // Stale target (block already edited away). Targetable non-solids
+    // (torches, Phase 11) are still breakable.
+    if (!block.solid && !block.targetable) return false
     const now = performance.now() / 1000
     const tool = this.inventory.selectedItem?.tool ?? null
     const toolMatches = tool && tool.kind === block.tool?.kind

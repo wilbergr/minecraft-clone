@@ -217,6 +217,46 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `__mc.mobs.spawnTimer = 0.1` (the 5s spawn interval is ~17s real time at
   headless speed); dawn burn: `setTime(0.2)` and wait for `mobs.count === 0`.
 
+## The underground (Phase 11)
+
+- The world is 96 tall with the surface shifted up 48 blocks (`baseHeight`
+  62); every height-anchored tunable moved with it: `sandLevel` 59,
+  `WATER.level` 57, `DAYNIGHT.clouds.height` 110. `SAVE.schemaVersion` went
+  to 2 — v1 edit overlays index blocks by the old chunkHeight, so old saves
+  reset (the load guard already handles that).
+- Caves are carved in `World.caveAt` (2-octave 3D value noise from
+  `createValueNoise3D`, y-squashed into tunnels, tunables in
+  `WORLD.terrain.caves`) — called inside `terrainBlock`, so purity holds for
+  both `Chunk.generate` and unloaded-chunk `blockAt`. Sea/beach columns keep
+  `seabedKeep` top blocks solid so caves never puncture the seabed (no water
+  flow exists). Tuned to ~6% of below-surface cells; a node script that
+  imports `World` with a `{ add() {} }` scene stub can measure/re-tune the
+  generator without a browser.
+- Ores are depth-banded in `WORLD.terrain.ores` (first matching band wins):
+  gold (block 12) y 1–16 deep, needs an iron pick; iron (8) y 4–40; coal
+  (block 11) y 24–72. Coal drops the `coal` item — Phase 12's
+  `FUEL_SECONDS` pre-listed `coal`, so it burns in the furnace as-is.
+- Depth lighting (budget, no flood-fill): every solid face's vertex color is
+  multiplied by `skyFactor(depth)` (Chunk.js) — depth being how far the
+  face's AIR cell sits below its column's top solid block, so caves darken
+  but a shaft dug open to the sky stays lit on remesh. Column tops are
+  cached per mesh build; the 1-block border ring asks `World.topSolidY`
+  (loaded chunk scan, else pure generator incl. tree canopies). Blocks with
+  `emissive: true` skip darkening.
+- Torch is block 13: `solid: false` + `targetable: true` — `isTargetable`
+  is what `World.raycast` stops on, and BlockInteraction's stale-target
+  check allows targetable non-solids, so torches are aimable/breakable but
+  walk-through; `shape: 'torch'` makes the mesher emit a small post instead
+  of a cube. `world.torches` (a Map kept in lockstep with the edit overlay,
+  rebuilt in `deserializeEdits`) feeds `TorchLights` (src/fx): a FIXED pool
+  of `LIGHTING.torch.poolSize` point lights reassigned to the nearest
+  torches each frame — pool size never changes at runtime or every material
+  recompiles. No torch recipe yet — tests obtain them via
+  `__mc.inventory.add('torch', n)`.
+- Headless: `__mc.torchLights` exposes the pool (`activeCount`); assert
+  depth darkening on chunk `geometry.getAttribute('color')` luminance
+  (deep vs surface vertices) rather than screenshots.
+
 ## Survival loop (Phase 12): furnace, hunger, passive mobs
 
 - Furnace: block 10 (`interactive: true` in blocks.js) — right click routes
