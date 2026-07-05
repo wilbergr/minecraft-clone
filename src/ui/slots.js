@@ -65,15 +65,17 @@ export function renderSlot(slotEl, stack) {
   renderDurability(durabilityEl, stack)
 }
 
-// Damaged tools show a bar that shrinks and shifts green → red as durability
-// drains; pristine tools and non-tools show nothing.
+// Damaged tools and armor pieces show a bar that shrinks and shifts
+// green → red as durability drains; pristine items and non-wearing items
+// show nothing.
 function renderDurability(el, stack) {
-  const tool = ITEMS[stack.id].tool
-  if (!tool || stack.durability === undefined || stack.durability >= tool.durability) {
+  const item = ITEMS[stack.id]
+  const max = item.tool?.durability ?? item.armor?.durability
+  if (max === undefined || stack.durability === undefined || stack.durability >= max) {
     el.style.display = 'none'
     return
   }
-  const frac = Math.max(0, stack.durability / tool.durability)
+  const frac = Math.max(0, stack.durability / max)
   el.style.display = 'block'
   el.style.width = `${Math.round(frac * 100)}%`
   el.style.background = `hsl(${Math.round(frac * 110)}, 75%, 48%)`
@@ -171,6 +173,9 @@ export function bindSlotTooltips() {
       detail = `+${item.food} food`
     } else if (item.armor) {
       detail = `+${item.armor.points} armor`
+      if (stack.durability !== undefined) {
+        detail += ` · ${stack.durability} / ${item.armor.durability} durability`
+      }
     }
     tip.textContent = ''
     const name = document.createElement('div')

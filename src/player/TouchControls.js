@@ -16,9 +16,11 @@ export function isTouchDevice() {
 //     through the same YXZ euler PointerLockControls uses)
 //   - a quick tap on the look area = one attack-or-break, exactly like a
 //     desktop left click
-//   - action buttons: tap/hold ⬆ to jump, hold ⛏ to mine continuously (or
-//     tap to attack), tap ▦ to place — all reuse the existing player /
-//     BlockInteraction / Combat entry points
+//   - action buttons: tap/hold ⬆ to jump, tap ⬇ to toggle sneak/dive (a
+//     toggle because the same thumb drags the look zone — holding is
+//     impossible), hold ⛏ to mine continuously (or tap to attack), tap ▦ to
+//     place — all reuse the existing player / BlockInteraction / Combat
+//     entry points
 //   - top-right buttons: pause, inventory, quest log, help
 //
 // The whole UI lives in #touch-ui, shown only while the player is in
@@ -52,6 +54,8 @@ export class TouchControls {
   #releaseAll() {
     this.player.touchMove.set(0, 0)
     this.player.keys.jump = false
+    this.player.keys.sneak = false
+    this.sneakBtn?.classList.remove('active')
     this.interaction.mining = false
     this.lookId = null
     this.stickId = null
@@ -205,7 +209,20 @@ export class TouchControls {
     jump.addEventListener('pointerup', stopJumping)
     jump.addEventListener('pointercancel', stopJumping)
 
-    cluster.append(jump, place, mine)
+    // Sneak / dive: a TOGGLE (tap on, tap off) rather than a hold — the
+    // right thumb is busy dragging the look zone, so holding is impossible.
+    // Drives the same keys.sneak flag as Shift/C on desktop: edge-guard +
+    // slow on land, the active swim-down in water. #releaseAll clears it so
+    // a menu can't trap the player mid-crouch.
+    const sneak = this.#button('⬇', 'Sneak / dive (tap to toggle)', 'touch-action-btn')
+    this.sneakBtn = sneak
+    sneak.addEventListener('pointerdown', () => {
+      const on = !this.player.keys.sneak
+      this.player.keys.sneak = on
+      sneak.classList.toggle('active', on)
+    })
+
+    cluster.append(jump, sneak, place, mine)
     this.root.appendChild(cluster)
   }
 

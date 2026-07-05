@@ -209,8 +209,8 @@ export class InventoryScreen {
     })
     if (this.armor) {
       for (const { slot, el } of this.armorEls) {
-        const id = this.armor.slots[slot]
-        renderSlot(el, id ? { id, count: 1 } : null)
+        const piece = this.armor.slots[slot]
+        renderSlot(el, piece ? { id: piece.id, count: 1, durability: piece.durability } : null)
       }
     }
     for (const { recipe, button, needEls } of this.recipeEls) {

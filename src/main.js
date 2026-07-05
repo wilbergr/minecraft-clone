@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { BREATH, CHALLENGE, GRAPHICS, HUNGER, WATER } from './config.js'
+import * as config from './config.js'
+import { BREATH, CHALLENGE, GRAPHICS, HUNGER, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
@@ -33,7 +34,7 @@ import { GroundItems } from './fx/GroundItems.js'
 import { TorchLights } from './fx/TorchLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
-import { BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, isLiquid } from './world/blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, isLiquid, isSolid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
 import { Breath } from './survival/Breath.js'
 import { Sleep } from './survival/Sleep.js'
@@ -101,6 +102,10 @@ const hunt = new TreasureHunt(world, scene)
 const hunger = new Hunger()
 fx.hunger = hunger
 combat.health.regenGate = () => hunger.value >= HUNGER.regenThreshold
+// MC's can't-sprint-when-starving rule (the spawnHook optional-gate
+// pattern): the double-tap latch still sets, but sprint speed is refused
+// until the bar climbs back over the threshold. Bare runs sprint freely.
+player.canSprintHook = () => hunger.value > PLAYER.sprint.minHunger
 hunger.onStarve = () => {
   if (combat.health.value > HUNGER.starve.minHealth) combat.health.damage(HUNGER.starve.damage)
 }
@@ -120,6 +125,9 @@ const enderStore = new EnderStore() // the King's Cache global store; also inert
 // skip to dawn; Combat.respawn → player.respawn consults it via spawnHook.
 const sleep = new Sleep(world, daynight)
 player.spawnHook = () => sleep.respawnPoint()
+// Monsters-nearby sleep refusal (the mobs.daynight attachment pattern):
+// null in bare runs, where the check silently passes.
+sleep.mobs = combat.mobs
 
 // Restore a saved game before anything renders: block edits must be in the
 // overlay before the first chunks generate, and the UI binders below pick up
@@ -220,6 +228,8 @@ interaction.useItemHook = (item) => {
   sounds.play('equip')
   return true
 }
+// Armor wear (fidelity pack): a piece ground down to zero durability snaps.
+combat.armor.onBreak = () => sounds.play('toolBreak')
 
 const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drops, camera)
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
@@ -264,8 +274,28 @@ const blockBreakHandlers = {
   [BLOCK_CHEST]: (x, y, z) => chests.onBroken(x, y, z, spillAt(x, y, z)),
 }
 interaction.onBlockBroken = (x, y, z, block) => blockBreakHandlers[block.id]?.(x, y, z)
+// Attachment pops (fidelity pack): torches and beds — the non-solid
+// `targetable` blocks — need the block under them. When an edit leaves the
+// cell no longer solid, the attachment above breaks into its drop (which
+// unregisters a torch from the light registry via setBlock). One level
+// only; a stack of attachments cascades naturally through the recursive
+// onEdit. Explosions report once at the blast center, so the carved cells
+// are swept below via onBlocksExploded — interior cells no-op (the cell
+// above them was carved too), leaving exactly the sphere's top shell.
+const popAttachmentAbove = (x, y, z) => {
+  if (isSolid(world.blockAt(x, y, z))) return
+  const above = BLOCKS[world.blockAt(x, y + 1, z)]
+  if (!above || above.solid || above.targetable !== true) return
+  world.setBlock(x, y + 1, z, BLOCK_AIR)
+  if (above.drop) drops.spawn(x + 0.5, y + 1.7, z + 0.5, above.drop)
+  sounds.play('break', { material: above.material })
+}
+world.onEdit(popAttachmentAbove)
 combat.mobs.onBlocksExploded = (cells) => {
-  for (const c of cells) blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
+  for (const c of cells) {
+    blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
+    popAttachmentAbove(c.x, c.y, c.z)
+  }
 }
 const reveal = bindTreasureReveal(hunt, player)
 const challengeReveal = bindChallengeReveal(challenge, player)
@@ -495,4 +525,8 @@ window.__mc = {
   projectiles: combat.projectiles,
   sleep,
   cursor,
+  // The live config module (headless-test seam): most tunables are read at
+  // call time, so tests can shrink timings/radii — e.g.
+  // config.COMBAT.mobs.spawnRadiusMax — without rebuilding.
+  config,
 }

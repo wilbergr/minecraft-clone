@@ -7,10 +7,15 @@ import { isTouchDevice } from './TouchControls.js'
 // First-person controls: pointer-lock mouse look + WASD movement with
 // delta-time integration and velocity damping, driving a real physics body
 // (Phase 8). The body owns the feet position; the camera rides at eye height
-// above it. Gravity, jumping (Space, held = auto-hop), sneaking (C — slower,
-// won't walk off edges), and AABB block collision all live in PhysicsBody;
-// this class turns input into a desired horizontal velocity and hands it
-// over each frame.
+// above it. Gravity, jumping (Space, held = auto-hop), sneaking (Shift, or C
+// as an alias — slower, won't walk off edges), and AABB block collision all
+// live in PhysicsBody; this class turns input into a desired horizontal
+// velocity and hands it over each frame. Sprinting is Minecraft's
+// double-tap-forward: a second forward press within
+// PLAYER.sprint.doubleTapSeconds latches sprint until forward releases (so
+// it is forward-only by construction), sneak engages, or control unlocks —
+// and the optional canSprintHook (main.js wires the hunger gate) can refuse
+// it.
 //
 // Touch devices (Phase 7) have no pointer lock, so `isLocked` — the flag
 // every game system gates on, meaning "the player is actively in control" —
@@ -39,13 +44,20 @@ export class PlayerControls {
       back: false,
       left: false,
       right: false,
-      sprint: false,
       sneak: false,
       jump: false,
     }
     this.jumpBuffer = 0 // seconds a tapped (touch) jump keeps waiting for ground
     this.eyeOffset = 0 // smoothed sneak crouch, subtracted from eye height
     this.isSprinting = false // sprint input while actually moving (hunger drain reads this)
+    // Double-tap-forward sprint (MC scheme): the latch holds while forward
+    // stays down; cleared on release, sneak, or unlock.
+    this.sprintLatch = false
+    this.lastForwardDownAt = -Infinity
+    // Optional gate consulted before sprinting (main.js wires the MC hunger
+    // rule: no sprint at or under PLAYER.sprint.minHunger); bare runs sprint
+    // freely.
+    this.canSprintHook = null
     // Decaying hit-shove (Phase 13): control input overwrites the body's
     // horizontal velocity every frame, so knockback rides its own vector
     // that update() adds on top — the same trick mobs use.
@@ -146,6 +158,17 @@ export class PlayerControls {
     switch (code) {
       case 'KeyW':
       case 'ArrowUp':
+        // A second forward press within the double-tap window latches
+        // sprint (key repeat never fires here — the transition check guards
+        // it); releasing forward drops the latch, so sprint is forward-only.
+        if (down && !this.keys.forward) {
+          const now = performance.now() / 1000
+          if (now - this.lastForwardDownAt < PLAYER.sprint.doubleTapSeconds) {
+            this.sprintLatch = true
+          }
+          this.lastForwardDownAt = now
+        }
+        if (!down) this.sprintLatch = false
         this.keys.forward = down
         break
       case 'KeyS':
@@ -160,17 +183,18 @@ export class PlayerControls {
       case 'ArrowRight':
         this.keys.right = down
         break
-      case 'ShiftLeft':
-      case 'ShiftRight':
-        this.keys.sprint = down
-        break
       case 'Space':
         this.keys.jump = down
         break
-      // C, not Ctrl: pointer lock doesn't intercept Ctrl+W / Ctrl+S, so a
-      // Ctrl sneak while moving would be closing tabs and saving pages.
+      // Shift sneaks (MC scheme); C stays as an alias for pre-remap muscle
+      // memory. No dedicated sprint key: MC's default is Ctrl, and pointer
+      // lock doesn't intercept Ctrl+W / Ctrl+S — a Ctrl sprint while moving
+      // would be closing tabs and saving pages. Double-tap forward instead.
+      case 'ShiftLeft':
+      case 'ShiftRight':
       case 'KeyC':
         this.keys.sneak = down
+        if (down) this.sprintLatch = false // sneak cancels a held sprint
         break
     }
   }
@@ -199,6 +223,7 @@ export class PlayerControls {
     this.jumpBuffer = Math.max(0, this.jumpBuffer - delta)
     if (!this.isLocked) {
       this.isSprinting = false
+      this.sprintLatch = false // unlock drops a held sprint, like MC
       return
     }
 
@@ -206,10 +231,14 @@ export class PlayerControls {
     const damp = Math.exp(-PLAYER.damping * delta)
     this.velocity.multiplyScalar(damp)
 
-    // Full joystick deflection sprints, mirroring Shift on the keyboard.
+    // Sprint: the double-tap-forward latch on keyboard, full joystick
+    // deflection on touch — both refused while sneaking or when the
+    // canSprintHook (the hunger gate) says no.
     const sneaking = this.keys.sneak
     const sprinting =
-      !sneaking && (this.keys.sprint || this.touchMove.length() >= 0.999)
+      !sneaking &&
+      (this.canSprintHook?.() ?? true) &&
+      ((this.sprintLatch && this.keys.forward) || this.touchMove.length() >= 0.999)
     const speed =
       PLAYER.moveSpeed *
       (sprinting
@@ -260,11 +289,12 @@ export class PlayerControls {
       }
     }
 
-    // Dive (deep water): C swims down. Sneak's land meaning (edge-stop,
-    // slow) is meaningless mid-water, so the key overload is clean; the
-    // passive drag-capped sink is too slow for a deliberate 10-block dive.
-    // Space wins when both are held. Touch inherits it through the existing
-    // ⬇ sneak button (TouchControls holds keys.sneak).
+    // Dive (deep water): sneak (Shift, or the C alias) swims down — exactly
+    // MC's Shift-to-descend. Sneak's land meaning (edge-stop, slow) is
+    // meaningless mid-water, so the key overload is clean; the passive
+    // drag-capped sink is too slow for a deliberate 10-block dive. Space
+    // wins when both are held. Touch inherits it through the ⬇ sneak toggle
+    // button (TouchControls drives keys.sneak).
     if (this.keys.sneak && this.body.inWater && !this.keys.jump) {
       this.body.velocity.y = -WATER.physics.swimDownSpeed
     }

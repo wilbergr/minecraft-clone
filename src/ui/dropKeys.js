@@ -1,7 +1,9 @@
 // Q-drop (inventory overhaul): while playing, Q throws one item from the
 // selected hotbar stack in the look direction; Shift+Q throws the whole
-// stack. Never Ctrl+Q — that's the browser-quit hazard that moved sneak
-// off Ctrl onto KeyC. Key auto-repeat makes held Q a stream, like Minecraft.
+// stack (an instant of sneak alongside the drop is harmless, and it matches
+// MC's modifier+Q shape). Never Ctrl+Q — that's the browser-quit hazard
+// that keeps every binding off Ctrl. Key auto-repeat makes held Q a
+// stream, like Minecraft.
 //
 // `uiOpen` is the open-UI union main.js already keeps for the overlay:
 // pointer-lock release is asynchronous, so isLocked alone would let a Q

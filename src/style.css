@@ -317,6 +317,16 @@ body.touch-mode #hotbar {
   opacity: 0.15;
 }
 
+/* Armor wear underline (fidelity pack): the hotbar's tool-durability bar
+   transplanted under the shield row — tracks the most-worn equipped piece. */
+#armor-durability {
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 1px;
+}
+
 /* Breath row (deep water): bubbles above the hunger drumsticks — the armor
    row's stacked slot, mirrored to the right column; hidden while full. */
 #breath-bar {
@@ -1058,6 +1068,13 @@ body.touch-mode .help-touch {
 
 .touch-action-btn:active {
   background: rgba(238, 242, 247, 0.25);
+}
+
+/* Latched toggle state (the ⬇ sneak/dive button): stays lit until tapped
+   off, distinct from the momentary :active flash. */
+.touch-action-btn.active {
+  background: rgba(238, 242, 247, 0.35);
+  border-color: rgba(238, 242, 247, 0.8);
 }
 
 #touch-menu {

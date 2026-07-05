@@ -37,9 +37,19 @@ function food(id, name, hunger, glyph, tint) {
 
 // Armor (Phase 13): right-click (the use verb) wears a piece into its
 // `armor.slot`, swapping out whatever was there. Equipped points sum into
-// damage reduction — see src/combat/Armor.js and COMBAT.armor.
-function armor(id, name, slot, points, tint, glyph) {
-  return { id, name, maxStack: 1, glyph, tint, armor: { slot, points } }
+// damage reduction — see src/combat/Armor.js and COMBAT.armor. `durability`
+// here is the item TYPE's maximum (the tool convention): each piece tracks
+// its remaining wear on its inventory stack / armor slot, ticking down one
+// per reduced hit and shattering at zero.
+function armor(id, name, slot, points, material, tint, glyph) {
+  return {
+    id,
+    name,
+    maxStack: 1,
+    glyph,
+    tint,
+    armor: { slot, points, durability: COMBAT.armorDurability[material] },
+  }
 }
 
 const TIER_TINT = { 1: '#a5814e', 2: '#9a9a9a', 3: '#d8dde2' } // wood/stone/iron
@@ -125,14 +135,14 @@ export const ITEMS = {
   // Cow bonus drop (Phase 13) — the leather armor ingredient.
   leather: { id: 'leather', name: 'Leather', maxStack: INVENTORY.maxStack, glyph: '▤', tint: LEATHER_TINT },
   // Armor sets (Phase 13). Points are MC-ish: full leather 7, full iron 15.
-  leather_helmet: armor('leather_helmet', 'Leather Cap', 'head', 1, LEATHER_TINT, '⌓'),
-  leather_chestplate: armor('leather_chestplate', 'Leather Tunic', 'chest', 3, LEATHER_TINT, '⛨'),
-  leather_leggings: armor('leather_leggings', 'Leather Pants', 'legs', 2, LEATHER_TINT, '∏'),
-  leather_boots: armor('leather_boots', 'Leather Boots', 'feet', 1, LEATHER_TINT, '⊔'),
-  iron_helmet: armor('iron_helmet', 'Iron Helmet', 'head', 2, TIER_TINT[3], '⌓'),
-  iron_chestplate: armor('iron_chestplate', 'Iron Chestplate', 'chest', 6, TIER_TINT[3], '⛨'),
-  iron_leggings: armor('iron_leggings', 'Iron Leggings', 'legs', 5, TIER_TINT[3], '∏'),
-  iron_boots: armor('iron_boots', 'Iron Boots', 'feet', 2, TIER_TINT[3], '⊔'),
+  leather_helmet: armor('leather_helmet', 'Leather Cap', 'head', 1, 'leather', LEATHER_TINT, '⌓'),
+  leather_chestplate: armor('leather_chestplate', 'Leather Tunic', 'chest', 3, 'leather', LEATHER_TINT, '⛨'),
+  leather_leggings: armor('leather_leggings', 'Leather Pants', 'legs', 2, 'leather', LEATHER_TINT, '∏'),
+  leather_boots: armor('leather_boots', 'Leather Boots', 'feet', 1, 'leather', LEATHER_TINT, '⊔'),
+  iron_helmet: armor('iron_helmet', 'Iron Helmet', 'head', 2, 'iron', TIER_TINT[3], '⌓'),
+  iron_chestplate: armor('iron_chestplate', 'Iron Chestplate', 'chest', 6, 'iron', TIER_TINT[3], '⛨'),
+  iron_leggings: armor('iron_leggings', 'Iron Leggings', 'legs', 5, 'iron', TIER_TINT[3], '∏'),
+  iron_boots: armor('iron_boots', 'Iron Boots', 'feet', 2, 'iron', TIER_TINT[3], '⊔'),
   wooden_pickaxe: tool('wooden_pickaxe', 'Wooden Pickaxe', 'pickaxe', 1, TIER_TINT[1], '⛏'),
   wooden_axe: tool('wooden_axe', 'Wooden Axe', 'axe', 1, TIER_TINT[1], '¬'),
   wooden_sword: tool('wooden_sword', 'Wooden Sword', 'sword', 1, TIER_TINT[1], '†'),

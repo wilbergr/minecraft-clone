@@ -489,7 +489,14 @@ export const CHEST = {
 export const PLAYER = {
   eyeHeight: 1.7, // camera height above the player's feet, in blocks
   moveSpeed: 5, // walk speed, blocks per second
-  sprintMultiplier: 1.8, // Shift-to-sprint speed factor
+  // Sprint speed factor (deliberately above MC's 1.3 — quest legs here run
+  // 100+ blocks). Sprint is MC's scheme: double-tap forward to latch it
+  // (forward-only), full joystick deflection on touch.
+  sprintMultiplier: 1.8,
+  sprint: {
+    doubleTapSeconds: 0.25, // second forward press within this latches sprint
+    minHunger: 6, // no sprinting at or below this many hunger points (MC rule)
+  },
   damping: 12, // higher = snappier stop (velocity decay per second)
   reach: 5, // max distance for breaking/placing blocks, in blocks
   spawnPoint: { x: 0.5, z: 8.5 }, // initial spawn AND respawn-on-death column
@@ -508,7 +515,7 @@ export const PHYSICS = {
   // past 1.0 to auto-step whole blocks instead.
   stepHeight: 0.6,
   sneak: {
-    speedMultiplier: 0.3, // sneak (C) walk-speed factor
+    speedMultiplier: 0.3, // sneak (Shift / C) walk-speed factor
     eyeDrop: 0.15, // camera crouches this far while sneaking
   },
   fall: {
@@ -576,15 +583,31 @@ export const COMBAT = {
     // Matching tool speed: break cooldown = hardness / (1 + tier * this).
     speedPerTier: 1,
     gatedFlashSeconds: 0.25, // highlight flashes red when the tool is too weak
+    // Environment penalties (fidelity pack): break time multiplies by these
+    // while the player body is submerged / off the ground (MC's 5× rules).
+    inWaterFactor: 5,
+    airborneFactor: 5,
   },
   toolDurability: { 1: 64, 2: 128, 3: 256 }, // uses per tool, by tier
+  // Armor wear (fidelity pack): every reduced hit ticks 1 point off each
+  // equipped piece; at 0 the piece shatters. Values sit between the tool
+  // tiers — a leather set survives ~80 hits, iron ~192.
+  armorDurability: { leather: 80, iron: 192 },
   mobs: {
     maxCount: 4, // hard cap on live mobs (keep low — one draw call per part)
     spawnIntervalSeconds: 5, // try to top the population up this often
     spawnRadiusMin: 10, // spawn ring around the player, in blocks
     spawnRadiusMax: 18,
     despawnRadius: 48, // mobs farther than this from the player are removed
-    // Night spawn mix (Phase 13): relative weights per hostile kind.
+    // Light-based spawning (dark-places spawn): hostiles rise wherever the
+    // local light (world.lightAt — depth sky light × time-of-day brightness,
+    // maxed with torch falloff over LIGHTING.torch.distance) is at or below
+    // maxLight. This replaces the old night-only gate: deep caves (sky floor
+    // 0.15) spawn at any hour, the surface spawns only at night (~0.1), and
+    // a torch carves a safe bubble the size of its visible glow. `attempts`
+    // ring spots are tried per spawn tick (the passive-spawner pattern).
+    spawnLight: { maxLight: 0.25, attempts: 6 },
+    // Spawn mix (Phase 13): relative weights per hostile kind.
     hostileWeights: { zombie: 0.5, skeleton: 0.3, creeper: 0.2 },
     zombie: {
       health: 10,
@@ -763,10 +786,12 @@ export const DAYNIGHT = {
   sun: { distance: 150, size: 30, color: 0xffdd88 }, // billboard sprite
   moon: { distance: 150, size: 20, color: 0xdfe8ff },
   hostiles: {
-    // Night population cap. Day spawning is off entirely; keep this modest —
-    // each mob body part is a draw call (see COMBAT.mobs.maxCount).
+    // Night population cap. By day the cap drops to COMBAT.mobs.maxCount and
+    // the light gate (COMBAT.mobs.spawnLight) restricts spawns to dark cells
+    // (caves, roofed rooms); keep both modest — each mob body part is a draw
+    // call (see COMBAT.mobs.maxCount).
     nightMaxCount: 6,
-    burnStaggerSeconds: 0.4, // dawn: one zombie ignites this often
+    burnStaggerSeconds: 0.4, // dawn: one SKY-EXPOSED hostile ignites this often
     burnColor: 0xff8c3a, // ember-orange particle burst on each burn
     burnParticles: 22,
   },
@@ -793,7 +818,7 @@ export const WATER = {
     sinkSpeed: 3.2, // max sink rate (water "terminal velocity")
     drag: 4, // vertical velocity decay per second — kills dive momentum
     swimUpSpeed: 4.2, // held Space rises at this rate, blocks/s
-    swimDownSpeed: 3.5, // held C (sneak) dives at this rate, blocks/s
+    swimDownSpeed: 3.5, // held sneak (Shift / C) dives at this rate, blocks/s
     breachBoost: 0.85, // jump-out-of-water impulse, fraction of jumpVelocity
     moveMultiplier: 0.55, // horizontal speed factor while submerged
   },
@@ -886,12 +911,15 @@ export const PASSIVE_MOBS = {
 }
 
 // Sleeping in a bed (bed feature): right-clicking a placed bed at night sets
-// the respawn point to the bed and skips the clock ahead to dawn; by day it
-// refuses, MC-style. The spawn point persists in the save's optional `spawn`
-// key (SaveManager.attachSleep) and falls back to PLAYER.spawnPoint when the
-// bed no longer exists at respawn time.
+// the respawn point to the bed and skips the clock ahead to dawn; by day the
+// click sets the spawn point without skipping time (modern MC behavior), and
+// night sleep is refused while hostiles are within monsterRadius. The spawn
+// point persists in the save's optional `spawn` key (SaveManager.attachSleep)
+// and falls back to PLAYER.spawnPoint when the bed no longer exists at
+// respawn time.
 export const SLEEP = {
   wakeTime: 0.0, // clock time sleeping skips to (0 = sunrise; see DAYNIGHT)
+  monsterRadius: 8, // hostiles within this of the bed block the night sleep
   fadeSeconds: 1.4, // full-screen fade-to-black while the night skips past
   toastSeconds: 3, // how long sleep-related toast messages linger
 }
