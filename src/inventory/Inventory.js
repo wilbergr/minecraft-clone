@@ -41,8 +41,9 @@ export class Inventory {
 
   // Add `count` of an item, filling existing stacks first, then empty slots
   // (hotbar first). Returns how many did NOT fit (0 = all added).
-  // `durability` restores a used tool's remaining uses (drop re-pickup, the
-  // cursor flush); omitted, fresh tools start at full durability.
+  // `durability` restores a used tool's or armor piece's remaining uses
+  // (drop re-pickup, the cursor flush, unequipping); omitted, fresh items
+  // start at full durability.
   add(itemId, count = 1, durability = undefined) {
     const item = ITEMS[itemId]
     if (!item) return count
@@ -59,8 +60,9 @@ export class Inventory {
       if (!this.slots[i]) {
         const take = Math.min(left, item.maxStack)
         this.slots[i] = { id: itemId, count: take }
-        // Tools never stack, so a new stack is always a single tool.
-        if (item.tool) this.slots[i].durability = durability ?? item.tool.durability
+        // Tools and armor never stack, so a new stack is always one item.
+        const max = item.tool?.durability ?? item.armor?.durability
+        if (max !== undefined) this.slots[i].durability = durability ?? max
         left -= take
       }
     }
@@ -165,8 +167,8 @@ export class Inventory {
       const s = data.slots?.[i]
       if (!s || !ITEMS[s.id]) continue
       this.slots[i] = { id: s.id, count: s.count }
-      const tool = ITEMS[s.id].tool
-      if (tool) this.slots[i].durability = s.durability ?? tool.durability
+      const max = ITEMS[s.id].tool?.durability ?? ITEMS[s.id].armor?.durability
+      if (max !== undefined) this.slots[i].durability = s.durability ?? max
     }
     this.selectedSlot = data.selectedSlot ?? 0
     this.#emit()

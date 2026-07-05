@@ -156,6 +156,13 @@ export class BlockInteraction {
 
     let breakTime = block.hardness ?? 0.3
     if (toolMatches) breakTime /= 1 + tool.tier * COMBAT.mining.speedPerTier
+    // Environment penalties (fidelity pack, MC's rules): digging while
+    // submerged or without footing is punishingly slow. The body already
+    // exposes both flags (Phase 8 / deep water); bare setups without a
+    // physics body skip the penalty.
+    const body = this.player.body
+    if (body?.inWater) breakTime *= COMBAT.mining.inWaterFactor
+    else if (body && !body.grounded) breakTime *= COMBAT.mining.airborneFactor
 
     // Progress belongs to one (block, held slot) pair — looking away or
     // switching items starts over.

@@ -21,9 +21,9 @@ export function bindHelp(player) {
         <section class="help-scheme help-desktop">
           <h3>Keyboard &amp; mouse</h3>
           <ul>
-            <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · <kbd>Shift</kbd> — sprint</li>
-            <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>C</kbd> — sneak</li>
-            <li>In water: <kbd>Space</kbd> — swim up · <kbd>C</kbd> — dive. Watch your bubbles — surface (or find an air pocket) before they run out</li>
+            <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · double-tap <kbd>W</kbd> — sprint (needs a fed hunger bar)</li>
+            <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>Shift</kbd> — sneak (<kbd>C</kbd> works too)</li>
+            <li>In water: <kbd>Space</kbd> — swim up · <kbd>Shift</kbd> — dive. Watch your bubbles — surface (or find an air pocket) before they run out</li>
             <li>Mouse — look around</li>
             <li>Left click — attack / hold to mine (cracks show progress)</li>
             <li>Right click — use the held item: place a block, eat food, wear armor</li>
@@ -41,7 +41,7 @@ export function bindHelp(player) {
             <li>Left stick — move (push to the edge to sprint)</li>
             <li>Drag anywhere else — look around</li>
             <li>Tap the world — attack / break one block</li>
-            <li>Tap ⬆ — jump · hold ⛏ — keep mining · tap ▦ — place / use item</li>
+            <li>Tap ⬆ — jump · tap ⬇ — sneak / dive (tap again to stand) · hold ⛏ — keep mining · tap ▦ — place / use item</li>
             <li>Tap a hotbar slot to select it</li>
             <li>Top right: ⏸ pause · 🎒 inventory · 🗺 quest log · ? help</li>
           </ul>

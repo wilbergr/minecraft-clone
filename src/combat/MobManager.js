@@ -1,4 +1,5 @@
-import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS, WATER } from '../config.js'
+import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS, WATER, WORLD } from '../config.js'
+import { BLOCK_AIR, isSolid } from '../world/blocks.js'
 import { Zombie } from './Zombie.js'
 import { Skeleton } from './Skeleton.js'
 import { Creeper } from './Creeper.js'
@@ -6,10 +7,15 @@ import { Boss } from './Boss.js'
 import { PassiveMob } from './PassiveMob.js'
 
 // Owns the live mob population: periodically tops it up by spawning hostiles
-// on a ring around the player — the night mix is weighted across zombie /
-// skeleton / creeper (Phase 13, COMBAT.mobs.hostileWeights) — updates their
-// AI each frame, and removes mobs that die or fall too far behind a
-// travelling player. Passive mobs (Phase 12) share the same list — one
+// in dark cells on a ring around the player — the mix is weighted across
+// zombie / skeleton / creeper (Phase 13, COMBAT.mobs.hostileWeights) —
+// updates their AI each frame, and removes mobs that die or fall too far
+// behind a travelling player. Spawning is light-gated (dark-places spawn):
+// each attempt walks the candidate column top-to-bottom for spawnable air
+// pockets (the surface AND every cave the column crosses) and spawns only
+// where world.lightAt is at or below COMBAT.mobs.spawnLight.maxLight — so
+// caves are dangerous at any hour, the surface only after dark, and torches
+// carve real safe bubbles. Passive mobs (Phase 12) share the same list — one
 // update/attack/despawn path — but spawn on their own timer against their
 // own cap (mobs with `passive: true` never count toward the hostile
 // population).
@@ -74,9 +80,10 @@ export class MobManager {
   }
 
   update(delta, playerPos, damagePlayer) {
-    // Night-gated spawning (Phase 10): hostiles only rise after dark, and
-    // the dark ring holds more of them. Kept modest — each body part is a
-    // draw call, which is why the day cap is low in the first place.
+    // Light-gated spawning (dark-places spawn): the old night-only gate is
+    // gone — the per-cell light check inside #spawnNear IS the gate now, so
+    // days allow cave spawns up to the day cap while nights still raise the
+    // whole dark surface. Caps stay modest — each body part is a draw call.
     const night = this.daynight ? this.daynight.isNight : true
     this.spawnTimer -= delta
     if (this.spawnTimer <= 0) {
@@ -87,19 +94,29 @@ export class MobManager {
           : COMBAT.mobs.maxCount
       // Hostiles only — passive mobs must not eat into the hostile cap.
       const hostiles = this.mobs.filter((m) => !m.passive).length
-      if (night && !this.event && hostiles < cap) this.#spawnNear(playerPos)
+      if (!this.event && hostiles < cap) this.#spawnNear(playerPos)
     }
 
     // Dawn burn (Phase 10): daylight ignites the night's hostiles one at a
     // time — an ember burst each (reusing the pooled particles), staggered so
     // sunrise reads as a wave of little pyres rather than a mass vanish.
-    // Hostiles only: farm animals (Phase 12) graze on through the day.
-    // Event mode defers the burn — the siege's dawn check fails the event
-    // (clearing the flag) before any of its mobs ignite.
+    // Sky-exposed hostiles only (dark-places spawn): a mob under any roof or
+    // underground survives sunrise, MC-style — without this, cave mobs would
+    // ignite at dawn through 40 blocks of stone. Farm animals (Phase 12)
+    // graze on through the day. Event mode defers the burn — the siege's
+    // dawn check fails the event (clearing the flag) before any of its mobs
+    // ignite.
     if (this.daynight && !night && !this.event) {
       this.burnTimer -= delta
       if (this.burnTimer <= 0) {
-        const i = this.mobs.findLastIndex((m) => !m.passive)
+        const i = this.mobs.findLastIndex(
+          (m) =>
+            !m.passive &&
+            this.world.topSolidY(
+              Math.floor(m.group.position.x),
+              Math.floor(m.group.position.z),
+            ) <= m.group.position.y,
+        )
         if (i !== -1) {
           this.burnTimer = DAYNIGHT.hostiles.burnStaggerSeconds
           const { burnColor, burnParticles } = DAYNIGHT.hostiles
@@ -234,35 +251,71 @@ export class MobManager {
     this.fx.sounds?.play('explosion')
   }
 
-  // Spawn one hostile at a random angle on the ring around the player,
-  // weighted across the Phase 13 kinds.
+  // Try a few ring spots around the player and spawn one hostile in the
+  // first dark-enough cell (dark-places spawn). Each attempt walks its
+  // column top-to-bottom collecting spawnable cells — solid floor, two air
+  // cells — so cave pockets under the ring are candidates alongside the
+  // surface; the pick must then be genuinely far from the player in 3D (the
+  // old check was horizontal-only — a cave cell 4 blocks under your feet is
+  // not "18 blocks away") and at or under spawnLight.maxLight.
   #spawnNear(playerPos) {
-    const { spawnRadiusMin, spawnRadiusMax, hostileWeights } = COMBAT.mobs
-    const angle = Math.random() * Math.PI * 2
-    const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
-    const x = playerPos.x + Math.sin(angle) * dist
-    const z = playerPos.z + Math.cos(angle) * dist
-    // Water-covered column (deep water): mobs spawn at surfaceY, which is
-    // the SEABED for ocean columns — a night horde rising on the sea floor
-    // (zombies pathing underwater, skeletons shooting through water) reads
-    // as broken. Skip the attempt; ocean nights are quiet on purpose.
-    if (this.world.terrainHeight(Math.round(x), Math.round(z)) <= WATER.level) return
-    let roll = Math.random() * Object.values(hostileWeights).reduce((a, b) => a + b, 0)
-    let kind = 'zombie'
-    for (const [name, weight] of Object.entries(hostileWeights)) {
-      roll -= weight
-      if (roll <= 0) {
-        kind = name
-        break
+    const { spawnRadiusMin, spawnRadiusMax, hostileWeights, spawnLight } = COMBAT.mobs
+    // Bare runs (daynight null) contribute no sky term — light is the torch
+    // term only, matching the old ungated fallback for tests.
+    const skyBrightness = this.daynight ? this.daynight.skyBrightness : 0
+    for (let attempt = 0; attempt < spawnLight.attempts; attempt++) {
+      const angle = Math.random() * Math.PI * 2
+      const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
+      const x = Math.floor(playerPos.x + Math.sin(angle) * dist)
+      const z = Math.floor(playerPos.z + Math.cos(angle) * dist)
+      // Water-covered column (deep water): the SURFACE here is the seabed —
+      // a horde rising on the sea floor (zombies pathing underwater,
+      // skeletons shooting through water) reads as broken. Skip the whole
+      // column; ocean nights are quiet on purpose, and ocean caves are
+      // sealed under the seabed anyway (caves.seabedKeep).
+      if (this.world.terrainHeight(x, z) <= WATER.level) continue
+      const cells = []
+      const topY = this.world.topSolidY(x, z)
+      let below = this.world.blockAt(x, WORLD.terrain.caves.minY - 1, z)
+      let above = null
+      // One bottom-up pass over the column: feet cell y is spawnable when
+      // the block below is solid and y / y+1 are both air.
+      for (let y = WORLD.terrain.caves.minY; y <= topY + 1; y++) {
+        const at = above ?? this.world.blockAt(x, y, z)
+        above = this.world.blockAt(x, y + 1, z)
+        if (isSolid(below) && at === BLOCK_AIR && above === BLOCK_AIR) {
+          cells.push(y)
+        }
+        below = at
       }
+      if (cells.length === 0) continue
+      const y = cells[Math.floor(Math.random() * cells.length)]
+      const d2 =
+        (x + 0.5 - playerPos.x) ** 2 + (y - playerPos.y) ** 2 + (z + 0.5 - playerPos.z) ** 2
+      if (d2 < spawnRadiusMin ** 2) continue
+      if (this.world.lightAt(x, y, z, skyBrightness) > spawnLight.maxLight) continue
+      let roll = Math.random() * Object.values(hostileWeights).reduce((a, b) => a + b, 0)
+      let kind = 'zombie'
+      for (const [name, weight] of Object.entries(hostileWeights)) {
+        roll -= weight
+        if (roll <= 0) {
+          kind = name
+          break
+        }
+      }
+      this.spawnAt(x + 0.5, z + 0.5, kind, y)
+      return
     }
-    this.spawnAt(x, z, kind)
   }
 
   // Direct hostile spawn (also the browser-verification hook:
   // __mc.mobs.spawnAt — kind defaults to zombie so old tests still work).
-  spawnAt(x, z, kind = 'zombie') {
+  // `y` places the feet at that height instead of the column surface
+  // (dark-places spawn puts mobs in cave pockets); null keeps every
+  // pre-existing caller byte-identical.
+  spawnAt(x, z, kind = 'zombie', y = null) {
     const mob = HOSTILES[kind](this.world, x, z, this.projectiles)
+    if (y !== null) mob.group.position.y = y
     // Fuse-start hiss (creepers): wired here so mob AI stays sound-agnostic.
     if ('onHiss' in mob) mob.onHiss = () => this.fx.sounds?.play('fuse')
     this.mobs.push(mob)

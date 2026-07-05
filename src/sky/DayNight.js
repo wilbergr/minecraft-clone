@@ -17,6 +17,7 @@ export class DayNight {
   #colorB = new THREE.Color()
   #colorC = new THREE.Color()
   #dir = new THREE.Vector3()
+  #maxSunIntensity = 1
 
   constructor(scene, world, camera) {
     this.scene = scene
@@ -24,6 +25,12 @@ export class DayNight {
     this.sunLight = world.sun
     this.ambient = world.ambient
     this.time = DAYNIGHT.startTime
+    // Normalized sky brightness [~0.1, 1] — the sampled sun intensity over
+    // its keyframe max. Noon ≈ 1, night ≈ 0.1, dusk/dawn lerp between.
+    // world.lightAt multiplies it into the depth-based sky light so mob
+    // spawning can ask "how dark is this cell right now" (dark-places spawn).
+    this.skyBrightness = 1
+    this.#maxSunIntensity = Math.max(...DAYNIGHT.keyframes.map((k) => k[2]))
     this.sunSprite = this.#makeBillboard(DAYNIGHT.sun)
     this.moonSprite = this.#makeBillboard(DAYNIGHT.moon)
     scene.add(this.sunSprite, this.moonSprite)
@@ -46,6 +53,7 @@ export class DayNight {
 
     // Sample the keyframe table around the current time.
     const [sky, sunIntensity, ambientIntensity, lightColor] = this.#sample()
+    this.skyBrightness = sunIntensity / this.#maxSunIntensity
     this.scene.background.copy(sky)
     this.scene.fog.color.copy(sky)
     this.sunLight.intensity = sunIntensity

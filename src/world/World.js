@@ -1,9 +1,9 @@
 import * as THREE from 'three'
-import { WATER, WORLD } from '../config.js'
+import { LIGHTING, WATER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { createAtlasTexture } from './atlas.js'
-import { Chunk } from './Chunk.js'
+import { Chunk, skyFactor } from './Chunk.js'
 
 // Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
 // player are generated on demand (a few per frame, nearest first) and dropped
@@ -430,6 +430,26 @@ export class World {
       if (isSolid(id)) return y
     }
     return -1
+  }
+
+  // Spawn-relevant light level [0, 1] at block (wx, wy, wz): the Phase 11
+  // depth sky light (skyFactor of how far the cell sits below its column's
+  // top solid block) scaled by the time-of-day `skyBrightness`
+  // (daynight.skyBrightness — pass 0 for "no sky contribution"), maxed with
+  // the nearest placed torch's falloff. The torch radius reuses
+  // LIGHTING.torch.distance so the protective bubble always equals the
+  // visibly-lit bubble; like the visual point lights, torch light ignores
+  // walls (the Phase 11 budget rule — no flood-fill). Consumed by
+  // MobManager's dark-places spawn check.
+  lightAt(wx, wy, wz, skyBrightness = 1) {
+    const sky = skyFactor(this.topSolidY(wx, wz) - wy) * skyBrightness
+    let torch = 0
+    const R = LIGHTING.torch.distance
+    for (const t of this.torches.values()) {
+      const d2 = (t.x - wx) ** 2 + (t.y - wy) ** 2 + (t.z - wz) ** 2
+      if (d2 < R * R) torch = Math.max(torch, 1 - Math.sqrt(d2) / R)
+    }
+    return Math.max(sky, torch)
   }
 
   // True once the chunk containing world column (x, z) has been generated.
