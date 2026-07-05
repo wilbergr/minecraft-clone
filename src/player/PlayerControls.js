@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
-import { GRAPHICS, PHYSICS, PLAYER, WATER } from '../config.js'
+import { GRAPHICS, LAVA, PHYSICS, PLAYER, WATER } from '../config.js'
 import { PhysicsBody } from '../physics/PhysicsBody.js'
 import { isTouchDevice } from './TouchControls.js'
 
@@ -239,6 +239,9 @@ export class PlayerControls {
       !sneaking &&
       (this.canSprintHook?.() ?? true) &&
       ((this.sprintLatch && this.keys.forward) || this.touchMove.length() >= 0.999)
+    // Liquid feel: lava is viscous (lava feature) — same swim scheme as
+    // water, roughly half the speeds. One table pick covers all four reads.
+    const liquid = this.body.inLava ? LAVA.physics : WATER.physics
     const speed =
       PLAYER.moveSpeed *
       (sprinting
@@ -246,7 +249,7 @@ export class PlayerControls {
         : sneaking
           ? PHYSICS.sneak.speedMultiplier
           : 1) *
-      (this.body.inWater ? WATER.physics.moveMultiplier : 1) // swimming is slower
+      (this.body.inWater ? liquid.moveMultiplier : 1) // swimming is slower
     const accel = speed * PLAYER.damping * delta
 
     if (this.keys.forward) this.velocity.z -= accel
@@ -283,8 +286,8 @@ export class PlayerControls {
         this.jumpBuffer = 0
       } else if (this.body.inWater) {
         this.body.velocity.y = this.body.hitWall
-          ? PHYSICS.jumpVelocity * WATER.physics.breachBoost
-          : WATER.physics.swimUpSpeed
+          ? PHYSICS.jumpVelocity * liquid.breachBoost
+          : liquid.swimUpSpeed
         this.jumpBuffer = 0
       }
     }
@@ -296,7 +299,7 @@ export class PlayerControls {
     // wins when both are held. Touch inherits it through the ⬇ sneak toggle
     // button (TouchControls drives keys.sneak).
     if (this.keys.sneak && this.body.inWater && !this.keys.jump) {
-      this.body.velocity.y = -WATER.physics.swimDownSpeed
+      this.body.velocity.y = -liquid.swimDownSpeed
     }
 
     // Sprint that actually covers ground (same "moving" test as the FOV cue).

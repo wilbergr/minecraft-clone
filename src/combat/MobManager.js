@@ -1,5 +1,6 @@
-import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS, WATER, WORLD } from '../config.js'
-import { BLOCK_AIR, isSolid } from '../world/blocks.js'
+import * as THREE from 'three'
+import { AUDIO, COMBAT, DAYNIGHT, LAVA, PASSIVE_MOBS, PHYSICS, WATER, WORLD } from '../config.js'
+import { BLOCK_AIR, BLOCK_LAVA, isSolid } from '../world/blocks.js'
 import { Zombie } from './Zombie.js'
 import { Skeleton } from './Skeleton.js'
 import { Creeper } from './Creeper.js'
@@ -27,6 +28,9 @@ import { PassiveMob } from './PassiveMob.js'
 //
 // Mob state is intentionally not persisted (Phase 5 note): mobs are ambient
 // spawns, so a reload simply starts with a fresh population.
+
+// Zero knock for environmental damage — addScaledVector with it is a no-op.
+const NO_KNOCK = new THREE.Vector3()
 
 const HOSTILES = {
   zombie: (world, x, z) => new Zombie(world, x, z),
@@ -160,6 +164,29 @@ export class MobManager {
         this.#remove(i)
         continue
       }
+      // Mob lava burn (lava feature): straight-line chasers WILL walk into
+      // pools — no pathfinding exists, and baiting them in is legitimate MC
+      // play. Same cadence as the player's contact burn (first tick
+      // immediate); a fatal tick removes via the dawn-burn path — ember
+      // burst, NO kill credit, NO drops (they'd burn in the pool anyway).
+      // `lavaProof` is the hook for future lava-immune mobs. Runs in the
+      // manager's own loop, never inside mob.update (the Phase 4 rule).
+      if (!mob.lavaProof && this.#inLava(mob)) {
+        mob.burnTimer = (mob.burnTimer ?? 0) - delta
+        if (mob.burnTimer <= 0) {
+          mob.burnTimer = LAVA.burn.intervalSeconds
+          const p = mob.group.position
+          if (mob.hurt(LAVA.burn.damage, NO_KNOCK)) {
+            const { burnColor, burnParticles } = DAYNIGHT.hostiles
+            this.fx.particles?.burst(p.x, p.y + 1, p.z, burnColor, burnParticles)
+            this.#remove(i)
+            continue
+          }
+          this.fx.particles?.burst(p.x, p.y + 0.5, p.z, LAVA.ember.color, 6)
+        }
+      } else {
+        mob.burnTimer = 0
+      }
       const dx = mob.group.position.x - playerPos.x
       const dz = mob.group.position.z - playerPos.z
       // Too far behind a travelling player, or fallen out of a mined-open
@@ -190,6 +217,17 @@ export class MobManager {
         this.#summonMinions(mob, n)
       }
     }
+  }
+
+  // Is the mob's midsection cell lava? (The PhysicsBody test, but computed
+  // here — mob bodies expose inLava too, yet not every mob path steps its
+  // body every frame, so the manager reads the world directly.)
+  #inLava(mob) {
+    const p = mob.group.position
+    const midY = Math.floor(p.y + (mob.body?.height ?? 1) * 0.5)
+    return (
+      this.world.blockAt(Math.floor(p.x), midY, Math.floor(p.z)) === BLOCK_LAVA
+    )
   }
 
   // The Hollow King's Quake: carve the marked cell (batched remesh, same as

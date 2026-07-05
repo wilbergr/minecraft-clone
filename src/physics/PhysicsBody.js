@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { PHYSICS, WATER } from '../config.js'
-import { isLiquid, isSolid } from '../world/blocks.js'
+import { LAVA, PHYSICS, WATER } from '../config.js'
+import { BLOCK_LAVA, isLiquid, isSolid } from '../world/blocks.js'
 
 // Axis-aligned bounding-box voxel physics (Phase 8), shared by the player and
 // mobs. A body is a width×height×width box whose `position` is the center of
@@ -30,7 +30,8 @@ export class PhysicsBody {
     this.velocity = new THREE.Vector3() // world-space, blocks/second
     this.grounded = false
     this.hitWall = false // a horizontal sweep was blocked this step
-    this.inWater = false // midsection submerged (Phase 10) — owners read this
+    this.inWater = false // midsection in ANY liquid (Phase 10) — owners read this
+    this.inLava = false // midsection specifically in lava (lava feature)
     this.fallDistance = 0 // blocks descended since last grounded
     this.onLand = null // callback(blocksFallen) — fires on touching down
   }
@@ -56,24 +57,29 @@ export class PhysicsBody {
       return
     }
 
-    // Submerged (Phase 10): the block at the body's midsection decides. Water
-    // swaps in gentle gravity, a low sink cap, and vertical drag — and clears
-    // fall distance, so water landings never hurt. Swim-up is the owner's
-    // input concern (PlayerControls sets velocity.y while Space is held).
-    this.inWater = isLiquid(
-      this.world.blockAt(
-        Math.floor(pos.x),
-        Math.floor(pos.y + this.height * 0.5),
-        Math.floor(pos.z),
-      ),
+    // Submerged (Phase 10): the block at the body's midsection decides.
+    // `inWater` means "in any liquid" — every consumer wants that reading
+    // for lava too (fall distance cleared, no jump crits, slow mining, no
+    // footsteps, swim controls); `inLava` narrows it so damage and the
+    // viscous LAVA.physics table key off the liquid's identity. Liquids swap
+    // in gentle gravity, a low sink cap, and vertical drag — and clear fall
+    // distance, so liquid landings never hurt (in lava the burn is the
+    // punishment, not the impact). Swim-up is the owner's input concern
+    // (PlayerControls sets velocity.y while Space is held).
+    const mid = this.world.blockAt(
+      Math.floor(pos.x),
+      Math.floor(pos.y + this.height * 0.5),
+      Math.floor(pos.z),
     )
+    this.inWater = isLiquid(mid)
+    this.inLava = mid === BLOCK_LAVA
 
     // Vertical displacement uses the frame's AVERAGE velocity (exact for
     // constant acceleration) — naive Euler would make jump height shrink
     // with frame time, losing a third of the apex at the clamped 0.1s delta.
     const vy0 = this.velocity.y
     if (this.inWater) {
-      const w = WATER.physics
+      const w = this.inLava ? LAVA.physics : WATER.physics
       this.fallDistance = 0
       this.velocity.y = Math.max(vy0 - w.gravity * delta, -w.sinkSpeed)
       this.velocity.y *= Math.exp(-w.drag * delta) // dive momentum bleeds off

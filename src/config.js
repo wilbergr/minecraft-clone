@@ -420,6 +420,16 @@ export const WORLD = {
       // solid so caves never puncture the seabed (there is no water flow).
       seabedKeep: 4,
     },
+    // Lava (lava feature): carved cave cells at or below `level` fill with
+    // lava instead of air — one branch in World.terrainBlock, the single
+    // choke point both generation paths share, so purity holds with no
+    // mirroring. Level 10 floods ~20% of cave volume and puts ~1 in 23
+    // diamond veins directly against a pool (the "diamonds guarded by lava"
+    // tension). Solid cells touching a pool crust into obsidian (block 20).
+    // Retune with `node tools/probe-lava.mjs`.
+    lava: {
+      level: 10, // carved cave cells at or below this height fill with lava
+    },
     // Ore bands (Phase 11, MC-style depth tiers): deep stone rolls against
     // each band in order — first hit wins — so overlapping bands stay cheap.
     ores: [
@@ -835,6 +845,47 @@ export const WATER = {
   },
 }
 
+// Lava (lava feature): the underground hazard & light source. Generated in
+// World.terrainBlock (cave cells at or below WORLD.terrain.lava.level — the
+// generation knob lives THERE, this block is behavior). Like water it is not
+// solid: raycasts pass through (can't be mined or targeted), collision
+// ignores it, placement displaces it, and there is NO flow simulation —
+// broken blocks leave air beside standing lava, exactly the sea's contract.
+// Physics swaps to the viscous table below while the body midsection is in
+// lava; burn timings are read via Burning.cfg (src/survival/Burning.js) so
+// headless tests can shrink them (the bossFight.cfg precedent). Burn and
+// after-burn damage go through health.damage() DIRECTLY — armor never
+// reduces them, the codified fall/void/starve/drown environmental precedent.
+export const LAVA = {
+  surfaceDrop: 0.12, // open pool tops render this far below the block top
+  // MC's "lava is viscous": roughly half water's speeds under heavier drag.
+  // The WATER.physics sharp edge applies unchanged — drag runs AFTER the
+  // owner sets velocity, so swim knobs are effectively capped by sinkSpeed.
+  physics: {
+    gravity: 5,
+    sinkSpeed: 1.6,
+    drag: 6,
+    swimUpSpeed: 2.2,
+    swimDownSpeed: 1.8,
+    breachBoost: 0.85,
+    moveMultiplier: 0.3,
+  },
+  // Contact burn: first tick lands the frame you enter (lava bites
+  // instantly, unlike drowning's grace), then every interval. ~2 hearts/s —
+  // lethal in ~5s untended, survivable if you climb out fast.
+  burn: { damage: 4, intervalSeconds: 0.5 },
+  // After-burn ("on fire"): keeps ticking after you climb out, extinguished
+  // the moment the camera goes underwater — water pockets near lava matter.
+  afterburn: { seconds: 4, damage: 1, intervalSeconds: 1 },
+  // Camera-in-lava fog: near-blind, MC-authentic. Swapped by the same
+  // one-flag updateUnderwater block that owns the water fog.
+  fog: { near: 1, far: 5, color: 0xe2590e, colorBlend: 0.95 },
+  ember: { color: 0xff8a1e, count: 14 }, // entry / burn-tick particle spits
+  // Ambience: pops + ember spits while a pool's exposed surface is nearby
+  // (the LavaLights registry supplies the nearest cell).
+  pops: { radius: 14, minSeconds: 1, maxSeconds: 3, embers: 3 },
+}
+
 // Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as
 // health) drained by time, sprinting, and mining. Health regen is gated on
 // being well-fed (Health.regenGate, wired in main.js); at zero hunger the
@@ -942,6 +993,23 @@ export const LIGHTING = {
     intensity: 40, // three r155+ physical falloff: candela-ish, decay 2
     distance: 14, // hard cutoff radius, blocks
     decay: 2,
+  },
+  // Lava glow (lava feature): a TorchLights-sibling pool assigned to the
+  // nearest EXPOSED pool surface cells (each chunk records them while
+  // building its lava mesh). `minSeparation` keeps one lake from eating the
+  // whole pool on adjacent cells. `distance` doubles as the spawn-suppression
+  // radius in world.lightAt — protective bubble ≡ visible glow, the torch
+  // contract. `faceTint` is the mesh-time warm tint on solid faces directly
+  // touching lava (radius 1, the Phase 11 no-flood-fill budget rule).
+  lava: {
+    poolSize: 3,
+    minSeparation: 6, // skip candidates this close to an already-lit cell
+    color: 0xff6a2a,
+    intensity: 30,
+    distance: 12,
+    decay: 2,
+    maxTrackDistance: 40,
+    faceTint: 0xff9a4a, // vertex-color floor for pool floors/walls
   },
 }
 

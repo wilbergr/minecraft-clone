@@ -856,8 +856,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   asserts: sampled `body.velocity.y` is post-drag, ≈ −2.15 held vs ≈ −1.2
   passive — assert the gap, not the raw `swimDownSpeed` knob. A cave pocket
   for spawn tests: probe columns with a node scene-stub (`new World({ add()
-  {} })`) for floor-solid/air/air cells deep below `topSolidY`; seed 1337
-  has a large one around (-60, 4, 0).
+  {} })`) for floor-solid/air/air cells deep below `topSolidY`; seed 1337's
+  old pocket around (-60, 4, 0) is a LAVA POOL now (below `lava.level`) —
+  use the relocated Deep Shard pocket around (-61, 23, -2) instead.
 
 ## MC-style inventory: armor slots + player preview
 
@@ -908,7 +909,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - Tier 4 = diamond everywhere tiers are keyed: `COMBAT.attack.swordDamage[4]`
   8, `toolDurability[4]` 512, `armorDurability.diamond` 384, `TIER_TINT[4]`
   cyan. Mining speed needed no code — `speedPerTier` is linear in tier. A
-  diamond pickaxe mines every gated block (the highest gate is minTier 3).
+  diamond pickaxe mines every gated block (obsidian, the lava feature's
+  crust block, raised the highest gate to minTier 4 — diamond only).
 - Full diamond armor is 3/8/6/3 = 20 points — exactly
   `COMBAT.armor.maxReduction` (0.8) at 0.04/point, so the set IS the cap;
   don't add points above it, they'd be dead weight.
@@ -923,6 +925,80 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   interval autosave (`SaveManager.update`) does NOT check `save.enabled` —
   a test that plants a hand-written save before `page.goto` must also stub
   `__mc.save.save = () => {}` or a locked-pointer autosave tick overwrites it.
+
+## Lava & obsidian (underground hazard / light source, Nether prep)
+
+- Lava is block 19 (`liquid: true`, not solid — water's whole flag set) but
+  generated in ONE place: `World.terrainBlock` returns lava for carved cave
+  cells at `y <= WORLD.terrain.lava.level` (10). Both generation paths share
+  that function, so purity holds with zero mirroring (unlike water's
+  two-site fill). NO flow simulation, same as water: breaking a pool wall
+  opens a dry hole beside standing lava; `World.explode` leaves liquids
+  alone. **Generated water and lava can provably never touch** (`seabedKeep`
+  seals sea columns; a probe assert stands guard) — a future bucket/liquid-
+  carrying feature owes the water+lava reaction question an answer before it
+  ships. Retune with `node tools/probe-lava.mjs` (band containment,
+  coverage, the no-contact invariant, Deep Shard placement, surface supply,
+  obsidian crust — exits 1 on failure).
+- Obsidian is block 20: generated as a crust wherever solid stone touches a
+  lava cell (a 6-neighbor test in `terrainBlock`, gated to
+  `y <= lava.level + 1` so it stays off the hot path). Ores WIN over the
+  crust on purpose — a diamond vein in a pool wall stays a diamond vein
+  (~4% of diamonds are lava-adjacent, the guarded-treasure tension).
+  `minTier: 4` (diamond pickaxe only), `blastResistant`, drops itself,
+  placeable — the future Nether portal frame material.
+- Rendering: a third mesh pass (`Chunk.#buildLavaMesh`, `chunk.lavaMesh`, a
+  child of the solid mesh like water) on `world.lavaMaterial` — an UNLIT
+  `MeshBasicMaterial`, so pools glow full-bright in dark caves with zero
+  lights (the Boss crown idiom). Solid faces whose exposed cell IS lava get
+  a warm vertex-color tint (`LIGHTING.lava.faceTint`) instead of depth
+  darkness — mesh-time, radius 1, the no-flood-fill budget rule.
+- The exposed-surface registry: `#buildLavaMesh` records every open-top lava
+  cell in `chunk.lavaSurfaces` (world coords, rebuilt on every remesh). It
+  feeds THREE consumers: `LavaLights` (src/fx — TorchLights' sibling pool,
+  `LIGHTING.lava.poolSize` 3, plus a min-separation rule so one lake can't
+  eat the whole pool; it also tracks `.nearest` for ambience), the lava term
+  in `world.lightAt` (pools suppress hostile spawns like torches — but
+  LOADED-CHUNKS-ONLY, documented in the method; safe because the spawn ring
+  is always inside the loaded radius), and the `lavaPop`/ember ambience
+  timer in main.js.
+- Physics: `body.inWater` means "in ANY liquid" (every consumer wants that —
+  fall-distance clear, no crits, 5× mining, no footsteps, swim controls);
+  `body.inLava` narrows it. `LAVA.physics` (viscous, ~half water speeds)
+  swaps in via `inLava`; PlayerControls picks the table once per update.
+  When gating on real water, test `inWater && !inLava` (main.js does, for
+  breath and the extinguish).
+- Burning (`src/survival/Burning.js`, Breath's value-less sibling; knobs in
+  `LAVA`): contact tick 4 dmg / 0.5s with the FIRST tick on entry (no
+  grace), then a 4s after-burn (1 dmg/s) on exit, extinguished the moment
+  the player is in water. Damage goes through `health.damage()` directly —
+  armor NEVER reduces it (the fall/void/starve/drown precedent). Ticks
+  inside the hunger/breath `isLocked && !isDead` gate; reset on respawn
+  beside hunger/breath; deliberately not saved. Breath does NOT drain in
+  lava (you're on fire, not holding breath). `updateUnderwater` generalized
+  to the camera cell's liquid id: `#lava-tint` (full wash in lava, an
+  `.afterburn` edge glow while on fire), `LAVA.fog` (near-blind), the
+  `sizzle` voice on transitions, and the one shared audio muffle.
+- Mobs burn on the same cadence in the `MobManager` loop (per-mob
+  `burnTimer`; `mob.lavaProof` exempts future lava-immune kinds) and die
+  via the dawn-burn removal path — ember burst, NO kill credit, NO drops.
+  Ground drops whose cell is lava are destroyed in `GroundItems.update`
+  (ember + sizzle) — covers thrown items sinking in and mined blocks popped
+  into an adjacent pool.
+- Deep Shard: `RelicHunt.#findCaveSpot`'s scan floor is clamped to
+  `y > lava.level + 1` — the old pocket at y 7.5 sits inside a pool now. On
+  seed 1337 the shard relocated to (-61, 23.5, -2); found-flags stay valid
+  (index-matched). `SAVE.schemaVersion` stayed 4 (the diamond precedent —
+  deep cells changed, heights and quest anchors didn't); the one guard is
+  ~5 lines in main.js after `save.load()`: feet restored inside lava →
+  teleport to `surfaceY`.
+- Headless: `__mc.burning` (shrink `burning.cfg.burn/afterburn` — cfg IS
+  the live `LAVA` object), `__mc.lavaLights` (`activeCount`, `nearest`),
+  sound counters `sizzle`/`lavaPop`. Nearest exposed pool to spawn on seed
+  1337: cell (10, 10, 15) (3 deep, obsidian floor at y 7, dry standable
+  ledge at (15, 12, 20)). Mob-in-lava test: `mobs.spawnAt(x + .5, z + .5,
+  'zombie', poolY)`, pin the returned mob, and wait for it to leave
+  `mobs.mobs` with `drops.count` unchanged.
 
 ## Sharp edges
 

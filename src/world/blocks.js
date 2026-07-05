@@ -264,6 +264,38 @@ export const BLOCKS = {
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 3 }, // needs an iron pickaxe or better
   },
+  19: {
+    id: 19,
+    name: 'Lava',
+    // The underground hazard (lava feature): water's flag set — swum
+    // through, unminable, unraycastable — but opaque, full-bright (its mesh
+    // pass uses an unlit material), and a damage source. Generated in
+    // World.terrainBlock: carved cave cells at or below
+    // WORLD.terrain.lava.level. No tex — the liquid passes emit no UVs;
+    // `color` feeds the lava mesh pass and particles. Not obtainable, so no
+    // item and no atlas tile, exactly like water.
+    solid: false,
+    liquid: true,
+    color: { top: 0xff8a1e, side: 0xe2590e, bottom: 0xc44708 },
+    drop: null,
+  },
+  20: {
+    id: 20,
+    name: 'Obsidian',
+    // Nether prep: generated as a crust around lava (solid cells adjacent
+    // to a pool in World.terrainBlock) and the diamond tier's signature
+    // gate — ONLY a diamond pickaxe mines it, and even then slowly.
+    // Blast-resistant like the King's Cache: creepers and quakes can't
+    // crack a pool open through its shell.
+    solid: true,
+    blastResistant: true,
+    color: { top: 0x241c33, side: 0x1e1729, bottom: 0x191325 },
+    tex: { top: 'obsidian', side: 'obsidian', bottom: 'obsidian' },
+    drop: 'obsidian',
+    hardness: 8, // the slowest mine in the game (~1.6s with a diamond pick)
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 4 }, // diamond only
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -272,6 +304,8 @@ export const BLOCK_TORCH = 13
 export const BLOCK_BED = 15
 export const BLOCK_CHEST = 16
 export const BLOCK_KINGS_CACHE = 17
+export const BLOCK_LAVA = 19
+export const BLOCK_OBSIDIAN = 20
 
 export function isSolid(id) {
   const block = BLOCKS[id]

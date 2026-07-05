@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { FEEDBACK } from '../config.js'
-import { BLOCKS, isSolid } from '../world/blocks.js'
+import { FEEDBACK, LAVA } from '../config.js'
+import { BLOCKS, BLOCK_LAVA, isSolid } from '../world/blocks.js'
 import { ITEMS } from '../inventory/items.js'
 
 // Ground item drops (Phase 9, audit P7b). Breaking a block or killing a mob
@@ -19,6 +19,9 @@ export class GroundItems {
     this.inventory = inventory
     this.sounds = sounds
     this.items = [] // oldest first
+    // Optional particle pool for lava-destruction embers, attached by
+    // main.js (the mobs.daynight attachment pattern) — bare runs skip fx.
+    this.particles = null
     const { size } = FEEDBACK.drops
     this.geometry = new THREE.BoxGeometry(size, size, size)
     this.materialCache = new Map() // item id -> shared material
@@ -99,6 +102,23 @@ export class GroundItems {
       }
       const pos = e.mesh.position
       e.mesh.rotation.y += cfg.spinSpeed * delta
+
+      // Lava destroys drops (lava feature): a cell test covers both the
+      // airborne arc sinking into a pool (lava isn't solid, so #floorBelow
+      // would otherwise rest the drop INSIDE it) and a mined block popped
+      // into an adjacent one — the classic diamond-mining heartbreak.
+      if (
+        this.world.blockAt(
+          Math.floor(pos.x),
+          Math.floor(pos.y),
+          Math.floor(pos.z),
+        ) === BLOCK_LAVA
+      ) {
+        this.particles?.burst(pos.x, pos.y + 0.2, pos.z, LAVA.ember.color, 8)
+        this.sounds?.play('sizzle', { gain: 0.5 })
+        this.#remove(i)
+        continue
+      }
 
       // Vacuum: home on the player's waist once the pop has finished (thrown
       // items carry their own longer delay so they don't boomerang back).
