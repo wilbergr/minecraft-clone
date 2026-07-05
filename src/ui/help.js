@@ -23,6 +23,7 @@ export function bindHelp(player) {
           <ul>
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · <kbd>Shift</kbd> — sprint</li>
             <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>C</kbd> — sneak</li>
+            <li>In water: <kbd>Space</kbd> — swim up · <kbd>C</kbd> — dive. Watch your bubbles — surface (or find an air pocket) before they run out</li>
             <li>Mouse — look around</li>
             <li>Left click — attack / hold to mine (cracks show progress)</li>
             <li>Right click — use the held item: place a block, eat food, wear armor</li>

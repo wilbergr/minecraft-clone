@@ -716,6 +716,73 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `chestScreen.openStore(__mc.enderStore)` directly; drive the grant with
   `challenge.skipToStage(4)` (fires onChange).
 
+## Deep water: ocean biome, breath & the Tide-Drowned Dive
+
+- Oceans are a THIRD noise field, not a biome band: `world.oceanNoise`
+  (`WORLD.terrain.ocean`) smoothsteps `terrainHeight` down toward
+  `floorHeight` (44 = 13 under `WATER.level` 57) across the
+  `[maskStart, maskFull]` continentalness band, entirely inside
+  `terrainHeight` — purity holds for free, and everything downstream (water
+  fill/mesh, sand beaches, no trees, `seabedKeep` cave sealing, all quest
+  placement guards) keys off height vs WATER.level unchanged. Where the mask
+  is zero, heights are byte-identical to the pre-ocean generator. Retune
+  with `node tools/probe-ocean.mjs` (committed; asserts coverage band,
+  dive-worthy column supply, spawn-column purity, and an unmasked-column
+  regression against the pre-ocean formula — exits 1 on failure). Seed 1337:
+  13.8% coverage, basins to 14 deep, nearest dive column ~176 blocks out,
+  spawn h=63 untouched. Terrain reshape ⇒ `SAVE.schemaVersion` 4 (the
+  v2→v3 precedent; old saves reset via the load guard).
+- Hostile night spawns skip water-covered columns (`#spawnNear` checks
+  `terrainHeight <= WATER.level` — mobs spawn at `surfaceY`, the SEABED for
+  ocean columns). Ocean nights are quiet on purpose; passives were already
+  grass-gated.
+- Breath (`src/survival/Breath.js`, knobs in `BREATH`): Hunger's structural
+  twin — drains while the CAMERA cell is water, refills fast in air, and at
+  zero `onDrown` fires per interval → main.js wires it to `health.damage()`
+  DIRECTLY (armor never reduces it — the fall/void/starve precedent) with
+  NO floor: drowning kills, unlike starvation, because surfacing is always
+  available. Ticks inside hunger's `isLocked && !isDead` gate; reset on
+  respawn; deliberately NOT saved (resets full on load — `SaveManager`
+  untouched). Timings read `breath.cfg` (IS the `BREATH` object), so tests
+  shrink them like `bossFight.cfg`. Bubble HUD (`ui/breathHud.js`,
+  `#breath-bar` above the drumsticks, armor-row slot mirrored right) hides
+  whenever the bar is full.
+- ONE submerged flag for everything: `updateUnderwater()` in main.js runs
+  the old water-tint camera-cell test and drives the tint, breath drain, fog
+  swap, splash + spray, and audio muffle — they can never disagree. It runs
+  AFTER `daynight.update` so the submerged fog (near/far from `WATER.fog`,
+  color lerped `colorBlend` toward the water color) overwrites what DayNight
+  wrote; surfaced frames restore `GRAPHICS.fogNear/fogFar` and leave color
+  to DayNight.
+- Swim-down is C (sneak) in the `PlayerControls` water branch — Space wins
+  when both are held; touch inherits it through the ⬇ sneak button. Sharp
+  edge: `PhysicsBody.step` clamps downward speed to `WATER.physics.
+  sinkSpeed` and applies drag AFTER the owner sets velocity, so
+  `swimDownSpeed` above sinkSpeed is effectively capped — the dive reads as
+  "sustained max sink" (~2.3× the passive drag equilibrium), not the raw
+  knob value.
+- Underwater audio: a PERMANENT lowpass `BiquadFilter` sits in the master
+  chain (`master → filter → destination`, built at unlock);
+  `sounds.setUnderwater(bool)` ramps its cutoff (`AUDIO.underwater`), and
+  `sounds.underwater` is the test-visible state (latched pre-unlock). The
+  `splash` voice fires on submerged-flag TRANSITIONS (enter loud, exit
+  soft) and counts in `stats.byName.splash` like everything else.
+- The Tide Shard (relic index 4) now REQUIRES the dive: `#findSeaSpot`'s
+  primary pass wants `h <= WATER.level - CHALLENGE.relics.minDiveDepth`
+  (10), keeping the old `-3`/`-2` rungs as the never-fail fallback ladder.
+  Same save shape, same clue, same index — on seed 1337 it lands at
+  y=46, so the ±4 collect band tops out at 50, five blocks under the
+  waterline: surface treading can never collect it.
+- Headless: `__mc.breath` (shrink `breath.cfg.drainPerSecond` /
+  `drown.intervalSeconds` / `drown.damage` before drowning runs — real
+  timings take ~50s of wall clock), `sounds.underwater`,
+  `stats.byName.splash`; drive the dive with `page.keyboard.down('KeyC')`
+  and compare descent per-frame against the passive sink (both descend —
+  assert the RATE, not the direction). `sounds.unlock()` +
+  `player.lock()` from `page.evaluate` work without real gestures. Fog
+  asserts: `scene.fog.near === WATER.fog.near` submerged,
+  `GRAPHICS.fogNear` surfaced.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

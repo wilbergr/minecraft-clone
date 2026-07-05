@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CHALLENGE, GRAPHICS, HUNGER } from './config.js'
+import { BREATH, CHALLENGE, GRAPHICS, HUNGER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
@@ -35,6 +35,7 @@ import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
 import { BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, isLiquid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
+import { Breath } from './survival/Breath.js'
 import { Sleep } from './survival/Sleep.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
@@ -43,6 +44,7 @@ import { EnderStore } from './crafting/EnderStore.js'
 import { ChestScreen } from './ui/chestScreen.js'
 import { bindSleepFx } from './ui/sleepFx.js'
 import { bindHungerHud } from './ui/hungerHud.js'
+import { bindBreathHud } from './ui/breathHud.js'
 import { bindArmorHud } from './ui/armorHud.js'
 
 const app = document.getElementById('app')
@@ -102,6 +104,14 @@ combat.health.regenGate = () => hunger.value >= HUNGER.regenThreshold
 hunger.onStarve = () => {
   if (combat.health.value > HUNGER.starve.minHealth) combat.health.damage(HUNGER.starve.damage)
 }
+// Breath & drowning (deep water): drains while the camera is submerged (the
+// shared flag computed in updateUnderwater below), refills in air. Drowning
+// damage goes through health.damage() DIRECTLY — armor must not reduce it,
+// the deliberate fall/void/starve precedent — and is lethal, unlike
+// starvation: the surface is always the escape. Not persisted (resets full
+// on load); reset on respawn beside hunger below.
+const breath = new Breath()
+breath.onDrown = () => combat.health.damage(BREATH.drown.damage)
 const furnaces = new Furnaces()
 const chests = new Chests() // placed-chest contents (inventory overhaul); no tick — inert storage
 const enderStore = new EnderStore() // the King's Cache global store; also inert
@@ -282,8 +292,10 @@ bindHotbar(inventory, player)
 bindHud(combat.health, () => {
   combat.respawn()
   hunger.reset() // fresh spawn, fresh appetite
+  breath.reset() // and fresh lungs — a drowning death can't respawn gasping
 })
 bindHungerHud(hunger)
+bindBreathHud(breath)
 bindArmorHud(combat.armor)
 bindSleepFx(sleep, sounds)
 bindResetButton(save)
@@ -371,14 +383,37 @@ window.addEventListener('resize', () => {
 
 const clock = new THREE.Clock()
 
-// Blue full-screen wash while the camera is underwater (Phase 10).
+// Underwater state (Phase 10 tint + deep water fog/audio/breath): ONE
+// camera-cell test decides "submerged" for everything — the blue wash, the
+// breath drain, the fog swap, and the audio muffle can never disagree.
+// Runs after daynight.update in the loop, so the submerged fog near/far and
+// color overwrite what DayNight just wrote; surfaced frames restore
+// GRAPHICS.fogNear/fogFar and leave the color to DayNight.
 const waterTint = document.getElementById('water-tint')
-const updateWaterTint = () => {
+const waterFogColor = new THREE.Color(WATER.fog.color)
+let submerged = false
+const updateUnderwater = () => {
   const p = camera.position
-  const submerged = isLiquid(
+  const now = isLiquid(
     world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)),
   )
+  if (now !== submerged) {
+    submerged = now
+    // Surface-crossing feedback: splash (louder going in), a spray burst at
+    // the entry point, and the master-bus low-pass muffle.
+    sounds.play('splash', { gain: now ? 1 : 0.55 })
+    if (now) particles.burst(p.x, p.y - 0.3, p.z, 0xdfefff, 18)
+    sounds.setUnderwater(now)
+  }
   waterTint.classList.toggle('hidden', !submerged)
+  if (submerged) {
+    scene.fog.near = WATER.fog.near
+    scene.fog.far = WATER.fog.far
+    scene.fog.color.lerp(waterFogColor, WATER.fog.colorBlend)
+  } else {
+    scene.fog.near = GRAPHICS.fogNear
+    scene.fog.far = GRAPHICS.fogFar
+  }
 }
 
 renderer.setAnimationLoop(() => {
@@ -395,6 +430,9 @@ renderer.setAnimationLoop(() => {
       sprinting: player.isSprinting,
       mining: interaction.mining && !!interaction.target,
     })
+    // Breath shares hunger's gate (menus/death freeze it) and the submerged
+    // flag updateUnderwater maintains each frame.
+    breath.update(delta, { submerged })
   }
   if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
   hunt.update(delta, camera.position)
@@ -408,7 +446,7 @@ renderer.setAnimationLoop(() => {
   daynight.update(player.isLocked ? delta : 0)
   clouds.update(delta, camera.position)
   torchLights.update(camera.position)
-  updateWaterTint()
+  updateUnderwater()
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)
@@ -446,6 +484,7 @@ window.__mc = {
   daynight,
   clouds,
   hunger,
+  breath,
   furnaces,
   furnaceScreen,
   chests,

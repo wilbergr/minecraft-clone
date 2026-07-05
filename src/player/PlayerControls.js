@@ -260,6 +260,15 @@ export class PlayerControls {
       }
     }
 
+    // Dive (deep water): C swims down. Sneak's land meaning (edge-stop,
+    // slow) is meaningless mid-water, so the key overload is clean; the
+    // passive drag-capped sink is too slow for a deliberate 10-block dive.
+    // Space wins when both are held. Touch inherits it through the existing
+    // ⬇ sneak button (TouchControls holds keys.sneak).
+    if (this.keys.sneak && this.body.inWater && !this.keys.jump) {
+      this.body.velocity.y = -WATER.physics.swimDownSpeed
+    }
+
     // Sprint that actually covers ground (same "moving" test as the FOV cue).
     this.isSprinting = sprinting && this.velocity.lengthSq() > 1
 
