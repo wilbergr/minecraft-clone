@@ -60,6 +60,9 @@ export const ITEMS = {
   bed: blockItem('bed', 15, 'Bed'),
   // Item storage (inventory overhaul): right click a placed chest to open it.
   chest: blockItem('chest', 16, 'Chest'),
+  // The King's Trial reward (granted once at completion, no recipe): every
+  // placed cache opens the same global store — see src/crafting/EnderStore.js.
+  kings_cache: blockItem('kings_cache', 17, "King's Cache"),
   // Sheep bonus drop — the bed-crafting ingredient.
   wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into

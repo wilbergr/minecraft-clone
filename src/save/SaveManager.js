@@ -20,13 +20,15 @@ import { SAVE, WORLD } from '../config.js'
 //     cursor: { id, count, durability? },  // held cursor stack (inventory overhaul);
 //                               // returned to the inventory on load
 //     chests: { "x,y,z": { slots: [...] } },  // Chests.serialize() (inventory overhaul)
+//     enderChest: { granted, slots: [...] },  // EnderStore.serialize() — the global
+//                               // King's Cache contents + one-time grant latch
 //   }
 //
-// `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, `cursor`, and
-// `chests` are optional keys (Phase 12 onward): older saves simply lack
-// them and load with a full bar / no furnace contents / nothing worn / the
-// origin spawn / a fresh trial / an empty hand / empty chests — absent keys
-// never invalidate a save on their own.
+// `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, `cursor`, `chests`,
+// and `enderChest` are optional keys (Phase 12 onward): older saves simply
+// lack them and load with a full bar / no furnace contents / nothing worn /
+// the origin spawn / a fresh trial / an empty hand / empty chests / an empty
+// ungranted cache — absent keys never invalidate a save on their own.
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -53,6 +55,8 @@ export class SaveManager {
     this.furnaceData = null
     this.chests = null // wired by attachChests (inventory overhaul)
     this.chestData = null
+    this.enderStore = null // wired by attachEnderStore (the King's Cache)
+    this.enderData = null
     this.armor = null // wired by attachArmor (Phase 13)
     this.armorData = null
     this.sleep = null // wired by attachSleep (bed feature)
@@ -132,6 +136,14 @@ export class SaveManager {
     chests.onChange(() => (this.dirty = true))
   }
 
+  // And for the King's Cache global store (the `enderChest` slot): called
+  // once after load() — the exact attachChests pattern.
+  attachEnderStore(store) {
+    this.enderStore = store
+    if (this.enderData !== null) store.deserialize(this.enderData)
+    store.onChange(() => (this.dirty = true))
+  }
+
   // And for worn armor (Phase 13): called once after load().
   attachArmor(armor) {
     this.armor = armor
@@ -185,6 +197,7 @@ export class SaveManager {
       this.hungerData = data.hunger ?? null
       this.furnaceData = data.furnaces ?? null
       this.chestData = data.chests ?? null
+      this.enderData = data.enderChest ?? null
       this.armorData = data.armor ?? null
       this.sleepData = data.spawn ?? null
       this.cursorData = data.cursor ?? null
@@ -211,6 +224,7 @@ export class SaveManager {
       hunger: this.hunger ? this.hunger.serialize() : (this.hungerData ?? undefined),
       furnaces: this.furnaces ? this.furnaces.serialize() : (this.furnaceData ?? undefined),
       chests: this.chests ? this.chests.serialize() : (this.chestData ?? undefined),
+      enderChest: this.enderStore ? this.enderStore.serialize() : (this.enderData ?? undefined),
       armor: this.armor ? this.armor.serialize() : (this.armorData ?? undefined),
       spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
       cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,

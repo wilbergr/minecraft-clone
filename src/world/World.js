@@ -258,7 +258,8 @@ export class World {
   // first, then each affected chunk remeshes ONCE — a blast through setBlock
   // would rebuild the same chunk dozens of times. Water and air are left
   // alone (no flow simulation to fill a carved seabed), y 0 stays solid like
-  // the cave floor, and any torches in the sphere unregister.
+  // the cave floor, `blastResistant` blocks survive, and any torches in the
+  // sphere unregister.
   //
   // Returns the carved cells as [{ x, y, z, id }] (id = the block that was
   // there) so callers can notify per-block break handlers — exploded
@@ -279,6 +280,7 @@ export class World {
           const id = this.blockAt(wx, wy, wz)
           const block = BLOCKS[id]
           if (!block || (!block.solid && !block.targetable)) continue // air/water stay
+          if (block.blastResistant) continue // e.g. the King's Cache — unrecoverable if carved
           this.#recordEdit(wx, wy, wz, BLOCK_AIR, dirty)
           carved.push({ x: wx, y: wy, z: wz, id })
         }
