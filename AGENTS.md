@@ -846,6 +846,44 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   {} })`) for floor-solid/air/air cells deep below `topSolidY`; seed 1337
   has a large one around (-60, 4, 0).
 
+## MC-style inventory: armor slots + player preview
+
+- The inventory screen is laid out MC-style: `#inventory-equip` (a vertical
+  4-slot armor column beside the live player figure) above the grids. The
+  wear slots are a REAL container adapter (`screen.armorAdapter`,
+  index-matched to `ARMOR_SLOTS`) on the shared cursor model — drag/click/
+  shift-click equip and unequip ride the exact same `stackOps` code paths as
+  every other slot. `canAccept(i, stack)` is the type gate
+  (`ITEMS[id].armor.slot === ARMOR_SLOTS[i]`): wrong-type drops stay on the
+  cursor. NOTHING is keyed by item id, so new armor tiers slot in with zero
+  changes here.
+- `Armor.setSlot(slot, piece)` is the one sanctioned direct wear-slot write
+  (the `Inventory.setSlot` convention): it emits, so the armor HUD, open
+  screens, and the save dirty flag all follow. The adapter's `set` fills in
+  `ITEMS[id].armor.durability` when a stack carries none. Right-click-equip
+  in game (`interaction.useItemHook` → `Armor.equipSelected`) is untouched;
+  `Armor.unequip` survives as API but the screen no longer calls it.
+- Shift-click: armor items in the grids quick-equip (the armor adapter is
+  prepended to `#quickTargets` when the clicked stack is armor); shift-click
+  on a wear slot sends the piece to the main grid, then the hotbar.
+- The player figure is `src/ui/playerPreview.js`: a SECOND tiny
+  `THREE.WebGLRenderer`+Scene (the main renderer owns the fullscreen canvas
+  and can't composite into a DOM panel) drawing a Mob-style box-part body.
+  Each wear slot has one overlay layer group sharing ONE material, tinted
+  from the equipped item's `tint` at refresh — tier-generic for free. Its
+  rAF loop runs ONLY while the screen is open (`start()`/`stop()` from
+  open/close); construction is try/caught so a failed second GL context
+  degrades to an empty pane, never a crash.
+- Empty wear slots show faint type glyphs via CSS `::before` on
+  `.armor-slot-<slot>.empty` — the `empty` class is toggled in
+  `screen.render()`, not by `renderSlot`.
+- Headless: `__mc.screen.preview` (`frames` counts real draws — wait for it
+  to move, it's SLOW under SwiftShader; `armorParts.<slot>.visible`,
+  `armorMaterials.<slot>.color`). Drive drags by dispatching
+  `pointerdown` on the source slot el and `pointerup` on
+  `screen.armorEls[i].el` (plus a document-level pointerup between
+  gestures); `PointerEvent` needs explicit `{ button: 0, bubbles: true }`.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

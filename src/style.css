@@ -491,10 +491,44 @@ body.touch-mode #hotbar {
   margin-top: 10px;
 }
 
-/* Worn armor (Phase 13): four wear slots set apart above the main grid. */
-.inv-armor-row {
-  grid-template-columns: repeat(4, 46px);
-  margin-bottom: 6px;
+/* Worn armor (MC layout): the four wear slots stack vertically beside the
+   live player figure, above the grids — Minecraft's inventory arrangement. */
+#inventory-equip {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 10px;
+}
+
+.inv-armor-col {
+  grid-template-columns: 46px;
+}
+
+/* The PlayerPreview render canvas (ui/playerPreview.js). */
+#player-preview {
+  width: 150px;
+  height: 210px;
+  border-radius: 6px;
+  border: 1px solid rgba(238, 242, 247, 0.15);
+  background: rgba(238, 242, 247, 0.05);
+}
+
+/* Empty wear slots hint at what they take — MC's ghost outlines. The
+   `empty` class is toggled by the screen's render. */
+.armor-slot.empty .slot-icon::before {
+  color: rgba(238, 242, 247, 0.28);
+}
+.armor-slot-head.empty .slot-icon::before {
+  content: '⌓';
+}
+.armor-slot-chest.empty .slot-icon::before {
+  content: '⛨';
+}
+.armor-slot-legs.empty .slot-icon::before {
+  content: '∏';
+}
+.armor-slot-feet.empty .slot-icon::before {
+  content: '⊔';
 }
 
 .inv-hint {
@@ -1168,8 +1202,13 @@ body.touch-mode .help-touch {
     gap: 3px;
   }
 
-  .inv-armor-row {
-    grid-template-columns: repeat(4, 34px);
+  .inv-armor-col {
+    grid-template-columns: 34px;
+  }
+
+  #player-preview {
+    width: 116px;
+    height: 162px;
   }
 
   .inv-grid .slot {
