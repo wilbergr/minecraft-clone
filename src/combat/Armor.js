@@ -92,6 +92,17 @@ export class Armor {
     return true
   }
 
+  // Direct slot write (the Inventory.setSlot convention): the ONE sanctioned
+  // way for UI adapters (the inventory screen's armor slots) to put a piece
+  // on or take it off — it emits, so the HUD, open screens, and the save
+  // dirty flag all stay in sync. `piece` is { id, durability } or null;
+  // type-checking (does this item belong in this slot?) is the caller's job
+  // via ITEMS[id].armor.slot — see the armor adapter's canAccept.
+  setSlot(slot, piece) {
+    this.slots[slot] = piece
+    this.#emit()
+  }
+
   // Take a piece off, back into the inventory. Refused when it doesn't fit.
   unequip(slot) {
     const piece = this.slots[slot]

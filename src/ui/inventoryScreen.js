@@ -4,6 +4,7 @@ import { ARMOR_SLOTS } from '../combat/Armor.js'
 import { RECIPES, canCraft, craft } from '../inventory/recipes.js'
 import { sortedStacks } from '../inventory/stackOps.js'
 import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.js'
+import { PlayerPreview } from './playerPreview.js'
 
 // The inventory screen: a full-screen overlay (E to toggle) showing every
 // inventory slot plus the crafting panel. Opening releases pointer lock so
@@ -16,9 +17,15 @@ import { createSlotEl, renderSlot, bindSlotPointer, makeSortRow } from './slots.
 // Note the crafting list counts only slotted items: a held cursor stack is
 // invisible to countOf, exactly like Minecraft.
 //
-// Armor (Phase 13): a row of four wear slots above the grid shows what's
-// equipped; clicking a worn piece takes it off (equipping happens in-game —
-// right click the piece). `armor` is optional so bare setups keep working.
+// Armor (Phase 13, MC-layout overhaul): the four wear slots are a real
+// container adapter on the same cursor model — drag a piece in to equip,
+// out to unequip, with canAccept type-checking by ITEMS[id].armor.slot
+// (generic across tiers: any future armor material slots in unchanged).
+// Shift-click equips from the grids and unequips back into them. The column
+// sits beside a live PlayerPreview figure that mirrors what's worn, MC's
+// arrangement. Right-clicking a held piece in-game still equips (the use
+// verb — untouched shortcut). `armor` is optional so bare setups keep
+// working.
 export class InventoryScreen {
   constructor(inventory, player, armor = null, cursor = null, drops = null, camera = null) {
     this.inventory = inventory
@@ -39,6 +46,30 @@ export class InventoryScreen {
       set: (i, stack) => inventory.setSlot(i, stack),
       canAccept: () => true,
     }
+
+    // The wear slots as a container adapter (index-matched to ARMOR_SLOTS):
+    // get/set translate between inventory stacks and Armor's { id, durability }
+    // pieces via Armor.setSlot (emits — HUD, save dirty flag, and this screen
+    // stay in sync). canAccept is the type gate: only the piece whose
+    // armor.slot matches lands; anything else stays on the cursor.
+    this.armorAdapter = armor
+      ? {
+          size: ARMOR_SLOTS.length,
+          get: (i) => {
+            const piece = armor.slots[ARMOR_SLOTS[i]]
+            return piece ? { id: piece.id, count: 1, durability: piece.durability } : null
+          },
+          set: (i, stack) => {
+            armor.setSlot(
+              ARMOR_SLOTS[i],
+              stack
+                ? { id: stack.id, durability: stack.durability ?? ITEMS[stack.id].armor.durability }
+                : null,
+            )
+          },
+          canAccept: (i, stack) => ITEMS[stack.id]?.armor?.slot === ARMOR_SLOTS[i],
+        }
+      : null
 
     this.#build()
     inventory.onChange(() => {
@@ -69,6 +100,7 @@ export class InventoryScreen {
     this.root.classList.remove('hidden')
     this.player.unlock()
     this.render()
+    this.preview?.start()
     this.onToggle?.(true)
   }
 
@@ -77,16 +109,33 @@ export class InventoryScreen {
     // A held stack can't leak: it returns to the inventory (overflow is
     // thrown at the player — see SlotCursor.flushInto).
     this.cursor?.flushInto(this.inventory, this.drops, this.camera)
+    this.preview?.stop()
     this.root.classList.add('hidden')
     this.player.lock()
     this.onToggle?.(false)
   }
 
-  // Shift-click rule here: hotbar ↔ main grid.
+  // Shift-click rule here: hotbar ↔ main grid — except armor, which
+  // quick-equips into its wear slot first (canAccept routes the piece; MC's
+  // shift-click-to-wear).
   #quickTargets(i) {
-    return i < INVENTORY.hotbarSlots
-      ? [{ adapter: this.invAdapter, start: INVENTORY.hotbarSlots, end: this.inventory.size }]
-      : [{ adapter: this.invAdapter, start: 0, end: INVENTORY.hotbarSlots }]
+    const targets =
+      i < INVENTORY.hotbarSlots
+        ? [{ adapter: this.invAdapter, start: INVENTORY.hotbarSlots, end: this.inventory.size }]
+        : [{ adapter: this.invAdapter, start: 0, end: INVENTORY.hotbarSlots }]
+    const stack = this.inventory.slots[i]
+    if (this.armorAdapter && stack && ITEMS[stack.id]?.armor) {
+      targets.unshift({ adapter: this.armorAdapter, start: 0, end: ARMOR_SLOTS.length })
+    }
+    return targets
+  }
+
+  // Shift-click from a wear slot: back into the grids, main grid first.
+  #armorQuickTargets() {
+    return [
+      { adapter: this.invAdapter, start: INVENTORY.hotbarSlots, end: this.inventory.size },
+      { adapter: this.invAdapter, start: 0, end: INVENTORY.hotbarSlots },
+    ]
   }
 
   #build() {
@@ -107,22 +156,31 @@ export class InventoryScreen {
     const slotsCol = document.createElement('div')
     this.slotEls = new Array(this.inventory.size)
 
-    // Equipped armor (Phase 13): a labeled 4-slot row; click to take off.
+    // Equipped armor (MC layout): a vertical column of the four wear slots
+    // beside the live player figure, above the grids — Minecraft's
+    // arrangement. Each slot is a full cursor-model slot on armorAdapter:
+    // drag/click pieces in and out like any other slot.
     if (this.armor) {
-      const armorRow = document.createElement('div')
-      armorRow.className = 'inv-grid inv-armor-row'
-      this.armorEls = ARMOR_SLOTS.map((slot) => {
+      const equipPane = document.createElement('div')
+      equipPane.id = 'inventory-equip'
+      const armorCol = document.createElement('div')
+      armorCol.className = 'inv-grid inv-armor-col'
+      this.armorEls = ARMOR_SLOTS.map((slot, i) => {
         const el = createSlotEl()
-        el.addEventListener('click', () => {
-          this.armor.unequip(slot)
+        el.classList.add('armor-slot', `armor-slot-${slot}`)
+        bindSlotPointer(el, {
+          cursor: this.cursor,
+          adapter: () => this.armorAdapter,
+          index: i,
+          quickTargets: () => this.#armorQuickTargets(),
+          gatherAdapters: () => [this.invAdapter],
         })
-        armorRow.appendChild(el)
+        armorCol.appendChild(el)
         return { slot, el }
       })
-      const label = document.createElement('p')
-      label.className = 'inv-hint'
-      label.textContent = 'Worn armor — click a piece to take it off.'
-      slotsCol.append(armorRow, label)
+      this.preview = new PlayerPreview()
+      equipPane.append(armorCol, this.preview.canvas)
+      slotsCol.appendChild(equipPane)
     }
     const makeGrid = (from, to, extraClass) => {
       const grid = document.createElement('div')
@@ -153,7 +211,7 @@ export class InventoryScreen {
     const hint = document.createElement('p')
     hint.className = 'inv-hint'
     hint.textContent =
-      'Click picks up a stack, click again to place — right click splits or places one, Shift-click moves a stack between rows, double-click gathers. Bottom row is the hotbar.'
+      'Click picks up a stack, click again to place — right click splits or places one, Shift-click moves a stack between rows, double-click gathers. Bottom row is the hotbar. Drag armor onto the figure’s slots to wear it (Shift-click also equips).'
     slotsCol.appendChild(hint)
     columns.appendChild(slotsCol)
 
@@ -208,10 +266,12 @@ export class InventoryScreen {
       renderSlot(el, this.inventory.slots[i])
     })
     if (this.armor) {
-      for (const { slot, el } of this.armorEls) {
-        const piece = this.armor.slots[slot]
-        renderSlot(el, piece ? { id: piece.id, count: 1, durability: piece.durability } : null)
-      }
+      this.armorEls.forEach(({ el }, i) => {
+        const stack = this.armorAdapter.get(i)
+        renderSlot(el, stack)
+        el.classList.toggle('empty', !stack) // CSS draws the slot-type glyph
+      })
+      this.preview?.refresh(this.armor)
     }
     for (const { recipe, button, needEls } of this.recipeEls) {
       button.disabled = !canCraft(this.inventory, recipe)
