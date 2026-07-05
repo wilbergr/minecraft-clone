@@ -30,6 +30,11 @@ export class DayNight {
     // world.lightAt multiplies it into the depth-based sky light so mob
     // spawning can ask "how dark is this cell right now" (dark-places spawn).
     this.skyBrightness = 1
+    // Visual ownership (dimension seam): while false (the Nether) the clock
+    // and skyBrightness keep advancing — game time passes down there — but
+    // the scene writes (background/fog color, lights, sprites) are skipped:
+    // the dimension controller owns the Nether's static atmosphere.
+    this.active = true
     this.#maxSunIntensity = Math.max(...DAYNIGHT.keyframes.map((k) => k[2]))
     this.sunSprite = this.#makeBillboard(DAYNIGHT.sun)
     this.moonSprite = this.#makeBillboard(DAYNIGHT.moon)
@@ -54,6 +59,7 @@ export class DayNight {
     // Sample the keyframe table around the current time.
     const [sky, sunIntensity, ambientIntensity, lightColor] = this.#sample()
     this.skyBrightness = sunIntensity / this.#maxSunIntensity
+    if (!this.active) return // suppressed (the Nether) — clock only
     this.scene.background.copy(sky)
     this.scene.fog.color.copy(sky)
     this.sunLight.intensity = sunIntensity

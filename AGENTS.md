@@ -255,7 +255,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   (block 11) y 24–72. Coal drops the `coal` item — Phase 12's
   `FUEL_SECONDS` pre-listed `coal`, so it burns in the furnace as-is.
 - Depth lighting (budget, no flood-fill): every solid face's vertex color is
-  multiplied by `skyFactor(depth)` (Chunk.js) — depth being how far the
+  multiplied by `skyFactor(depth)` (a `World` instance method since the
+  Nether — each dimension shapes its own curve) — depth being how far the
   face's AIR cell sits below its column's top solid block, so caves darken
   but a shaft dug open to the sky stays lit on remesh. Column tops are
   cached per mesh build; the 1-block border ring asks `World.topSolidY`
@@ -999,6 +1000,90 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   ledge at (15, 12, 20)). Mob-in-lava test: `mobs.spawnAt(x + .5, z + .5,
   'zombie', poolY)`, pin the returned mob, and wait for it to leave
   `mobs.mobs` with `drops.count` unchanged.
+
+## The Nether (dimension architecture, generation, portal)
+
+- **Two `World` instances, one scene.** Every world parents its chunk meshes
+  AND its sun/ambient lights under `world.root` (a per-world `THREE.Group`);
+  `src/world/Dimensions.js` travels by toggling `root.visible` — the
+  renderer skips lights in invisible subtrees, so lighting swaps with the
+  terrain in one bit. The controller also: disposes the inactive world's
+  chunks (`world.disposeChunks()` — edits persist, the queue regenerates on
+  return), reassigns `.world` on player + player.body + interaction +
+  combat + mobs + projectiles + drops + torchLights + lavaLights +
+  chestScreen (the complete list — grep `Dimensions.js` before adding a
+  world-holding system), clears mobs/projectiles/drops (none persist —
+  travel = the death/reload semantic), sets `furnaces.dim`/`chests.dim` to
+  `'N|'` (container keys are dimension-prefixed; overworld keys stay bare so
+  old saves load), and hands off fog/sky. Quest systems (hunt/challenge/
+  guidance/sleep) are DELIBERATELY not swapped: their meshes live in the
+  overworld root, their `update()` calls in main.js gate on
+  `dims.current === world`, and beds refuse the Nether.
+- **Per-world seams on `World`** (read these instead of config globals):
+  `fluid` ({id, level} — generation liquid fill + the wet-column spawn
+  guard), `skyFactor(depth)` (depth-light curve; the Nether overrides it
+  FLAT at `NETHER.lighting.minSkyLight` — under a roof everything is
+  "deep"), `hasSky` (gates the dawn burn and DayNight visual writes —
+  `daynight.active` keeps the clock ticking in the Nether but skips scene
+  writes; the dimension controller owns the static red haze), and
+  `spawnProfile` (weights/caps/light gate + a pinned `skyBrightness` —
+  EMPTY weights = spawn nothing, which is how the Nether stays quiet until
+  its mobs ship; MobManager bails on a zero-total table).
+- **NetherWorld generation contract** (`src/world/NetherWorld.js`):
+  `terrainHeight()` returns `WORLD.chunkHeight`, so EVERY cell is answered
+  by `terrainBlock` — the whole sandwich (bedrock caps, netherrack
+  shoulders, FBM floor+ceiling relief, ySquash-0.55 3D wall field, lava
+  seas at y<=26, obsidian shells, glowstone ceiling clusters, soul sand,
+  quartz) lives there as one pure function; the overworld water-fill and
+  tree paths never run. `surfaceY` is a LOAD-BEARING override: the base
+  scans top-down and would answer "on the roof"; the Nether scans bottom-up
+  above the lava level for a standable pocket. Retune with
+  `node tools/probe-nether.mjs` (includes an overworld height-checksum
+  regression — the Nether must never move an overworld block).
+- **Save**: optional keys `dimension` + `netherEdits`
+  (`attachNether`/`attachDimensions`), container maps reuse their existing
+  slots with prefixed keys — `SAVE.schemaVersion` stayed 4, old saves load
+  clean into the overworld. Nether-side torches/glowstone/portals rebuild
+  from the nether overlay like everything registry-backed.
+- **Bedrock** (block 25) debuts the generic `unbreakable` flag —
+  BlockInteraction red-flashes it beside the tier gate. Emissive CUBES
+  (glowstone, block 23) skip depth darkening in the mesher (the old check
+  only covered the torch shape path). PLACED glowstone joins the torch
+  light registry (setBlock/#recordEdit/#rebuildRegistries all gain the
+  second id) — generated clusters deliberately don't (the registry is
+  edit-backed).
+- **The portal** (block 26 + `src/world/Portals.js` + `src/fx/PortalPanels.js`):
+  the field block is non-solid, non-targetable, and NEVER MESHED (the
+  mesher skips it like a liquid); `world.portals` is the torch-registry
+  pattern verbatim, so portals need no save key and rebuild on load.
+  Ignition: flint & steel (`tool.kind 'igniter'` — matches no block; wears
+  only on success) through `interaction.useItemHook`; detection is a fixed
+  2×3 interior / 4×5 obsidian ring, both orientations, corners optional,
+  candidate cell = target + normal. Frame-break collapse: a Portals onEdit
+  subscriber on BOTH worlds re-validates the touched cluster (flood +
+  rectangle + ring check) — the `#filling` flag suppresses re-entry during
+  ignition/construction/collapse writes.
+- **Travel**: stand in the field `NETHER.portal.chargeSeconds` (camera-cell
+  test; menus pause, leaving decays, `#portal-tint` vignette + rising
+  drone). 8:1 scaling; link to an existing portal within
+  `linkRadius` (24 nether / 192 overworld) else BUILD the return portal as
+  edits near the scaled target — deterministic outward pocket search with a
+  ledge-above-the-fluid fallback (covers lava seas and ocean returns), full
+  obsidian ring, ledge stamped under unsupported cells, step-out headroom
+  carved. Construction works with ZERO chunks loaded (blockAt/setBlock +
+  overlay). `justArrived` latches on arrival (and at boot, so a save
+  restored inside a field never auto-travels) and clears when the camera
+  leaves the field. Death in the Nether → overworld respawn
+  (`dims.travel('overworld')` in the bindHud respawn handler, before
+  `combat.respawn`).
+- Headless: `__mc.dims` (`.current/.overworld/.nether/.travel(name, feet?)`),
+  `__mc.portals` (`travelCount`, `tryIgnite`), `__mc.portalPanels`
+  (`.count`), `__mc.world` is now a GETTER for `dims.current`. Shrink
+  `__mc.config.NETHER.portal.chargeSeconds` before charge tests; always
+  pass `feet` to a bare `dims.travel('nether', …)` (keeping overworld
+  coordinates means a lethal fall); sound counters `ignite`/`portalCharge`/
+  `portalTravel`/`netherAmbience`. Nether floor near origin on seed 1337:
+  the arrival pocket is (0, 57, 0).
 
 ## Sharp edges
 

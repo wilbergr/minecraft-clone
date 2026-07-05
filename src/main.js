@@ -2,6 +2,10 @@ import * as THREE from 'three'
 import * as config from './config.js'
 import { BREATH, CHALLENGE, GRAPHICS, HUNGER, LAVA, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
+import { NetherWorld } from './world/NetherWorld.js'
+import { Dimensions } from './world/Dimensions.js'
+import { Portals } from './world/Portals.js'
+import { PortalPanels } from './fx/PortalPanels.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { TouchControls } from './player/TouchControls.js'
@@ -69,13 +73,20 @@ const camera = new THREE.PerspectiveCamera(
 )
 
 const world = new World(scene)
+// The Nether (second dimension): a sibling World in the same scene, its root
+// invisible until the dimension controller (constructed below, once every
+// world-holding system exists) swaps it in.
+const nether = new NetherWorld(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
 
 // Sky layer (Phase 10): the day/night clock drives lights, sky/fog color,
-// and the sun/moon billboards; clouds drift as one merged mesh.
+// and the sun/moon billboards; clouds drift as one merged mesh. The sky
+// bodies and clouds are OVERWORLD furniture — parenting them under its root
+// makes them vanish with it in the Nether.
 const daynight = new DayNight(scene, world, camera)
 const clouds = new Clouds(scene)
+world.root.add(daynight.sunSprite, daynight.moonSprite, clouds.mesh)
 
 // Torch lighting (Phase 11): a fixed point-light pool tracks the torches
 // nearest the camera — see src/fx/TorchLights.js.
@@ -100,7 +111,10 @@ const combat = new Combat(camera, world, player, inventory, interaction, scene, 
 fx.health = combat.health
 combat.mobs.daynight = daynight // hostile spawns are night-gated (Phase 10)
 fx.viewmodel = new Viewmodel(camera, inventory, player)
-const hunt = new TreasureHunt(world, scene)
+// Quest systems are overworld-bound (dimension seam): their meshes parent
+// under the overworld root so they vanish in the Nether, their world ref is
+// never swapped, and their update() calls below gate on the active dimension.
+const hunt = new TreasureHunt(world, world.root)
 
 // Survival loop (Phase 12): hunger gates health regen and starves down to a
 // floor; furnaces smelt ore/meat over time and spill their contents when
@@ -157,16 +171,7 @@ bindSlotTooltips()
 
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
-// Load guard (lava feature): a save written before lava existed can restore
-// the player inside a newly-flooded cave bottom — burning from frame one is
-// a bad beat. blockAt answers from the generator + edit overlay even before
-// chunks exist, so the check is correct here; teleport up to the surface.
-{
-  const p = player.body.position
-  if (world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === BLOCK_LAVA) {
-    player.teleport(p.x, world.surfaceY(p.x, p.z), p.z)
-  }
-}
+save.attachNether(nether) // the Nether's edit overlay, before its first chunk
 save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
@@ -180,7 +185,8 @@ save.attachSleep(sleep)
 // The King's Trial (endgame): the four-stage challenge chain, unlocked by
 // treasure-hunt completion. Constructed after attachTreasure so it sees the
 // restored hunt state; its own progress rides the optional `challenge` slot.
-const challenge = new Challenge(world, scene, hunt, inventory)
+// Overworld-bound like the hunt: its meshes live in the overworld root.
+const challenge = new Challenge(world, world.root, hunt, inventory)
 save.attachChallenge(challenge)
 challenge.onCollect = (relic) => {
   sounds.play('pickup')
@@ -250,7 +256,16 @@ challenge.onBossDefeated = (pos) => {
 }
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
+// Flint & steel (N3): the igniter tool claims the use verb — a successful
+// strike lights the targeted obsidian frame (portals is constructed below;
+// the hook only fires at runtime, well after boot wiring completes).
 interaction.useItemHook = (item) => {
+  if (item.tool?.kind === 'igniter') {
+    if (interaction.target && portals.tryIgnite(dims.current, interaction.target)) {
+      inventory.damageSelected() // wears only when a portal actually lights
+    }
+    return true // the click is spent either way — igniters never place/eat
+  }
   if (!item.armor || !combat.armor.equipSelected()) return false
   sounds.play('equip')
   return true
@@ -261,6 +276,62 @@ combat.armor.onBreak = () => sounds.play('toolBreak')
 const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drops, camera)
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
 const chestScreen = new ChestScreen(chests, inventory, player, world, cursor, drops, camera, sounds)
+
+// The dimension controller (the Nether): owns { overworld, nether, current }
+// and the travel swap — every world-holding system above is on its list.
+// Constructed here because it needs them all; the saved dimension is applied
+// right away (before the first frame), so a save made in the Nether loads
+// straight back into it — position was already restored by save.load().
+const dims = new Dimensions({
+  overworld: world,
+  nether,
+  scene,
+  player,
+  interaction,
+  combat,
+  drops,
+  torchLights,
+  lavaLights,
+  furnaces,
+  chests,
+  chestScreen,
+  daynight,
+})
+save.attachDimensions(dims)
+if (save.dimensionData === 'nether') dims.travel('nether')
+
+// The portal (N3): frame ignition, the stand-in-the-field charge, 8:1
+// linked travel, and the translucent field panels. The vignette rides its
+// own DOM layer; sounds/particles wire through the hooks.
+const portals = new Portals(dims, player, camera)
+const portalPanels = new PortalPanels(scene, dims, particles)
+const portalTint = document.getElementById('portal-tint')
+portals.onChargeStart = () => sounds.play('portalCharge')
+portals.onCharge = (fraction) => {
+  portalTint.style.opacity = fraction
+}
+portals.onTravel = () => sounds.play('portalTravel')
+portals.onIgnite = (ok, x, y, z) => {
+  if (ok) {
+    sounds.play('ignite')
+    particles.burst(x + 1, y + 1.5, z + 0.5, config.NETHER.portal.panel.color, 40)
+  } else {
+    // The strike fizzles — a few sparks, no sound of catching.
+    particles.burst(x + 0.5, y + 0.5, z + 0.5, 0xffc86e, 6)
+  }
+}
+// Load guard (lava feature): a save written before lava existed can restore
+// the player inside a newly-flooded cave bottom — burning from frame one is
+// a bad beat. blockAt answers from the generator + edit overlay even before
+// chunks exist, so the check is correct here; teleport up to the walkable
+// surface of whichever dimension the player restored into.
+{
+  const p = player.body.position
+  const w = dims.current
+  if (w.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === BLOCK_LAVA) {
+    player.teleport(p.x, w.surfaceY(p.x, p.z), p.z)
+  }
+}
 // Use dispatcher for right clicks on blocks (touch ▦ too, sneak bypasses):
 // handlers keyed by block id, each returning true when the click was spent.
 // New interactive blocks register here — mark the block `interactive: true`
@@ -272,7 +343,15 @@ const blockUseHandlers = {
     furnaceScreen.openAt(x, y, z)
     return true
   },
-  [BLOCK_BED]: (x, y, z) => sleep.tryAt(x, y, z),
+  // Beds are overworld furniture: sleeping (and spawn-setting) is refused in
+  // the Nether — the respawn point is overworld logic through and through.
+  [BLOCK_BED]: (x, y, z) => {
+    if (dims.current !== world) {
+      sleep.onMessage?.('The bed refuses this place — sleep under an open sky')
+      return true
+    }
+    return sleep.tryAt(x, y, z)
+  },
   [BLOCK_CHEST]: (x, y, z) => {
     chestScreen.openAt(x, y, z)
     return true
@@ -309,19 +388,22 @@ interaction.onBlockBroken = (x, y, z, block) => blockBreakHandlers[block.id]?.(x
 // onEdit. Explosions report once at the blast center, so the carved cells
 // are swept below via onBlocksExploded — interior cells no-op (the cell
 // above them was carved too), leaving exactly the sphere's top shell.
-const popAttachmentAbove = (x, y, z) => {
-  if (isSolid(world.blockAt(x, y, z))) return
-  const above = BLOCKS[world.blockAt(x, y + 1, z)]
+const popAttachmentIn = (w) => (x, y, z) => {
+  if (isSolid(w.blockAt(x, y, z))) return
+  const above = BLOCKS[w.blockAt(x, y + 1, z)]
   if (!above || above.solid || above.targetable !== true) return
-  world.setBlock(x, y + 1, z, BLOCK_AIR)
+  w.setBlock(x, y + 1, z, BLOCK_AIR)
   if (above.drop) drops.spawn(x + 0.5, y + 1.7, z + 0.5, above.drop)
   sounds.play('break', { material: above.material })
 }
-world.onEdit(popAttachmentAbove)
+// Each world pops its own attachments (edits only ever happen in the world
+// they belong to, so the handlers never cross).
+world.onEdit(popAttachmentIn(world))
+nether.onEdit(popAttachmentIn(nether))
 combat.mobs.onBlocksExploded = (cells) => {
   for (const c of cells) {
     blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
-    popAttachmentAbove(c.x, c.y, c.z)
+    popAttachmentIn(dims.current)(c.x, c.y, c.z)
   }
 }
 const reveal = bindTreasureReveal(hunt, player)
@@ -347,6 +429,7 @@ bindBackdropDrop(furnaceScreen.root, cursor, drops, camera)
 bindBackdropDrop(chestScreen.root, cursor, drops, camera)
 bindHotbar(inventory, player)
 bindHud(combat.health, () => {
+  dims.travel('overworld') // death in the Nether respawns under the sky
   combat.respawn()
   hunger.reset() // fresh spawn, fresh appetite
   breath.reset() // and fresh lungs — a drowning death can't respawn gasping
@@ -358,7 +441,7 @@ bindArmorHud(combat.armor)
 bindSleepFx(sleep, sounds)
 bindResetButton(save)
 const toggleQuestLog = bindQuestLog(hunt, challenge)
-const updateTreasureHud = bindTreasureHud(hunt, challenge, camera)
+const updateTreasureHud = bindTreasureHud(hunt, challenge, camera, () => dims.current === world)
 // Closing the screen re-locks the pointer; give the lock a beat to land
 // before re-evaluating, so "click to play" only appears if it failed.
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -375,7 +458,7 @@ chestScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOv
 // challengeReveal modal). It also takes over challenge.onToast: every trial
 // message rides the queued Herald banner, not the single-slot toast.
 const guidance = bindGuidance({
-  scene,
+  scene: world.root, // overworld-bound — Herald/stele vanish in the Nether
   world,
   camera,
   player,
@@ -421,7 +504,7 @@ combat.health.onChange((h) => {
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('button')) sounds.play('click')
 })
-const updateFootsteps = createFootsteps(sounds, player, camera, world)
+const updateFootsteps = createFootsteps(sounds, player, camera, () => dims.current)
 
 // Coarse-pointer devices get the joystick/touch scheme instead of pointer
 // lock; on desktop this is a no-op and the touch UI never exists.
@@ -457,7 +540,7 @@ const lavaFogColor = new THREE.Color(LAVA.fog.color)
 let liquid = 0 // camera-cell liquid block id, 0 while surfaced
 const updateUnderwater = () => {
   const p = camera.position
-  const id = world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))
+  const id = dims.current.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))
   const now = isLiquid(id) ? id : 0
   if (now !== liquid) {
     // Surface-crossing feedback (louder going in): splash + spray for
@@ -488,8 +571,13 @@ const updateUnderwater = () => {
     scene.fog.far = LAVA.fog.far
     scene.fog.color.lerp(lavaFogColor, LAVA.fog.colorBlend)
   } else {
-    scene.fog.near = GRAPHICS.fogNear
-    scene.fog.far = GRAPHICS.fogFar
+    // Surfaced: restore the current dimension's baseline. The overworld
+    // leaves the color to DayNight (base.color null); the Nether's static
+    // red is re-asserted here since nothing else repaints it.
+    const base = dims.baseFog()
+    scene.fog.near = base.near
+    scene.fog.far = base.far
+    if (base.color !== null) scene.fog.color.setHex(base.color)
   }
 }
 
@@ -511,10 +599,22 @@ const updateLavaAmbience = (delta) => {
   particles.burst(c.x + 0.5, c.y + 1, c.z + 0.5, LAVA.ember.color, LAVA.pops.embers)
 }
 
+// Nether ambience (N2): a sparse low swell while the Nether is current —
+// the lava-pops timer pattern, gated on being in control like every ambience.
+let netherAmbienceTimer = 0 // first swell greets the first arrival
+const updateNetherAmbience = (delta) => {
+  if (!player.isLocked || dims.current !== nether) return
+  netherAmbienceTimer -= delta
+  if (netherAmbienceTimer > 0) return
+  const { minSeconds, maxSeconds } = config.NETHER.ambience
+  netherAmbienceTimer = minSeconds + Math.random() * (maxSeconds - minSeconds)
+  sounds.play('netherAmbience')
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
-  world.update(camera.position)
+  dims.current.update(camera.position) // stream chunks for the active dimension
   player.update(delta)
   interaction.update(delta)
   combat.update(delta)
@@ -537,9 +637,14 @@ renderer.setAnimationLoop(() => {
     })
   }
   if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
-  hunt.update(delta, camera.position)
-  challenge.update(delta, camera.position)
-  guidance.update(delta, camera.position)
+  // Quest systems are overworld-bound: their targets, meshes, and proximity
+  // checks are overworld coordinates, so they idle while the Nether is
+  // current (the compass HUD hides through its own isActive gate).
+  if (dims.current === world) {
+    hunt.update(delta, camera.position)
+    challenge.update(delta, camera.position)
+    guidance.update(delta, camera.position)
+  }
   particles.update(delta)
   drops.update(delta, camera.position)
   fx.viewmodel.update(delta)
@@ -549,8 +654,11 @@ renderer.setAnimationLoop(() => {
   clouds.update(delta, camera.position)
   torchLights.update(camera.position)
   lavaLights.update(camera.position)
+  portals.update(delta)
+  portalPanels.update(delta, camera.position)
   updateUnderwater()
   updateLavaAmbience(delta)
+  updateNetherAmbience(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)
@@ -562,7 +670,14 @@ window.__mc = {
   scene,
   camera,
   player,
-  world,
+  // "The world I'm standing in" — tests already treat it that way, so it
+  // follows the active dimension; __mc.dims exposes both worlds + travel.
+  get world() {
+    return dims.current
+  },
+  dims,
+  portals,
+  portalPanels,
   interaction,
   renderer,
   inventory,

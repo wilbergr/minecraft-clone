@@ -10,7 +10,9 @@ import { cardinal8 } from '../treasure/TreasureHunt.js'
 // anchor); it hides only when neither quest has an objective. Returns an
 // update() for the main loop: the arrow needs the camera every frame, but
 // text only touches the DOM when it changes.
-export function bindTreasureHud(hunt, challenge, camera) {
+// `isActive` (dimension seam): compass targets are overworld coordinates, so
+// the strip hides entirely while another dimension is current.
+export function bindTreasureHud(hunt, challenge, camera, isActive = () => true) {
   const compass = document.getElementById('compass')
   compass.innerHTML =
     '<span id="compass-arrow" aria-hidden="true">▲</span><span id="compass-text"></span>'
@@ -37,7 +39,7 @@ export function bindTreasureHud(hunt, challenge, camera) {
   let lastText = ''
   const forward = new THREE.Vector3()
   return function update() {
-    const target = hunt.activeToken ?? challenge.compassTarget
+    const target = isActive() ? (hunt.activeToken ?? challenge.compassTarget) : null
     compass.classList.toggle('hidden', !target)
     if (!target) return
 

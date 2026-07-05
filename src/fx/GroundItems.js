@@ -202,6 +202,12 @@ export class GroundItems {
     return 0
   }
 
+  // Remove every live drop (dimension travel: drops never cross — items in
+  // the shared scene would otherwise float visibly in the other world).
+  clear() {
+    while (this.items.length) this.#remove(this.items.length - 1)
+  }
+
   #materialFor(item) {
     let material = this.materialCache.get(item.id)
     if (!material) {

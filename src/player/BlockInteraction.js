@@ -148,6 +148,13 @@ export class BlockInteraction {
     const tool = this.inventory.selectedItem?.tool ?? null
     const toolMatches = tool && tool.kind === block.tool?.kind
 
+    // Unbreakable blocks (bedrock — the Nether's floor/roof shell) flash the
+    // same "can't break this" red as a missing tool tier.
+    if (block.unbreakable) {
+      this.gatedFlashUntil = now + COMBAT.mining.gatedFlashSeconds
+      this.#resetMining()
+      return false
+    }
     if (block.tool?.minTier > 0 && (!toolMatches || tool.tier < block.tool.minTier)) {
       this.gatedFlashUntil = now + COMBAT.mining.gatedFlashSeconds
       this.#resetMining()

@@ -1,21 +1,12 @@
 import * as THREE from 'three'
 import { LAVA, LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_WATER, isSolid } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_PORTAL, BLOCK_WATER, isSolid } from './blocks.js'
 import { uvRect } from './atlas.js'
 
 // Warm vertex-color floor for solid faces directly exposed to lava (lava
 // feature): brighter than any cave depth factor, so pool floors and walls
 // read hot at zero runtime cost. Parsed once — config colors are static.
 const LAVA_FACE_TINT = new THREE.Color(LIGHTING.lava.faceTint)
-
-// Sky-light factor [minSkyLight, 1] for an air cell `depth` blocks below its
-// column's top solid block (<= 0 means open sky). The Phase 11 budget depth
-// lighting: multiplied into vertex colors at mesh time — no light propagation.
-export function skyFactor(depth) {
-  const { falloffBlocks, minSkyLight } = LIGHTING.depth
-  if (depth <= 0) return 1
-  return Math.max(minSkyLight, 1 - depth / falloffBlocks)
-}
 
 // One face per entry: outward direction, the 4 quad corners (in block-local
 // 0..1 coords, wound so triangles (0,1,2)+(2,1,3) face outward), and a baked
@@ -106,11 +97,12 @@ export class Chunk {
             baseX + x, y, baseZ + z, h, biome,
           )
         }
-        // Sea water (Phase 10): air below the waterline fills with water.
-        // Mirrors World.blockAt's unloaded-chunk answer, keeping generation a
-        // pure function of (seed, x, y, z) so border meshing stays correct.
-        for (let y = h; y <= WATER.level; y++) {
-          this.blocks[this.index(x, y, z)] = BLOCK_WATER
+        // Liquid fill (Phase 10 sea water, per-world since the Nether): air
+        // below the world's fluid level fills with its fluid. Mirrors
+        // World.blockAt's unloaded-chunk answer, keeping generation a pure
+        // function of (seed, x, y, z) so border meshing stays correct.
+        for (let y = h; y <= this.world.fluid.level; y++) {
+          this.blocks[this.index(x, y, z)] = this.world.fluid.id
         }
       }
     }
@@ -189,8 +181,10 @@ export class Chunk {
       for (let z = 0; z < this.size; z++) {
         for (let y = 0; y < this.height; y++) {
           const id = this.blocks[this.index(x, y, z)]
-          // Liquids have their own passes (water below, lava after it).
-          if (id === BLOCK_AIR || id === BLOCK_WATER || id === BLOCK_LAVA) continue
+          // Liquids have their own passes (water below, lava after it); the
+          // portal field is never meshed at all — it renders as registry-
+          // driven scene panels (src/fx/PortalPanels.js).
+          if (id === BLOCK_AIR || id === BLOCK_WATER || id === BLOCK_LAVA || id === BLOCK_PORTAL) continue
           const block = BLOCKS[id]
           if (block.shape === 'torch') {
             this.#emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color)
@@ -199,7 +193,7 @@ export class Chunk {
           if (block.shape === 'bed') {
             // Beds aren't emissive, so unlike torches they take the depth
             // darkening of their own cell (one factor for the whole box).
-            const light = skyFactor(this.#colTop(x, z, baseX, baseZ, colTops) - y)
+            const light = this.world.skyFactor(this.#colTop(x, z, baseX, baseZ, colTops) - y)
             this.#emitBed(positions, normals, colors, uvs, indices, x, y, z, block, color, light)
             continue
           }
@@ -215,9 +209,11 @@ export class Chunk {
               // paint it lava-lit instead of cave-dark — mesh-time, radius
               // 1 only, the Phase 11 no-flood-fill budget rule.
               color.multiply(LAVA_FACE_TINT)
-            } else {
+            } else if (!block.emissive) {
+              // Emissive cubes (glowstone) skip depth darkening — the block
+              // is the thing making the light, the torch rule.
               const top = this.#colTop(x + dx, z + dz, baseX, baseZ, colTops)
-              color.multiplyScalar(skyFactor(top - (y + dy)))
+              color.multiplyScalar(this.world.skyFactor(top - (y + dy)))
             }
             if (block.biomeTint === 'all' || (block.biomeTint === 'top' && dy === 1)) {
               const biome = this.#biome(x, z, baseX, baseZ, biomes)

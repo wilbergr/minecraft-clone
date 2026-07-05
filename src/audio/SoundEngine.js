@@ -203,6 +203,25 @@ export class SoundEngine {
         this.#tone({ type: 'sine', from: 150, to: 55, dur: 0.18, gain: 0.35 * v })
         this.#burst({ type: 'bandpass', freq: 750, dur: 0.06, gain: 0.2 * v })
         break
+      case 'ignite': // flint strike — sharp scrape + a whoosh catching
+        this.#burst({ type: 'highpass', freq: 3000, dur: 0.08, gain: 0.4 * v })
+        this.#burst({ type: 'bandpass', freq: 900, dur: 0.35, gain: 0.35 * v, when: 0.08 })
+        this.#tone({ type: 'sine', from: 180, to: 320, dur: 0.3, gain: 0.15 * v, when: 0.08 })
+        break
+      case 'portalCharge': // eerie rising drone — the field taking hold
+        this.#tone({ type: 'sine', from: 110, to: 440, dur: 3.0, gain: 0.2 * v })
+        this.#tone({ type: 'triangle', from: 165, to: 660, dur: 3.0, gain: 0.1 * v })
+        break
+      case 'portalTravel': // deep crossing whoosh + a shimmer on top
+        this.#burst({ type: 'lowpass', freq: 400, dur: 1.0, gain: 0.7 * v })
+        this.#tone({ type: 'sine', from: 500, to: 60, dur: 0.9, gain: 0.35 * v })
+        this.#tone({ type: 'sine', from: 880, to: 1760, dur: 0.6, gain: 0.12 * v, when: 0.15 })
+        break
+      case 'netherAmbience': // a long low cavern swell — distant, hollow, warm
+        this.#burst({ type: 'lowpass', freq: 220, dur: 3.2, gain: 0.22 * v })
+        this.#tone({ type: 'sine', from: 55, to: 38, dur: 3.0, gain: 0.16 * v })
+        this.#tone({ type: 'triangle', from: 82, to: 66, dur: 2.4, gain: 0.08 * v, when: 0.6 })
+        break
       case 'trialComplete': // three ascending chimes — the rite fulfilled
         this.#tone({ type: 'sine', from: 440, to: 442, dur: 0.5, gain: 0.25 * v })
         this.#tone({ type: 'sine', from: 554, to: 556, dur: 0.5, gain: 0.25 * v, when: 0.22 })

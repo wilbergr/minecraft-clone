@@ -886,6 +886,80 @@ export const LAVA = {
   pops: { radius: 14, minSeconds: 1, maxSeconds: 3, embers: 3 },
 }
 
+// The Nether (second dimension): a NetherWorld instance beside the overworld
+// (src/world/NetherWorld.js) swapped by the dimension controller
+// (src/world/Dimensions.js). Everything Nether-shaped lives here — the
+// static atmosphere, the flat visibility floor, the per-world spawn profile,
+// and (N2) the cavern generator's knobs.
+export const NETHER = {
+  skyColor: 0x1a0808, // static dark-red haze — scene background under the roof
+  // Tighter than the overworld's 18/46: hides the roof, sells the scale.
+  fog: { near: 12, far: 40, color: 0x1a0808 },
+  lighting: {
+    // Flat depth-light floor: every face under the roof renders at this
+    // factor (the overworld's falloff curve would pin the whole dimension
+    // at the 0.15 cave minimum). Glowstone/lava/torches carve brightness up
+    // from here.
+    minSkyLight: 0.35,
+    ambientIntensity: 0.55,
+    ambientColor: 0xffd9c8, // warm — everything reads ember-lit
+  },
+  // Per-world hostile spawn profile (MobManager reads it off the world).
+  // Weights are EMPTY until Nether mobs ship (N5) — MobManager treats a
+  // zero-total table as "spawn nothing", so the dimension stays quiet
+  // without touching the spawner.
+  spawn: {
+    weights: {},
+    maxCount: 6,
+    maxLight: 0.4, // sits above the visibility floor — darkness isn't the gate down here
+  },
+  // Ambience: a sparse low swell while in the dimension (the lava-pops
+  // timer pattern, main.js).
+  ambience: { minSeconds: 15, maxSeconds: 25 },
+  // The portal (N3, src/world/Portals.js): a fixed 2×3 interior inside a
+  // 4×5 obsidian ring (corners optional), lit with flint & steel. Standing
+  // in the field charges the timer, then travel at 8:1 coordinate scale —
+  // an existing portal within linkRadius of the scaled target links,
+  // otherwise a return portal is BUILT there as ordinary edits.
+  portal: {
+    frameBlockId: 20, // obsidian
+    blockId: 26, // the portal-field block (never meshed — registry-rendered)
+    interior: { width: 2, height: 3 },
+    chargeSeconds: 3, // stand in the field this long (leaving decays it)
+    scale: 8, // 1 nether block = this many overworld blocks
+    linkRadius: { overworld: 192, nether: 24 }, // same 8:1 ratio
+    searchRadius: 24, // safe-pocket column search around the scaled target
+    ledgeBlockId: { overworld: 2, nether: 21 }, // dirt / netherrack under a built frame
+    panel: { color: 0x9a4dd8, opacity: 0.55 }, // the translucent field planes
+    shimmer: { intervalSeconds: 0.6, color: 0xb06ae8, count: 2, radius: 24 },
+  },
+  // The cavern sandwich (probe-tuned — retune with `node
+  // tools/probe-nether.mjs` after touching anything here): bedrock caps,
+  // solid netherrack shoulders, FBM floor + ceiling relief with an open
+  // band between, re-solidified by a vertically-STRETCHED 3D wall field
+  // (overworld caves squash 1.7 into tunnels; 0.55 stretches walls into
+  // pillars and curtains). All pure functions of (WORLD.seed, x, y, z).
+  terrain: {
+    bedrock: { floor: 2, roof: 94 }, // y < floor / y >= roof: unbreakable shell
+    shoulders: { floor: 4, roof: 88 }, // solid netherrack outside the open band
+    floor: { seedSalt: 0x6e01, base: 34, amplitude: 22, frequency: 1 / 48, octaves: 3, lacunarity: 2, gain: 0.5 },
+    ceiling: { seedSalt: 0x6e02, base: 76, amplitude: 10, frequency: 1 / 64, octaves: 2, lacunarity: 2, gain: 0.5 },
+    walls: { seedSalt: 0x6e03, frequency: 1 / 26, ySquash: 0.55, threshold: 0.6 },
+    // Open cavern cells at or below this height flood with lava — the
+    // Nether's seas, reusing the lava feature's rendering/damage wholesale.
+    // Solid cells touching a sea crust into obsidian (the overworld rule).
+    lava: { level: 26 },
+    // Quartz ore: netherrack-body roll (first-hit like the overworld ore
+    // bands) — roughly iron-abundance across a much taller band.
+    quartz: { salt: 0x6e04, chance: 0.02, minY: 8, maxY: 80 },
+    // Glowstone: hash-seeded teardrop clusters hanging from the ceiling
+    // (the tree-canopy mirror-stamp pattern) — a lit landmark ~per chunk.
+    glowstone: { salt: 0x6e05, chance: 0.004 },
+    // Soul sand: floor-surface patches in low basins near the seas.
+    soulSand: { salt: 0x6e06, chance: 0.28, basinAbove: 6 },
+  },
+}
+
 // Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as
 // health) drained by time, sprinting, and mining. Health regen is gated on
 // being well-fed (Health.regenGate, wired in main.js); at zero hunger the

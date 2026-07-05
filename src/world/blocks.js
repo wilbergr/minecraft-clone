@@ -296,6 +296,92 @@ export const BLOCKS = {
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 4 }, // diamond only
   },
+  21: {
+    id: 21,
+    name: 'Netherrack',
+    // The Nether's body rock: soft (mines fast, MC-authentic) but still
+    // pickaxe-gated so bare hands can't tunnel the dimension.
+    solid: true,
+    color: { top: 0x7a3230, side: 0x6e2c2a, bottom: 0x612624 },
+    tex: { top: 'netherrack', side: 'netherrack', bottom: 'netherrack' },
+    drop: 'netherrack',
+    hardness: 0.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
+  22: {
+    id: 22,
+    name: 'Soul Sand',
+    // Basin-floor patches near the lava seas. The MC slowdown mechanic is
+    // deferred (N4 polish) — for now it is flavor terrain that drops itself.
+    solid: true,
+    color: { top: 0x584434, side: 0x503d2f, bottom: 0x48372a },
+    tex: { top: 'soul_sand', side: 'soul_sand', bottom: 'soul_sand' },
+    drop: 'soul_sand',
+    hardness: 0.4,
+    material: 'sand',
+    tool: { kind: 'shovel', minTier: 0 },
+  },
+  23: {
+    id: 23,
+    name: 'Glowstone',
+    // Ceiling-cluster light source. `emissive` exempts its faces from depth
+    // darkening (the torch rule); PLACED glowstone also registers in the
+    // torch light registry (World.setBlock) so it feeds the point-light
+    // pool and lightAt spawn suppression — generated clusters are visual
+    // landmarks only (the registry is edit-backed).
+    solid: true,
+    emissive: true,
+    color: { top: 0xffd98a, side: 0xf5c96e, bottom: 0xe8b855 },
+    tex: { top: 'glowstone', side: 'glowstone', bottom: 'glowstone' },
+    drop: 'glowstone',
+    hardness: 0.3,
+    material: 'stone',
+  },
+  24: {
+    id: 24,
+    name: 'Quartz Ore',
+    solid: true,
+    // Netherrack flecked white — drops the quartz gem directly (the
+    // coal/diamond convention; quartz never smelts).
+    color: { top: 0x9a6a60, side: 0x8e5f56, bottom: 0x82554c },
+    tex: { top: 'quartz_ore', side: 'quartz_ore', bottom: 'quartz_ore' },
+    drop: 'quartz',
+    hardness: 3,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
+  25: {
+    id: 25,
+    name: 'Bedrock',
+    // The Nether's unbreakable floor/roof shell: no void falls, no
+    // roof-walking. `unbreakable` is a generic gate in BlockInteraction's
+    // mining path (beside the tool-tier gate); blastResistant keeps
+    // explosions honest too. Deliberately absent from the overworld — its
+    // mine-to-the-void floor stays as-is.
+    solid: true,
+    unbreakable: true,
+    blastResistant: true,
+    color: { top: 0x4a4a4a, side: 0x444444, bottom: 0x3e3e3e },
+    tex: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' },
+    drop: null,
+    hardness: Infinity,
+    material: 'stone',
+  },
+  26: {
+    id: 26,
+    name: 'Nether Portal',
+    // The portal field (N3): non-solid AND non-targetable — walked through,
+    // never aimed at, never mined (break the obsidian frame instead), and
+    // NEVER MESHED (the chunk mesher skips it like a liquid; it has no
+    // tex). It renders as translucent scene panels driven by the
+    // world.portals registry (src/fx/PortalPanels.js), which setBlock keeps
+    // in lockstep with the edit overlay exactly like torches. No item —
+    // created by flint-&-steel ignition only.
+    solid: false,
+    color: { top: 0x9a4dd8, side: 0x9a4dd8, bottom: 0x9a4dd8 },
+    drop: null,
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -306,6 +392,12 @@ export const BLOCK_CHEST = 16
 export const BLOCK_KINGS_CACHE = 17
 export const BLOCK_LAVA = 19
 export const BLOCK_OBSIDIAN = 20
+export const BLOCK_NETHERRACK = 21
+export const BLOCK_SOUL_SAND = 22
+export const BLOCK_GLOWSTONE = 23
+export const BLOCK_QUARTZ_ORE = 24
+export const BLOCK_BEDROCK = 25
+export const BLOCK_PORTAL = 26
 
 export function isSolid(id) {
   const block = BLOCKS[id]
