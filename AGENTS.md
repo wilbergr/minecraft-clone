@@ -897,6 +897,33 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `screen.armorEls[i].el` (plus a document-level pointerup between
   gestures); `PointerEvent` needs explicit `{ button: 0, bubbles: true }`.
 
+## Diamond tier (top material tier)
+
+- Diamond ore is block 18: a new FIRST row in `WORLD.terrain.ores` (deepest
+  band y 1–12, chance 0.008 — rarer than gold; bands stay ordered deep →
+  shallow, first hit wins). It gates on `pickaxe minTier: 3` (iron+) like
+  gold, and drops the `diamond` gem item directly (coal-style, no smelting).
+  Retune with `node tools/probe-diamond.mjs` (the probe-ocean/cave pattern:
+  scene-stub World, asserts in-band + rarer-than-gold, exits 1 on failure).
+- Tier 4 = diamond everywhere tiers are keyed: `COMBAT.attack.swordDamage[4]`
+  8, `toolDurability[4]` 512, `armorDurability.diamond` 384, `TIER_TINT[4]`
+  cyan. Mining speed needed no code — `speedPerTier` is linear in tier. A
+  diamond pickaxe mines every gated block (the highest gate is minTier 3).
+- Full diamond armor is 3/8/6/3 = 20 points — exactly
+  `COMBAT.armor.maxReduction` (0.8) at 0.04/point, so the set IS the cap;
+  don't add points above it, they'd be dead weight.
+- The diamond shovel debuts the `shovel` tool kind: grass/dirt/sand/snow name
+  it at `minTier: 0` (the axe-on-wood pattern — speed-only, hands still
+  work), so it can never break pickaxe-gated blocks (kind mismatch) and no
+  lower-tier shovels exist (deliberate: diamond-task scope). Viewmodel has a
+  shovel head branch — unknown tool kinds otherwise render as axes.
+- All additions are additive: no new save keys, `SAVE.schemaVersion` stayed
+  4 (adding an ore band changes some deep stone cells but never heights or
+  quest placement, so old saves keep loading). Headless sharp edge: the
+  interval autosave (`SaveManager.update`) does NOT check `save.enabled` —
+  a test that plants a hand-written save before `page.goto` must also stub
+  `__mc.save.save = () => {}` or a locked-pointer autosave tick overwrites it.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

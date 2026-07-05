@@ -423,6 +423,7 @@ export const WORLD = {
     // Ore bands (Phase 11, MC-style depth tiers): deep stone rolls against
     // each band in order — first hit wins — so overlapping bands stay cheap.
     ores: [
+      { blockId: 18, chance: 0.008, minY: 1, maxY: 12, salt: 0xd1a3 }, // diamond: deepest + rarest
       { blockId: 12, chance: 0.018, minY: 1, maxY: 16, salt: 0x601d }, // gold: deep + rare
       { blockId: 8, chance: 0.045, minY: 4, maxY: 40, salt: 0x1e55 }, // iron: mid band
       { blockId: 11, chance: 0.06, minY: 24, maxY: 72, salt: 0xc0a1 }, // coal: shallow + common
@@ -540,7 +541,7 @@ export const COMBAT = {
     cooldownSeconds: 0.35, // min time between player attacks
     handDamage: 1, // bare hands / non-tool items
     toolDamage: 2, // pickaxes and axes (any tier) — better than a fist
-    swordDamage: { 1: 4, 2: 5, 3: 7 }, // by tool tier (wood/stone/iron)
+    swordDamage: { 1: 4, 2: 5, 3: 7, 4: 8 }, // by tool tier (wood/stone/iron/diamond)
     knockback: 6, // horizontal impulse applied to a hit mob
     // Jump-attack crit (Phase 13): hits landed while falling (airborne and
     // descending, not swimming) deal extra damage, MC-style.
@@ -588,11 +589,11 @@ export const COMBAT = {
     inWaterFactor: 5,
     airborneFactor: 5,
   },
-  toolDurability: { 1: 64, 2: 128, 3: 256 }, // uses per tool, by tier
+  toolDurability: { 1: 64, 2: 128, 3: 256, 4: 512 }, // uses per tool, by tier
   // Armor wear (fidelity pack): every reduced hit ticks 1 point off each
   // equipped piece; at 0 the piece shatters. Values sit between the tool
-  // tiers — a leather set survives ~80 hits, iron ~192.
-  armorDurability: { leather: 80, iron: 192 },
+  // tiers — a leather set survives ~80 hits, iron ~192, diamond ~384.
+  armorDurability: { leather: 80, iron: 192, diamond: 384 },
   mobs: {
     maxCount: 4, // hard cap on live mobs (keep low — one draw call per part)
     spawnIntervalSeconds: 5, // try to top the population up this often

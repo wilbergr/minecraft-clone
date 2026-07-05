@@ -53,6 +53,7 @@ const TILE_NAMES = [
   'kings_cache_top',
   'kings_cache_side',
   'kings_cache_bottom',
+  'diamond_ore',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -175,6 +176,10 @@ const PAINTERS = {
   gold_ore(px, rand) {
     stoneBase(px, rand)
     blobs(px, rand, [232, 200, 74], 5)
+  },
+  diamond_ore(px, rand) {
+    stoneBase(px, rand)
+    blobs(px, rand, [110, 227, 219], 5)
   },
   // Worked dark stone with a smelting mouth near the bottom.
   furnace_side(px, rand) {

@@ -24,6 +24,12 @@ export const RECIPES = [
   { id: 'iron_pickaxe', input: [['iron_ingot', 3], ['stick', 2]], output: ['iron_pickaxe', 1] },
   { id: 'iron_axe', input: [['iron_ingot', 3], ['stick', 2]], output: ['iron_axe', 1] },
   { id: 'iron_sword', input: [['iron_ingot', 2], ['stick', 1]], output: ['iron_sword', 1] },
+  // Diamond tools (top tier): gems mined from deep diamond ore (iron pick
+  // required), mirroring the iron recipe shapes.
+  { id: 'diamond_pickaxe', input: [['diamond', 3], ['stick', 2]], output: ['diamond_pickaxe', 1] },
+  { id: 'diamond_axe', input: [['diamond', 3], ['stick', 2]], output: ['diamond_axe', 1] },
+  { id: 'diamond_sword', input: [['diamond', 2], ['stick', 1]], output: ['diamond_sword', 1] },
+  { id: 'diamond_shovel', input: [['diamond', 1], ['stick', 2]], output: ['diamond_shovel', 1] },
   // Ranged combat (Phase 13). No string or flint items exist, so the bow is
   // all wood and arrows are stick + stone — skeletons also drop arrows.
   { id: 'bow', input: [['stick', 3], ['planks', 2]], output: ['bow', 1] },
@@ -41,6 +47,10 @@ export const RECIPES = [
   { id: 'iron_chestplate', input: [['iron_ingot', 8]], output: ['iron_chestplate', 1] },
   { id: 'iron_leggings', input: [['iron_ingot', 7]], output: ['iron_leggings', 1] },
   { id: 'iron_boots', input: [['iron_ingot', 4]], output: ['iron_boots', 1] },
+  { id: 'diamond_helmet', input: [['diamond', 5]], output: ['diamond_helmet', 1] },
+  { id: 'diamond_chestplate', input: [['diamond', 8]], output: ['diamond_chestplate', 1] },
+  { id: 'diamond_leggings', input: [['diamond', 7]], output: ['diamond_leggings', 1] },
+  { id: 'diamond_boots', input: [['diamond', 4]], output: ['diamond_boots', 1] },
 ]
 
 // --- Smelting (Phase 12) ----------------------------------------------------
