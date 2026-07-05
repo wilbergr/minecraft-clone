@@ -175,6 +175,19 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   not couple to the physics pass) and vacuum to the player inside
   `FEEDBACK.drops.magnetRadius`. Inventory-full pickups retry on a backoff;
   the entity list is capped (oldest despawns first).
+- Drop LANDING works by sinking: `#floorBelow` scans down from the drop's
+  own cell, so the last fall frame leaves the center fractionally inside the
+  floor block and the `pos.y <= rest` check snaps it up onto that block's
+  top. Never make `#floorBelow` skip solid cells the drop overlaps — drops
+  would fall through the world. The flip side: the pop arc must never CARRY
+  the drop into a solid cell, or that same scan wedges it on/inside the
+  block it entered — mining a block with a solid roof directly above used to
+  hang the drop mid-air this way. `update()` clamps the arc (ceiling stop
+  while rising, per-axis wall stops for drift); keep those clamps if the arc
+  changes. Regression suite: `node tools/test-drops.mjs` (needs `npm run
+  build` + `npm install --no-save puppeteer-core`); the roofed repro only
+  triggers on high pop rolls under the headless 0.1s delta clamp, so the
+  test pins `Math.random` to the max roll around the break call.
 - Zombie audio hooks live OUTSIDE Zombie.js (idle groans in
   `MobManager.update`, attack growl in Combat's damagePlayer wrapper) so mob
   AI stays sound-agnostic; footsteps watch camera movement

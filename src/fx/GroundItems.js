@@ -133,10 +133,26 @@ export class GroundItems {
         // Pop arc: tiny self-integrated ballistic hop onto the first solid
         // block below (NOT surfaceY — drops mined inside a tunnel must land
         // on the tunnel floor, not teleport to the terrain roof above).
+        // Solid cells stop the arc instead of swallowing it: sideways drift
+        // stops at walls, and the hop caps at a solid ceiling (mining a block
+        // with solid blocks above) — otherwise the drop enters the roof cell
+        // and #floorBelow would wedge it on top of the roof.
         e.vy -= cfg.pop.gravity * delta
-        pos.x += e.vx * delta
+        const wy = Math.floor(pos.y)
+        const nx = pos.x + e.vx * delta
+        if (isSolid(this.world.blockAt(Math.floor(nx), wy, Math.floor(pos.z)))) e.vx = 0
+        else pos.x = nx
+        const nz = pos.z + e.vz * delta
+        if (isSolid(this.world.blockAt(Math.floor(pos.x), wy, Math.floor(nz)))) e.vz = 0
+        else pos.z = nz
         pos.y += e.vy * delta
-        pos.z += e.vz * delta
+        if (e.vy > 0) {
+          const roofY = Math.floor(pos.y + cfg.size / 2)
+          if (isSolid(this.world.blockAt(Math.floor(pos.x), roofY, Math.floor(pos.z)))) {
+            pos.y = roofY - cfg.size / 2
+            e.vy = 0
+          }
+        }
         const rest = this.#floorBelow(pos) + cfg.size / 2
         if (e.vy < 0 && pos.y <= rest) {
           pos.y = rest
@@ -151,6 +167,12 @@ export class GroundItems {
 
   // Top of the first solid block at or below the drop (0 = void floor gone;
   // the despawn timer cleans up drops falling in a mined-open column).
+  // NOTE: landing DEPENDS on the drop's center sinking fractionally into the
+  // floor block on its last fall frame — the scan starts at that (solid)
+  // cell, answers its top, and the pos.y <= rest check snaps the drop up.
+  // Never "skip" solid cells the drop overlaps, or drops fall through the
+  // world; keeping the drop out of solid cells it should NOT sink into
+  // (roof above a mined block, walls) is the pop-arc clamps' job in update().
   #floorBelow(pos) {
     const wx = Math.floor(pos.x)
     const wz = Math.floor(pos.z)
