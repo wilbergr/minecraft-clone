@@ -913,10 +913,33 @@ export const NETHER = {
     maxCount: 6,
     maxLight: 0.4, // sits above the visibility floor — darkness isn't the gate down here
   },
+  // Ambience: a sparse low swell while in the dimension (the lava-pops
+  // timer pattern, main.js).
+  ambience: { minSeconds: 15, maxSeconds: 25 },
+  // The cavern sandwich (probe-tuned — retune with `node
+  // tools/probe-nether.mjs` after touching anything here): bedrock caps,
+  // solid netherrack shoulders, FBM floor + ceiling relief with an open
+  // band between, re-solidified by a vertically-STRETCHED 3D wall field
+  // (overworld caves squash 1.7 into tunnels; 0.55 stretches walls into
+  // pillars and curtains). All pure functions of (WORLD.seed, x, y, z).
   terrain: {
+    bedrock: { floor: 2, roof: 94 }, // y < floor / y >= roof: unbreakable shell
+    shoulders: { floor: 4, roof: 88 }, // solid netherrack outside the open band
+    floor: { seedSalt: 0x6e01, base: 34, amplitude: 22, frequency: 1 / 48, octaves: 3, lacunarity: 2, gain: 0.5 },
+    ceiling: { seedSalt: 0x6e02, base: 76, amplitude: 10, frequency: 1 / 64, octaves: 2, lacunarity: 2, gain: 0.5 },
+    walls: { seedSalt: 0x6e03, frequency: 1 / 26, ySquash: 0.55, threshold: 0.6 },
     // Open cavern cells at or below this height flood with lava — the
     // Nether's seas, reusing the lava feature's rendering/damage wholesale.
+    // Solid cells touching a sea crust into obsidian (the overworld rule).
     lava: { level: 26 },
+    // Quartz ore: netherrack-body roll (first-hit like the overworld ore
+    // bands) — roughly iron-abundance across a much taller band.
+    quartz: { salt: 0x6e04, chance: 0.02, minY: 8, maxY: 80 },
+    // Glowstone: hash-seeded teardrop clusters hanging from the ceiling
+    // (the tree-canopy mirror-stamp pattern) — a lit landmark ~per chunk.
+    glowstone: { salt: 0x6e05, chance: 0.004 },
+    // Soul sand: floor-surface patches in low basins near the seas.
+    soulSand: { salt: 0x6e06, chance: 0.28, basinAbove: 6 },
   },
 }
 

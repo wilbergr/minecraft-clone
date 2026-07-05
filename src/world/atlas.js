@@ -55,6 +55,11 @@ const TILE_NAMES = [
   'kings_cache_bottom',
   'diamond_ore',
   'obsidian',
+  'netherrack',
+  'soul_sand',
+  'glowstone',
+  'quartz_ore',
+  'bedrock',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -332,6 +337,41 @@ const PAINTERS = {
     speckle(px, rand, [26, 20, 37], 7)
     blobs(px, rand, [58, 44, 88], 4) // purple glints
     blobs(px, rand, [12, 9, 18], 3) // deep-black patches
+  },
+  // The Nether's body rock: dark dried-blood red with raw scar patches.
+  netherrack(px, rand) {
+    speckle(px, rand, [110, 44, 40], 14)
+    blobs(px, rand, [84, 30, 28], 4)
+    blobs(px, rand, [140, 62, 52], 3)
+  },
+  // Umber sand with faint dark hollows — the trapped-souls read without
+  // literal faces at 16px.
+  soul_sand(px, rand) {
+    speckle(px, rand, [86, 66, 50], 10)
+    blobs(px, rand, [60, 44, 34], 5)
+    // A few 2-px "eye pair" hollows.
+    for (let i = 0; i < 3; i++) {
+      const ex = 2 + Math.floor(rand() * 11)
+      const ey = 2 + Math.floor(rand() * 12)
+      px(ex, ey, rgb(38, 28, 22))
+      px(ex + 2, ey, rgb(38, 28, 22))
+    }
+  },
+  // Bright amber crystal blobs on a warm body — reads glowing even unlit.
+  glowstone(px, rand) {
+    speckle(px, rand, [212, 160, 82], 16)
+    blobs(px, rand, [255, 226, 130], 7)
+    blobs(px, rand, [176, 120, 58], 3)
+  },
+  quartz_ore(px, rand) {
+    PAINTERS.netherrack(px, rand)
+    blobs(px, rand, [235, 230, 220], 5)
+  },
+  // Featureless hard gray with deep blotches — clearly "not minable".
+  bedrock(px, rand) {
+    speckle(px, rand, [74, 74, 74], 24)
+    blobs(px, rand, [38, 38, 38], 5)
+    blobs(px, rand, [104, 104, 104], 3)
   },
 }
 

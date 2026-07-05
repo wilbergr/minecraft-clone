@@ -76,6 +76,12 @@ export const ITEMS = {
   // Lava-crust block (Nether prep): mined with a diamond pickaxe only —
   // the future portal frame material.
   obsidian: blockItem('obsidian', 20, 'Obsidian'),
+  // The Nether's blocks (N2): body rock (also a furnace fuel), basin sand,
+  // the placeable ceiling light, and the quartz gem its ore drops.
+  netherrack: blockItem('netherrack', 21, 'Netherrack'),
+  soul_sand: blockItem('soul_sand', 22, 'Soul Sand'),
+  glowstone: blockItem('glowstone', 23, 'Glowstone'),
+  quartz: { id: 'quartz', name: 'Quartz', maxStack: INVENTORY.maxStack, glyph: '❖', tint: '#e8e4da' },
   // Sheep bonus drop — the bed-crafting ingredient.
   wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into

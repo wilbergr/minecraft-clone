@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { COMBAT, DAYNIGHT, LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_GLOWSTONE, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { createAtlasTexture } from './atlas.js'
 import { Chunk } from './Chunk.js'
@@ -312,11 +312,13 @@ export class World {
     }
     chunkEdits.set((lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy, id)
 
-    // Torch registry (Phase 11): placing a torch lights it, any other write
-    // to the cell (breaking it, replacing it) unlights it.
+    // Torch registry (Phase 11; placed glowstone joined it in the Nether
+    // arc — both feed the TorchLights pool and lightAt spawn suppression):
+    // placing lights it, any other write to the cell unlights it.
     const torchKey = `${wx},${wy},${wz}`
-    if (id === BLOCK_TORCH) this.torches.set(torchKey, { x: wx, y: wy, z: wz })
-    else this.torches.delete(torchKey)
+    if (id === BLOCK_TORCH || id === BLOCK_GLOWSTONE) {
+      this.torches.set(torchKey, { x: wx, y: wy, z: wz })
+    } else this.torches.delete(torchKey)
 
     const chunk = this.chunks.get(key)
     if (chunk) {
@@ -391,8 +393,9 @@ export class World {
     chunkEdits.set((lx * WORLD.chunkSize + lz) * WORLD.chunkHeight + wy, id)
 
     const torchKey = `${wx},${wy},${wz}`
-    if (id === BLOCK_TORCH) this.torches.set(torchKey, { x: wx, y: wy, z: wz })
-    else this.torches.delete(torchKey)
+    if (id === BLOCK_TORCH || id === BLOCK_GLOWSTONE) {
+      this.torches.set(torchKey, { x: wx, y: wy, z: wz })
+    } else this.torches.delete(torchKey)
 
     const chunk = this.chunks.get(key)
     if (chunk) {
@@ -433,7 +436,7 @@ export class World {
     for (const [key, chunkEdits] of this.edits) {
       const [cx, cz] = key.split(',').map(Number)
       for (const [idx, id] of chunkEdits) {
-        if (id !== BLOCK_TORCH) continue
+        if (id !== BLOCK_TORCH && id !== BLOCK_GLOWSTONE) continue
         const wy = idx % H
         const lz = Math.floor(idx / H) % S
         const lx = Math.floor(idx / (H * S))

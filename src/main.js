@@ -567,6 +567,18 @@ const updateLavaAmbience = (delta) => {
   particles.burst(c.x + 0.5, c.y + 1, c.z + 0.5, LAVA.ember.color, LAVA.pops.embers)
 }
 
+// Nether ambience (N2): a sparse low swell while the Nether is current —
+// the lava-pops timer pattern, gated on being in control like every ambience.
+let netherAmbienceTimer = 0 // first swell greets the first arrival
+const updateNetherAmbience = (delta) => {
+  if (!player.isLocked || dims.current !== nether) return
+  netherAmbienceTimer -= delta
+  if (netherAmbienceTimer > 0) return
+  const { minSeconds, maxSeconds } = config.NETHER.ambience
+  netherAmbienceTimer = minSeconds + Math.random() * (maxSeconds - minSeconds)
+  sounds.play('netherAmbience')
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
@@ -612,6 +624,7 @@ renderer.setAnimationLoop(() => {
   lavaLights.update(camera.position)
   updateUnderwater()
   updateLavaAmbience(delta)
+  updateNetherAmbience(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)

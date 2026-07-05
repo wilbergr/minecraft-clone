@@ -72,6 +72,7 @@ export const FUEL_SECONDS = {
   planks: 15,
   stick: 5,
   coal: 80,
+  netherrack: 15, // the Nether's native furnace fuel (N2)
 }
 
 export function canCraft(inventory, recipe) {
