@@ -22,13 +22,20 @@ import { SAVE, WORLD } from '../config.js'
 //     chests: { "x,y,z": { slots: [...] } },  // Chests.serialize() (inventory overhaul)
 //     enderChest: { granted, slots: [...] },  // EnderStore.serialize() — the global
 //                               // King's Cache contents + one-time grant latch
+//     dimension: 'overworld' | 'nether',  // where the player stood (the Nether);
+//                               // absent = overworld
+//     netherEdits: { "cx,cz": [...] },  // NetherWorld.serializeEdits() — the
+//                               // Nether's own sparse edit overlay
 //   }
 //
 // `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, `cursor`, `chests`,
-// and `enderChest` are optional keys (Phase 12 onward): older saves simply
-// lack them and load with a full bar / no furnace contents / nothing worn /
-// the origin spawn / a fresh trial / an empty hand / empty chests / an empty
-// ungranted cache — absent keys never invalidate a save on their own.
+// `enderChest`, `dimension`, and `netherEdits` are optional keys (Phase 12
+// onward): older saves simply lack them and load with a full bar / no
+// furnace contents / nothing worn / the origin spawn / a fresh trial / an
+// empty hand / empty chests / an empty ungranted cache / the overworld and
+// an untouched Nether — absent keys never invalidate a save on their own.
+// (Nether-placed furnace/chest state rides the existing `furnaces`/`chests`
+// maps under 'N|'-prefixed keys — same shape, no new slot.)
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -63,6 +70,10 @@ export class SaveManager {
     this.sleepData = null
     this.cursor = null // wired by attachCursor (inventory overhaul)
     this.cursorData = null
+    this.nether = null // wired by attachNether (the Nether's edit overlay)
+    this.netherData = null
+    this.dims = null // wired by attachDimensions — serialize reads it live
+    this.dimensionData = null // loaded 'nether'/'overworld', applied by main.js
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -162,6 +173,22 @@ export class SaveManager {
     cursor.onChange(() => (this.dirty = true))
   }
 
+  // The Nether's edit overlay (dimension feature): the exact `edits` pattern
+  // for the second world — restore before its first chunk generates, mark
+  // dirty on every Nether edit. Called once after load().
+  attachNether(world) {
+    this.nether = world
+    if (this.netherData !== null) world.deserializeEdits(this.netherData)
+    world.onEdit(() => (this.dirty = true))
+  }
+
+  // And the dimension controller: serialize() reads the current dimension
+  // live (like the daynight clock); main.js applies the loaded value with
+  // dims.travel once every system is wired. Called once after load().
+  attachDimensions(dims) {
+    this.dims = dims
+  }
+
   // And for the bed spawn point (bed feature): called once after load().
   attachSleep(sleep) {
     this.sleep = sleep
@@ -201,6 +228,8 @@ export class SaveManager {
       this.armorData = data.armor ?? null
       this.sleepData = data.spawn ?? null
       this.cursorData = data.cursor ?? null
+      this.netherData = data.netherEdits ?? null
+      this.dimensionData = data.dimension ?? null
       this.dirty = false
       return true
     } catch (err) {
@@ -228,6 +257,8 @@ export class SaveManager {
       armor: this.armor ? this.armor.serialize() : (this.armorData ?? undefined),
       spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
       cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,
+      netherEdits: this.nether ? this.nether.serializeEdits() : (this.netherData ?? undefined),
+      dimension: this.dims ? this.dims.name : (this.dimensionData ?? undefined),
     }
   }
 

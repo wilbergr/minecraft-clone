@@ -5,7 +5,9 @@ import { BLOCKS } from '../world/blocks.js'
 // frame — PlayerControls stays untouched — and plays one step per
 // AUDIO.footstep.strideBlocks of ground covered, voiced by the material of
 // the block under the player's feet. Returns the per-frame update function.
-export function createFootsteps(sounds, player, camera, world) {
+// `getWorld` is a function (dimension seam): main.js passes the dimension
+// controller's current world so steps voice the ground actually underfoot.
+export function createFootsteps(sounds, player, camera, getWorld) {
   let lastX = camera.position.x
   let lastZ = camera.position.z
   let travelled = 0
@@ -23,9 +25,10 @@ export function createFootsteps(sounds, player, camera, world) {
     travelled += dist
     if (travelled < AUDIO.footstep.strideBlocks) return
     travelled = 0
+    const world = getWorld()
     const wx = Math.floor(camera.position.x)
     const wz = Math.floor(camera.position.z)
-    const ground = world.blockAt(wx, world.surfaceY(camera.position.x, camera.position.z) - 1, wz)
+    const ground = world.blockAt(wx, Math.floor(player.body.position.y) - 1, wz)
     sounds.play('footstep', { material: BLOCKS[ground]?.material })
   }
 }

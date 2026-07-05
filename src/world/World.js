@@ -1,18 +1,33 @@
 import * as THREE from 'three'
-import { LIGHTING, WATER, WORLD } from '../config.js'
+import { COMBAT, DAYNIGHT, LIGHTING, WATER, WORLD } from '../config.js'
 import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { createAtlasTexture } from './atlas.js'
-import { Chunk, skyFactor } from './Chunk.js'
+import { Chunk } from './Chunk.js'
 
 // Chunked procedural voxel world. Chunks within WORLD.renderDistance of the
 // player are generated on demand (a few per frame, nearest first) and dropped
 // again once the player moves away; player edits are kept in an overlay map so
 // they survive unload/reload. Terrain is a deterministic function of
 // (WORLD.seed, x, z), so any block can be answered without its chunk existing.
+//
+// Dimensions (the Nether): a World is one dimension — a second instance
+// (NetherWorld, overriding only the pure generator methods) coexists in the
+// same scene. Everything a world puts into the scene (chunk meshes, its
+// sun/ambient lights) parents under `this.root`, a per-world THREE.Group:
+// the dimension controller (src/world/Dimensions.js) swaps dimensions by
+// toggling root.visible — the renderer skips lights inside invisible
+// subtrees, so lighting swaps with the terrain in the same bit. Per-world
+// knobs the engine reads off the instance instead of config globals:
+// `fluid` (generation liquid fill), `skyFactor` (depth-lighting curve),
+// `hasSky` (dawn burn / DayNight ownership), `spawnProfile` (MobManager).
 export class World {
   constructor(scene) {
     this.scene = scene
+    // Per-world scene root: chunk meshes and this world's lights live under
+    // it, so `root.visible` is the whole dimension's visibility switch.
+    this.root = new THREE.Group()
+    scene.add(this.root)
     this.chunks = new Map() // "cx,cz" -> Chunk
     this.edits = new Map() // "cx,cz" -> Map(blockIndex -> blockId)
     // Textured chunks (Phase 13): the procedural atlas is the albedo map and
@@ -59,6 +74,13 @@ export class World {
     // overlay (torches only ever come from player edits, never generation)
     // and consumed by TorchLights to position its point-light pool.
     this.torches = new Map()
+    // Generation liquid fill (dimension seam): air below `level` floods with
+    // `id` in both Chunk.generate and the unloaded-chunk blockAt path. The
+    // Nether swaps in lava; MobManager's wet-column spawn guard reads it too.
+    this.fluid = { id: BLOCK_WATER, level: WATER.level }
+    // Sky flag (dimension seam): gates the dawn burn and DayNight visuals —
+    // false under the Nether's solid roof.
+    this.hasSky = true
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
     // Edit listeners (King's Trial PR 2 promoted the old single-assignment
     // onEdit callback to a list): SaveManager marks the save dirty, the
@@ -263,9 +285,11 @@ export class World {
     }
     const h = this.terrainHeight(wx, wz)
     if (wy < h) return this.terrainBlock(wx, wy, wz, h)
-    // Sea water fills the air below the waterline (mirrors Chunk.generate,
-    // so the answer for an unloaded chunk matches what it would mesh as).
-    if (wy <= WATER.level) return BLOCK_WATER
+    // The world's liquid fills the air below its level (mirrors
+    // Chunk.generate, so the answer for an unloaded chunk matches what it
+    // would mesh as). Sea water in the overworld; the Nether's fill lives in
+    // its terrainBlock instead (its columns generate full-height).
+    if (wy <= this.fluid.level) return this.fluid.id
     return this.#treeBlockAt(wx, wy, wz)
   }
 
@@ -471,6 +495,32 @@ export class World {
     return -1
   }
 
+  // Sky-light factor [minSkyLight, 1] for an air cell `depth` blocks below
+  // its column's top solid block (<= 0 means open sky). The Phase 11 budget
+  // depth lighting, promoted to an instance method (dimension seam): the
+  // mesher and lightAt both consult the world so each dimension can shape
+  // its own curve — the Nether overrides this with a flat visibility floor
+  // (everything under its roof would otherwise sit at the cave minimum).
+  skyFactor(depth) {
+    const { falloffBlocks, minSkyLight } = LIGHTING.depth
+    if (depth <= 0) return 1
+    return Math.max(minSkyLight, 1 - depth / falloffBlocks)
+  }
+
+  // Hostile-spawn profile (dimension seam), read live by MobManager each
+  // spawn tick so headless tests can still shrink the config knobs.
+  // `skyBrightness: null` means "ask the daynight clock" (the overworld);
+  // the Nether pins it to 0 — there is no sky under the roof.
+  get spawnProfile() {
+    return {
+      weights: COMBAT.mobs.hostileWeights,
+      cap: COMBAT.mobs.maxCount,
+      nightCap: DAYNIGHT.hostiles.nightMaxCount,
+      maxLight: COMBAT.mobs.spawnLight.maxLight,
+      skyBrightness: null,
+    }
+  }
+
   // Spawn-relevant light level [0, 1] at block (wx, wy, wz): the Phase 11
   // depth sky light (skyFactor of how far the cell sits below its column's
   // top solid block) scaled by the time-of-day `skyBrightness`
@@ -490,7 +540,7 @@ export class World {
   // the loaded radius. A pure generator fallback would cost thousands of
   // caveAt calls per query for a case that cannot occur.
   lightAt(wx, wy, wz, skyBrightness = 1) {
-    const sky = skyFactor(this.topSolidY(wx, wz) - wy) * skyBrightness
+    const sky = this.skyFactor(this.topSolidY(wx, wz) - wy) * skyBrightness
     let glow = 0
     const R = LIGHTING.torch.distance
     for (const t of this.torches.values()) {
@@ -556,7 +606,7 @@ export class World {
       for (const [key, chunk] of this.chunks) {
         const dist = Math.max(Math.abs(chunk.cx - pcx), Math.abs(chunk.cz - pcz))
         if (dist > rd + 1) {
-          this.scene.remove(chunk.mesh)
+          this.root.remove(chunk.mesh)
           chunk.dispose()
           this.chunks.delete(key)
         }
@@ -571,9 +621,24 @@ export class World {
       const chunk = new Chunk(this, cx, cz)
       chunk.generate(this.edits.get(key))
       this.chunks.set(key, chunk)
-      this.scene.add(chunk.buildMesh(this.material))
+      this.root.add(chunk.buildMesh(this.material))
       budget--
     }
+  }
+
+  // Drop every loaded chunk (the inactive dimension frees its geometry on
+  // travel — Dimensions.js). Edits stay in the overlay; the budgeted
+  // nearest-first queue regenerates everything on return, and resetting
+  // lastPcx forces update() to rebuild the queue on the next frame.
+  disposeChunks() {
+    for (const chunk of this.chunks.values()) {
+      this.root.remove(chunk.mesh)
+      chunk.dispose()
+    }
+    this.chunks.clear()
+    this.genQueue = []
+    this.lastPcx = undefined
+    this.lastPcz = undefined
   }
 
   // --- Voxel raycast (Amanatides & Woo grid traversal) ----------------------
@@ -640,10 +705,12 @@ export class World {
 
   #buildLights() {
     // Kept as instance fields so the day/night cycle (src/sky/DayNight.js)
-    // can animate direction, intensity, and color each frame.
+    // can animate direction, intensity, and color each frame. Parented under
+    // the world root: an invisible root's lights are skipped by the renderer,
+    // so the inactive dimension's sun/ambient stop lighting for free.
     this.ambient = new THREE.AmbientLight(0xffffff, 0.6)
     this.sun = new THREE.DirectionalLight(0xffffff, 1.2)
     this.sun.position.set(30, 50, 20)
-    this.scene.add(this.ambient, this.sun)
+    this.root.add(this.ambient, this.sun)
   }
 }

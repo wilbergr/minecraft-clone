@@ -886,6 +886,40 @@ export const LAVA = {
   pops: { radius: 14, minSeconds: 1, maxSeconds: 3, embers: 3 },
 }
 
+// The Nether (second dimension): a NetherWorld instance beside the overworld
+// (src/world/NetherWorld.js) swapped by the dimension controller
+// (src/world/Dimensions.js). Everything Nether-shaped lives here — the
+// static atmosphere, the flat visibility floor, the per-world spawn profile,
+// and (N2) the cavern generator's knobs.
+export const NETHER = {
+  skyColor: 0x1a0808, // static dark-red haze — scene background under the roof
+  // Tighter than the overworld's 18/46: hides the roof, sells the scale.
+  fog: { near: 12, far: 40, color: 0x1a0808 },
+  lighting: {
+    // Flat depth-light floor: every face under the roof renders at this
+    // factor (the overworld's falloff curve would pin the whole dimension
+    // at the 0.15 cave minimum). Glowstone/lava/torches carve brightness up
+    // from here.
+    minSkyLight: 0.35,
+    ambientIntensity: 0.55,
+    ambientColor: 0xffd9c8, // warm — everything reads ember-lit
+  },
+  // Per-world hostile spawn profile (MobManager reads it off the world).
+  // Weights are EMPTY until Nether mobs ship (N5) — MobManager treats a
+  // zero-total table as "spawn nothing", so the dimension stays quiet
+  // without touching the spawner.
+  spawn: {
+    weights: {},
+    maxCount: 6,
+    maxLight: 0.4, // sits above the visibility floor — darkness isn't the gate down here
+  },
+  terrain: {
+    // Open cavern cells at or below this height flood with lava — the
+    // Nether's seas, reusing the lava feature's rendering/damage wholesale.
+    lava: { level: 26 },
+  },
+}
+
 // Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as
 // health) drained by time, sprinting, and mining. Health regen is gated on
 // being well-fed (Health.regenGate, wired in main.js); at zero hunger the

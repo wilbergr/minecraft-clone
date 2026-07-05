@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { AUDIO, COMBAT, DAYNIGHT, LAVA, PASSIVE_MOBS, PHYSICS, WATER, WORLD } from '../config.js'
+import { AUDIO, COMBAT, DAYNIGHT, LAVA, PASSIVE_MOBS, PHYSICS, WORLD } from '../config.js'
 import { BLOCK_AIR, BLOCK_LAVA, isSolid } from '../world/blocks.js'
 import { Zombie } from './Zombie.js'
 import { Skeleton } from './Skeleton.js'
@@ -92,13 +92,14 @@ export class MobManager {
     this.spawnTimer -= delta
     if (this.spawnTimer <= 0) {
       this.spawnTimer = COMBAT.mobs.spawnIntervalSeconds
-      const cap =
-        night && this.daynight
-          ? DAYNIGHT.hostiles.nightMaxCount
-          : COMBAT.mobs.maxCount
+      // The spawn profile is the world's (dimension seam): weights, caps,
+      // and the light gate all come off this.world so the Nether can shape
+      // its own population without touching the spawner.
+      const profile = this.world.spawnProfile
+      const cap = night && this.daynight ? profile.nightCap : profile.cap
       // Hostiles only — passive mobs must not eat into the hostile cap.
       const hostiles = this.mobs.filter((m) => !m.passive).length
-      if (!this.event && hostiles < cap) this.#spawnNear(playerPos)
+      if (!this.event && hostiles < cap) this.#spawnNear(playerPos, profile)
     }
 
     // Dawn burn (Phase 10): daylight ignites the night's hostiles one at a
@@ -109,8 +110,10 @@ export class MobManager {
     // ignite at dawn through 40 blocks of stone. Farm animals (Phase 12)
     // graze on through the day. Event mode defers the burn — the siege's
     // dawn check fails the event (clearing the flag) before any of its mobs
-    // ignite.
-    if (this.daynight && !night && !this.event) {
+    // ignite. Skyless worlds (the Nether — world.hasSky false) never burn:
+    // the clock keeps oscillating while you're down there, but there is no
+    // sunrise under the roof.
+    if (this.daynight && !night && !this.event && this.world.hasSky) {
       this.burnTimer -= delta
       if (this.burnTimer <= 0) {
         const i = this.mobs.findLastIndex(
@@ -296,22 +299,30 @@ export class MobManager {
   // surface; the pick must then be genuinely far from the player in 3D (the
   // old check was horizontal-only — a cave cell 4 blocks under your feet is
   // not "18 blocks away") and at or under spawnLight.maxLight.
-  #spawnNear(playerPos) {
-    const { spawnRadiusMin, spawnRadiusMax, hostileWeights, spawnLight } = COMBAT.mobs
-    // Bare runs (daynight null) contribute no sky term — light is the torch
-    // term only, matching the old ungated fallback for tests.
-    const skyBrightness = this.daynight ? this.daynight.skyBrightness : 0
+  #spawnNear(playerPos, profile) {
+    const { spawnRadiusMin, spawnRadiusMax, spawnLight } = COMBAT.mobs
+    const weights = profile.weights
+    // An empty/zero-weight table means this world spawns nothing (the
+    // Nether until its mobs ship) — bail before rolling a default kind.
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0)
+    if (totalWeight <= 0) return
+    // The sky term is the profile's when pinned (the Nether pins 0 — no
+    // sky), else the clock's; bare runs (daynight null) contribute none,
+    // matching the old ungated fallback for tests.
+    const skyBrightness =
+      profile.skyBrightness ?? (this.daynight ? this.daynight.skyBrightness : 0)
     for (let attempt = 0; attempt < spawnLight.attempts; attempt++) {
       const angle = Math.random() * Math.PI * 2
       const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
       const x = Math.floor(playerPos.x + Math.sin(angle) * dist)
       const z = Math.floor(playerPos.z + Math.cos(angle) * dist)
-      // Water-covered column (deep water): the SURFACE here is the seabed —
-      // a horde rising on the sea floor (zombies pathing underwater,
-      // skeletons shooting through water) reads as broken. Skip the whole
-      // column; ocean nights are quiet on purpose, and ocean caves are
-      // sealed under the seabed anyway (caves.seabedKeep).
-      if (this.world.terrainHeight(x, z) <= WATER.level) continue
+      // Fluid-covered column (deep water, per-world since the Nether): the
+      // SURFACE here is the seabed — a horde rising on the sea floor
+      // (zombies pathing underwater, skeletons shooting through water)
+      // reads as broken. Skip the whole column; ocean nights are quiet on
+      // purpose, and ocean caves are sealed under the seabed anyway
+      // (caves.seabedKeep).
+      if (this.world.terrainHeight(x, z) <= this.world.fluid.level) continue
       const cells = []
       const topY = this.world.topSolidY(x, z)
       let below = this.world.blockAt(x, WORLD.terrain.caves.minY - 1, z)
@@ -331,10 +342,10 @@ export class MobManager {
       const d2 =
         (x + 0.5 - playerPos.x) ** 2 + (y - playerPos.y) ** 2 + (z + 0.5 - playerPos.z) ** 2
       if (d2 < spawnRadiusMin ** 2) continue
-      if (this.world.lightAt(x, y, z, skyBrightness) > spawnLight.maxLight) continue
-      let roll = Math.random() * Object.values(hostileWeights).reduce((a, b) => a + b, 0)
+      if (this.world.lightAt(x, y, z, skyBrightness) > profile.maxLight) continue
+      let roll = Math.random() * totalWeight
       let kind = 'zombie'
-      for (const [name, weight] of Object.entries(hostileWeights)) {
+      for (const [name, weight] of Object.entries(weights)) {
         roll -= weight
         if (roll <= 0) {
           kind = name

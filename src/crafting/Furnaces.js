@@ -23,8 +23,12 @@ const PROGRESS_DECAY = 2
 // contents spill as ground drops instead of vanishing.
 export class Furnaces {
   constructor() {
-    this.map = new Map() // "x,y,z" -> state
+    this.map = new Map() // "x,y,z" -> state ("N|x,y,z" in the Nether)
     this.listeners = []
+    // Dimension key prefix (set by Dimensions.travel): '' in the overworld —
+    // old saves' keys stay valid — 'N|' in the Nether, so a Nether furnace
+    // never shares state with an overworld one at the same coordinates.
+    this.dim = ''
   }
 
   onChange(fn) {
@@ -42,7 +46,7 @@ export class Furnaces {
   }
 
   #key(x, y, z) {
-    return `${x},${y},${z}`
+    return `${this.dim}${x},${y},${z}`
   }
 
   // State for the furnace block at (x, y, z), created empty on first access.

@@ -14,8 +14,11 @@ import { ITEMS } from '../inventory/items.js'
 // furnace precedent.
 export class Chests {
   constructor() {
-    this.map = new Map() // "x,y,z" -> { slots: Array(CHEST.slots) }
+    this.map = new Map() // "x,y,z" -> { slots } ("N|x,y,z" in the Nether)
     this.listeners = []
+    // Dimension key prefix (set by Dimensions.travel) — the Furnaces twin:
+    // '' in the overworld so old saves' keys stay valid, 'N|' in the Nether.
+    this.dim = ''
   }
 
   onChange(fn) {
@@ -33,7 +36,7 @@ export class Chests {
   }
 
   #key(x, y, z) {
-    return `${x},${y},${z}`
+    return `${this.dim}${x},${y},${z}`
   }
 
   // State for the chest block at (x, y, z), created empty on first access.
