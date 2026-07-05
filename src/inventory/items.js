@@ -52,7 +52,7 @@ function armor(id, name, slot, points, material, tint, glyph) {
   }
 }
 
-const TIER_TINT = { 1: '#a5814e', 2: '#9a9a9a', 3: '#d8dde2' } // wood/stone/iron
+const TIER_TINT = { 1: '#a5814e', 2: '#9a9a9a', 3: '#d8dde2', 4: '#6ee3db' } // wood/stone/iron/diamond
 const LEATHER_TINT = '#8a5a33'
 
 export const ITEMS = {
@@ -78,6 +78,9 @@ export const ITEMS = {
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into
   // the Phase 12 furnace is a follow-up.
   coal: { id: 'coal', name: 'Coal', maxStack: INVENTORY.maxStack, glyph: '◆', tint: '#3a3a3a' },
+  // Diamond ore drop — the endgame tool/armor ingredient (dropped directly
+  // by the ore, coal-style; diamonds never smelt).
+  diamond: { id: 'diamond', name: 'Diamond', maxStack: INVENTORY.maxStack, glyph: '◇', tint: TIER_TINT[4] },
   stick: { id: 'stick', name: 'Stick', maxStack: INVENTORY.maxStack, glyph: '/', tint: '#a5814e' },
   // Zombie drop. Real food since Phase 12 (barely: it's zombie).
   rotten_flesh: {
@@ -143,6 +146,12 @@ export const ITEMS = {
   iron_chestplate: armor('iron_chestplate', 'Iron Chestplate', 'chest', 6, 'iron', TIER_TINT[3], '⛨'),
   iron_leggings: armor('iron_leggings', 'Iron Leggings', 'legs', 5, 'iron', TIER_TINT[3], '∏'),
   iron_boots: armor('iron_boots', 'Iron Boots', 'feet', 2, 'iron', TIER_TINT[3], '⊔'),
+  // Diamond set (top tier): full set = 20 points, which lands exactly on
+  // COMBAT.armor.maxReduction (0.8) — the best protection the cap allows.
+  diamond_helmet: armor('diamond_helmet', 'Diamond Helmet', 'head', 3, 'diamond', TIER_TINT[4], '⌓'),
+  diamond_chestplate: armor('diamond_chestplate', 'Diamond Chestplate', 'chest', 8, 'diamond', TIER_TINT[4], '⛨'),
+  diamond_leggings: armor('diamond_leggings', 'Diamond Leggings', 'legs', 6, 'diamond', TIER_TINT[4], '∏'),
+  diamond_boots: armor('diamond_boots', 'Diamond Boots', 'feet', 3, 'diamond', TIER_TINT[4], '⊔'),
   wooden_pickaxe: tool('wooden_pickaxe', 'Wooden Pickaxe', 'pickaxe', 1, TIER_TINT[1], '⛏'),
   wooden_axe: tool('wooden_axe', 'Wooden Axe', 'axe', 1, TIER_TINT[1], '¬'),
   wooden_sword: tool('wooden_sword', 'Wooden Sword', 'sword', 1, TIER_TINT[1], '†'),
@@ -152,5 +161,12 @@ export const ITEMS = {
   iron_pickaxe: tool('iron_pickaxe', 'Iron Pickaxe', 'pickaxe', 3, TIER_TINT[3], '⛏'),
   iron_axe: tool('iron_axe', 'Iron Axe', 'axe', 3, TIER_TINT[3], '¬'),
   iron_sword: tool('iron_sword', 'Iron Sword', 'sword', 3, TIER_TINT[3], '†'),
+  // Diamond tools (top tier — mines everything the game gates). The shovel
+  // is the kind's debut: soft blocks (grass/dirt/sand/snow) name it at
+  // minTier 0, the axe-on-wood pattern — it only speeds digging.
+  diamond_pickaxe: tool('diamond_pickaxe', 'Diamond Pickaxe', 'pickaxe', 4, TIER_TINT[4], '⛏'),
+  diamond_axe: tool('diamond_axe', 'Diamond Axe', 'axe', 4, TIER_TINT[4], '¬'),
+  diamond_sword: tool('diamond_sword', 'Diamond Sword', 'sword', 4, TIER_TINT[4], '†'),
+  diamond_shovel: tool('diamond_shovel', 'Diamond Shovel', 'shovel', 4, TIER_TINT[4], '♠'),
 }
 

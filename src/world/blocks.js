@@ -11,8 +11,8 @@
 // holding one divides the break time by tier (COMBAT.mining.speedPerTier),
 // and minTier > 0 means the block cannot be broken at all without that tool
 // at that tier (0 = the tool only speeds things up). Tiers: 1 wood, 2 stone,
-// 3 iron. Hardness values are tuned so tiers read at a glance: stone takes
-// ~7x as long as dirt.
+// 3 iron, 4 diamond. Hardness values are tuned so tiers read at a glance:
+// stone takes ~7x as long as dirt.
 //
 // `material` (Phase 9) groups blocks into sound voices — dirt/stone/wood/sand
 // — used for break/place/dig/footstep sounds (see src/audio/SoundEngine.js).
@@ -39,6 +39,7 @@ export const BLOCKS = {
     drop: 'dirt', // grass blocks drop dirt, like the original
     hardness: 0.3,
     material: 'dirt',
+    tool: { kind: 'shovel', minTier: 0 }, // shovels dig faster; hands still work
   },
   2: {
     id: 2,
@@ -49,6 +50,7 @@ export const BLOCKS = {
     drop: 'dirt',
     hardness: 0.3,
     material: 'dirt',
+    tool: { kind: 'shovel', minTier: 0 },
   },
   3: {
     id: 3,
@@ -70,6 +72,7 @@ export const BLOCKS = {
     drop: 'sand',
     hardness: 0.3,
     material: 'sand',
+    tool: { kind: 'shovel', minTier: 0 },
   },
   5: {
     id: 5,
@@ -191,6 +194,7 @@ export const BLOCKS = {
     drop: 'snow',
     hardness: 0.3,
     material: 'dirt',
+    tool: { kind: 'shovel', minTier: 0 },
   },
   15: {
     id: 15,
@@ -246,6 +250,19 @@ export const BLOCKS = {
     hardness: 2.5,
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 1 },
+  },
+  18: {
+    id: 18,
+    name: 'Diamond Ore',
+    solid: true,
+    // Stone flecked ice-cyan — the endgame prize. Drops the gem directly
+    // (no smelting), like coal, and gates on an iron-or-better pickaxe.
+    color: { top: 0x9ed9d4, side: 0x8fc9c4, bottom: 0x7fb5b0 },
+    tex: { top: 'diamond_ore', side: 'diamond_ore', bottom: 'diamond_ore' },
+    drop: 'diamond',
+    hardness: 4,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 3 }, // needs an iron pickaxe or better
   },
 }
 

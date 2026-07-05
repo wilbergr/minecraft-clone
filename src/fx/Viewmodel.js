@@ -157,6 +157,11 @@ function buildTool(kind, tint) {
       const bar = box(0.4, 0.07, 0.07, head)
       bar.position.y = 0.24
       group.add(handle, bar)
+    } else if (kind === 'shovel') {
+      // shovel: a flat scoop capping the handle
+      const scoop = box(0.13, 0.18, 0.045, head)
+      scoop.position.y = 0.3
+      group.add(handle, scoop)
     } else {
       // axe: a blade hanging off one side of the top
       const blade = box(0.17, 0.18, 0.06, head)
