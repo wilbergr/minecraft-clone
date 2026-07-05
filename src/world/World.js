@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { COMBAT, DAYNIGHT, LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_GLOWSTONE, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_GLOWSTONE, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_PORTAL, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { createAtlasTexture } from './atlas.js'
 import { Chunk } from './Chunk.js'
@@ -74,6 +74,11 @@ export class World {
     // overlay (torches only ever come from player edits, never generation)
     // and consumed by TorchLights to position its point-light pool.
     this.torches = new Map()
+    // Portal-field cells, "x,y,z" -> {x, y, z} — the torch-registry pattern
+    // verbatim (portal blocks only ever come from ignition edits, never
+    // generation): kept in lockstep with the edit overlay, rebuilt on load,
+    // consumed by PortalPanels (rendering) and Portals (charge + linking).
+    this.portals = new Map()
     // Generation liquid fill (dimension seam): air below `level` floods with
     // `id` in both Chunk.generate and the unloaded-chunk blockAt path. The
     // Nether swaps in lava; MobManager's wet-column spawn guard reads it too.
@@ -319,6 +324,8 @@ export class World {
     if (id === BLOCK_TORCH || id === BLOCK_GLOWSTONE) {
       this.torches.set(torchKey, { x: wx, y: wy, z: wz })
     } else this.torches.delete(torchKey)
+    if (id === BLOCK_PORTAL) this.portals.set(torchKey, { x: wx, y: wy, z: wz })
+    else this.portals.delete(torchKey)
 
     const chunk = this.chunks.get(key)
     if (chunk) {
@@ -396,6 +403,8 @@ export class World {
     if (id === BLOCK_TORCH || id === BLOCK_GLOWSTONE) {
       this.torches.set(torchKey, { x: wx, y: wy, z: wz })
     } else this.torches.delete(torchKey)
+    if (id === BLOCK_PORTAL) this.portals.set(torchKey, { x: wx, y: wy, z: wz })
+    else this.portals.delete(torchKey)
 
     const chunk = this.chunks.get(key)
     if (chunk) {
@@ -424,25 +433,29 @@ export class World {
       if (!Array.isArray(entries)) continue
       this.edits.set(key, new Map(entries))
     }
-    this.#rebuildTorches()
+    this.#rebuildRegistries()
   }
 
-  // Recover torch world positions from the loaded edit overlay (torches only
-  // exist as edits, so the overlay is the complete source of truth).
-  #rebuildTorches() {
+  // Recover torch/glowstone and portal world positions from the loaded edit
+  // overlay (both only exist as edits, so the overlay is the complete
+  // source of truth — no dedicated save keys).
+  #rebuildRegistries() {
     this.torches = new Map()
+    this.portals = new Map()
     const S = WORLD.chunkSize
     const H = WORLD.chunkHeight
     for (const [key, chunkEdits] of this.edits) {
       const [cx, cz] = key.split(',').map(Number)
       for (const [idx, id] of chunkEdits) {
-        if (id !== BLOCK_TORCH && id !== BLOCK_GLOWSTONE) continue
+        const isLight = id === BLOCK_TORCH || id === BLOCK_GLOWSTONE
+        if (!isLight && id !== BLOCK_PORTAL) continue
         const wy = idx % H
         const lz = Math.floor(idx / H) % S
         const lx = Math.floor(idx / (H * S))
         const wx = cx * S + lx
         const wz = cz * S + lz
-        this.torches.set(`${wx},${wy},${wz}`, { x: wx, y: wy, z: wz })
+        const registry = isLight ? this.torches : this.portals
+        registry.set(`${wx},${wy},${wz}`, { x: wx, y: wy, z: wz })
       }
     }
   }

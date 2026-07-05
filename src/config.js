@@ -916,6 +916,23 @@ export const NETHER = {
   // Ambience: a sparse low swell while in the dimension (the lava-pops
   // timer pattern, main.js).
   ambience: { minSeconds: 15, maxSeconds: 25 },
+  // The portal (N3, src/world/Portals.js): a fixed 2×3 interior inside a
+  // 4×5 obsidian ring (corners optional), lit with flint & steel. Standing
+  // in the field charges the timer, then travel at 8:1 coordinate scale —
+  // an existing portal within linkRadius of the scaled target links,
+  // otherwise a return portal is BUILT there as ordinary edits.
+  portal: {
+    frameBlockId: 20, // obsidian
+    blockId: 26, // the portal-field block (never meshed — registry-rendered)
+    interior: { width: 2, height: 3 },
+    chargeSeconds: 3, // stand in the field this long (leaving decays it)
+    scale: 8, // 1 nether block = this many overworld blocks
+    linkRadius: { overworld: 192, nether: 24 }, // same 8:1 ratio
+    searchRadius: 24, // safe-pocket column search around the scaled target
+    ledgeBlockId: { overworld: 2, nether: 21 }, // dirt / netherrack under a built frame
+    panel: { color: 0x9a4dd8, opacity: 0.55 }, // the translucent field planes
+    shimmer: { intervalSeconds: 0.6, color: 0xb06ae8, count: 2, radius: 24 },
+  },
   // The cavern sandwich (probe-tuned — retune with `node
   // tools/probe-nether.mjs` after touching anything here): bedrock caps,
   // solid netherrack shoulders, FBM floor + ceiling relief with an open

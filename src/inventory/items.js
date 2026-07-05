@@ -82,6 +82,17 @@ export const ITEMS = {
   soul_sand: blockItem('soul_sand', 22, 'Soul Sand'),
   glowstone: blockItem('glowstone', 23, 'Glowstone'),
   quartz: { id: 'quartz', name: 'Quartz', maxStack: INVENTORY.maxStack, glyph: '❖', tint: '#e8e4da' },
+  // Flint & steel (N3): tool kind 'igniter' matches no block, so it can't
+  // mine (the bow precedent) — its whole job is lighting portal frames
+  // through interaction.useItemHook. Durability wears one per ignition.
+  flint_and_steel: {
+    id: 'flint_and_steel',
+    name: 'Flint & Steel',
+    maxStack: 1,
+    glyph: '⌁',
+    tint: '#d8dde2',
+    tool: { kind: 'igniter', tier: 1, durability: 16 },
+  },
   // Sheep bonus drop — the bed-crafting ingredient.
   wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into

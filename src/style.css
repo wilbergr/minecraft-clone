@@ -379,6 +379,22 @@ body.touch-mode #hotbar {
   );
 }
 
+/* Portal charge vignette (the Nether): a purple pull closing in from the
+   edges while standing in a portal field — opacity is driven per frame by
+   the charge fraction (src/world/Portals.js onCharge), so no .hidden gate. */
+#portal-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(120, 40, 200, 0) 30%,
+    rgba(120, 40, 200, 0.75) 100%
+  );
+}
+
 /* --- Hunger bar (Phase 12): drumsticks mirroring the hearts row ----------- */
 
 #hunger-bar {

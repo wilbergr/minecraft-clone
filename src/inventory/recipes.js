@@ -37,6 +37,9 @@ export const RECIPES = [
   // Torches (Phase 11 left this "no recipe yet" — closed with the King's
   // Trial: cave diving for the Deep Shard needs light the honest way).
   { id: 'torch', input: [['stick', 1], ['coal', 1]], output: ['torch', 4] },
+  // Flint & steel (the Nether): no flint item exists — iron + coal is the
+  // documented divergence (the bow's "no string" precedent above).
+  { id: 'flint_and_steel', input: [['iron_ingot', 1], ['coal', 1]], output: ['flint_and_steel', 1] },
   // Armor (Phase 13): leather from cows, iron from smelted ingots. Right
   // click a piece to wear it.
   { id: 'leather_helmet', input: [['leather', 5]], output: ['leather_helmet', 1] },

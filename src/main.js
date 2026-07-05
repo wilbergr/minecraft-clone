@@ -4,6 +4,8 @@ import { BREATH, CHALLENGE, GRAPHICS, HUNGER, LAVA, PLAYER, WATER } from './conf
 import { World } from './world/World.js'
 import { NetherWorld } from './world/NetherWorld.js'
 import { Dimensions } from './world/Dimensions.js'
+import { Portals } from './world/Portals.js'
+import { PortalPanels } from './fx/PortalPanels.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { TouchControls } from './player/TouchControls.js'
@@ -254,7 +256,16 @@ challenge.onBossDefeated = (pos) => {
 }
 
 // Armor equipping (Phase 13): right-clicking an armor item wears it.
+// Flint & steel (N3): the igniter tool claims the use verb — a successful
+// strike lights the targeted obsidian frame (portals is constructed below;
+// the hook only fires at runtime, well after boot wiring completes).
 interaction.useItemHook = (item) => {
+  if (item.tool?.kind === 'igniter') {
+    if (interaction.target && portals.tryIgnite(dims.current, interaction.target)) {
+      inventory.damageSelected() // wears only when a portal actually lights
+    }
+    return true // the click is spent either way — igniters never place/eat
+  }
   if (!item.armor || !combat.armor.equipSelected()) return false
   sounds.play('equip')
   return true
@@ -288,6 +299,27 @@ const dims = new Dimensions({
 })
 save.attachDimensions(dims)
 if (save.dimensionData === 'nether') dims.travel('nether')
+
+// The portal (N3): frame ignition, the stand-in-the-field charge, 8:1
+// linked travel, and the translucent field panels. The vignette rides its
+// own DOM layer; sounds/particles wire through the hooks.
+const portals = new Portals(dims, player, camera)
+const portalPanels = new PortalPanels(scene, dims, particles)
+const portalTint = document.getElementById('portal-tint')
+portals.onChargeStart = () => sounds.play('portalCharge')
+portals.onCharge = (fraction) => {
+  portalTint.style.opacity = fraction
+}
+portals.onTravel = () => sounds.play('portalTravel')
+portals.onIgnite = (ok, x, y, z) => {
+  if (ok) {
+    sounds.play('ignite')
+    particles.burst(x + 1, y + 1.5, z + 0.5, config.NETHER.portal.panel.color, 40)
+  } else {
+    // The strike fizzles — a few sparks, no sound of catching.
+    particles.burst(x + 0.5, y + 0.5, z + 0.5, 0xffc86e, 6)
+  }
+}
 // Load guard (lava feature): a save written before lava existed can restore
 // the player inside a newly-flooded cave bottom — burning from frame one is
 // a bad beat. blockAt answers from the generator + edit overlay even before
@@ -622,6 +654,8 @@ renderer.setAnimationLoop(() => {
   clouds.update(delta, camera.position)
   torchLights.update(camera.position)
   lavaLights.update(camera.position)
+  portals.update(delta)
+  portalPanels.update(delta, camera.position)
   updateUnderwater()
   updateLavaAmbience(delta)
   updateNetherAmbience(delta)
@@ -642,6 +676,8 @@ window.__mc = {
     return dims.current
   },
   dims,
+  portals,
+  portalPanels,
   interaction,
   renderer,
   inventory,

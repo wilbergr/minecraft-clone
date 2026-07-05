@@ -368,6 +368,20 @@ export const BLOCKS = {
     hardness: Infinity,
     material: 'stone',
   },
+  26: {
+    id: 26,
+    name: 'Nether Portal',
+    // The portal field (N3): non-solid AND non-targetable — walked through,
+    // never aimed at, never mined (break the obsidian frame instead), and
+    // NEVER MESHED (the chunk mesher skips it like a liquid; it has no
+    // tex). It renders as translucent scene panels driven by the
+    // world.portals registry (src/fx/PortalPanels.js), which setBlock keeps
+    // in lockstep with the edit overlay exactly like torches. No item —
+    // created by flint-&-steel ignition only.
+    solid: false,
+    color: { top: 0x9a4dd8, side: 0x9a4dd8, bottom: 0x9a4dd8 },
+    drop: null,
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -383,6 +397,7 @@ export const BLOCK_SOUL_SAND = 22
 export const BLOCK_GLOWSTONE = 23
 export const BLOCK_QUARTZ_ORE = 24
 export const BLOCK_BEDROCK = 25
+export const BLOCK_PORTAL = 26
 
 export function isSolid(id) {
   const block = BLOCKS[id]
