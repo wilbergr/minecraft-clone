@@ -1,4 +1,4 @@
-import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS } from '../config.js'
+import { AUDIO, COMBAT, DAYNIGHT, PASSIVE_MOBS, PHYSICS, WATER } from '../config.js'
 import { Zombie } from './Zombie.js'
 import { Skeleton } from './Skeleton.js'
 import { Creeper } from './Creeper.js'
@@ -240,6 +240,13 @@ export class MobManager {
     const { spawnRadiusMin, spawnRadiusMax, hostileWeights } = COMBAT.mobs
     const angle = Math.random() * Math.PI * 2
     const dist = spawnRadiusMin + Math.random() * (spawnRadiusMax - spawnRadiusMin)
+    const x = playerPos.x + Math.sin(angle) * dist
+    const z = playerPos.z + Math.cos(angle) * dist
+    // Water-covered column (deep water): mobs spawn at surfaceY, which is
+    // the SEABED for ocean columns — a night horde rising on the sea floor
+    // (zombies pathing underwater, skeletons shooting through water) reads
+    // as broken. Skip the attempt; ocean nights are quiet on purpose.
+    if (this.world.terrainHeight(Math.round(x), Math.round(z)) <= WATER.level) return
     let roll = Math.random() * Object.values(hostileWeights).reduce((a, b) => a + b, 0)
     let kind = 'zombie'
     for (const [name, weight] of Object.entries(hostileWeights)) {
@@ -249,11 +256,7 @@ export class MobManager {
         break
       }
     }
-    this.spawnAt(
-      playerPos.x + Math.sin(angle) * dist,
-      playerPos.z + Math.cos(angle) * dist,
-      kind,
-    )
+    this.spawnAt(x, z, kind)
   }
 
   // Direct hostile spawn (also the browser-verification hook:

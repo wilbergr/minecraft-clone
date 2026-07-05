@@ -317,6 +317,29 @@ body.touch-mode #hotbar {
   opacity: 0.15;
 }
 
+/* Breath row (deep water): bubbles above the hunger drumsticks — the armor
+   row's stacked slot, mirrored to the right column; hidden while full. */
+#breath-bar {
+  position: absolute;
+  bottom: calc(5.8rem + env(safe-area-inset-bottom));
+  left: calc(50% + 6px);
+  display: flex;
+  gap: 2px;
+  font-size: 0.95rem;
+  user-select: none;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.bubble.half {
+  opacity: 0.45;
+}
+
+.bubble.empty {
+  opacity: 0.15;
+}
+
 /* Underwater wash (Phase 10): shown while the camera is inside a water
    block. Sits below the touch UI / HUD so controls stay fully readable. */
 #water-tint {
@@ -1093,6 +1116,11 @@ body.touch-mode .help-touch {
   }
 
   #armor-bar {
+    bottom: calc(4.9rem + env(safe-area-inset-bottom));
+    font-size: 0.8rem;
+  }
+
+  #breath-bar {
     bottom: calc(4.9rem + env(safe-area-inset-bottom));
     font-size: 0.8rem;
   }

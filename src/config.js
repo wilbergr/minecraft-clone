@@ -113,6 +113,13 @@ export const CHALLENGE = {
   // {dir} / {name}, filled from the generated positions relative to spawn.
   relics: {
     seedSalt: 0x3e1c, // placement stream for the five shards
+    // The Tide Shard's primary placement pass requires a column at least this
+    // many blocks under WATER.level (deep water made real oceans exist), so
+    // retrieving it takes a genuine breath-managed dive — the ±4 vertical
+    // collect band can no longer be reached by treading the surface. The
+    // relaxation ladder in RelicHunt.#findSeaSpot still falls back to
+    // shallower seas on pathological seeds, so placement never fails.
+    minDiveDepth: 10,
     collectRadius: 2.25, // walk within this many blocks (horizontal) to collect
     hoverHeight: 1.4, // surface shards float this far above the terrain
     tokenColor: 0x7fe7d0, // unlit sea-glass green — reads as glowing, unlike gold tokens
@@ -444,6 +451,25 @@ export const WORLD = {
         { name: 'snow', max: Infinity, treeChance: 0.008, surface: 'snow', grassTint: 0x8fb987, leafTint: 0x5a8a52 },
       ],
     },
+    // Ocean basins (deep water): a third, low-frequency FBM — the
+    // "continentalness" field — smoothly depresses terrainHeight toward
+    // `floorHeight` where the mask exceeds `maskStart` (fully oceanic past
+    // `maskFull`). smoothstep across the band makes shores SHELVE instead of
+    // cliff, and where the mask is zero heights are byte-identical to the
+    // pre-ocean generator (~86% of columns on seed 1337). Deliberately NOT a
+    // `biomes.bands` entry — that table is a climate axis and ocean is
+    // orthogonal to it; sand floors / no trees / sealed seabeds all follow
+    // from the height rules alone. Retune with `node tools/probe-ocean.mjs`.
+    ocean: {
+      seedSalt: 0x0cea, // mixed into WORLD.seed for the continentalness field
+      frequency: 1 / 320, // basins span ~10–20 chunks
+      octaves: 2,
+      lacunarity: 2,
+      gain: 0.5,
+      maskStart: 0.35, // shore begins shelving past this noise value
+      maskFull: 0.7, // fully oceanic past this
+      floorHeight: 44, // deep seabed target: 13 blocks under WATER.level 57
+    },
   },
 }
 
@@ -614,7 +640,10 @@ export const COMBAT = {
 // localStorage key — see src/save/SaveManager.js for the schema.
 export const SAVE = {
   storageKey: 'minecraft-clone-save',
-  schemaVersion: 3, // bump (and migrate in SaveManager.load) when the shape changes
+  schemaVersion: 4, // bump (and migrate in SaveManager.load) when the shape changes
+  // v3 → v4 (deep water): ocean basins reshape the terrain under the same
+  // seed, so v3 edit overlays no longer sit on the blocks they were made
+  // against. No migration — old saves start fresh, as the load guard does.
   // v2 → v3 (Phase 13): biomes reshape the terrain under the same seed, so
   // v2 edit overlays no longer sit on the blocks they were made against.
   // No migration — old saves start fresh, as the load guard does.
@@ -764,8 +793,19 @@ export const WATER = {
     sinkSpeed: 3.2, // max sink rate (water "terminal velocity")
     drag: 4, // vertical velocity decay per second — kills dive momentum
     swimUpSpeed: 4.2, // held Space rises at this rate, blocks/s
+    swimDownSpeed: 3.5, // held C (sneak) dives at this rate, blocks/s
     breachBoost: 0.85, // jump-out-of-water impulse, fraction of jumpVelocity
     moveMultiplier: 0.55, // horizontal speed factor while submerged
+  },
+  // Submerged fog (deep water): while the camera is underwater the scene fog
+  // pulls in tight and tints toward the water color — depth feels dangerous
+  // and the seabed can't be scouted from the surface. Restored to
+  // GRAPHICS.fogNear/fogFar on surfacing (DayNight owns the color up there).
+  fog: {
+    near: 3,
+    far: 16,
+    color: 0x2a6fd4, // matches the water block's side color (blocks.js)
+    colorBlend: 0.8, // how far fog color lerps from the sky toward `color`
   },
 }
 
@@ -785,6 +825,22 @@ export const HUNGER = {
     minHealth: 2, // starvation stops at one heart — it weakens, never kills
   },
   fallbackFoodValue: 2, // consumables without a `food` field restore this
+}
+
+// Breath (deep water): a 10-bubble bar (2 points each, the health/hunger
+// unit scheme) that drains while the CAMERA is underwater (the same cell
+// test as the blue #water-tint wash, so meter and wash never disagree) and
+// refills fast in air. At zero, onDrown fires on an interval — drowning
+// damage is real and LETHAL (unlike starvation's floor): starvation has no
+// escape action, but the surface is always the escape from drowning. It is
+// dealt through health.damage() directly, so armor never reduces it (the
+// fall/void/starve precedent). Breath is deliberately not saved — it resets
+// full on load.
+export const BREATH = {
+  max: 20,
+  drainPerSecond: 20 / 15, // ~15 seconds of air, MC-ish
+  refillPerSecond: 8, // a breach refills fully in ~2.5 s
+  drown: { damage: 2, intervalSeconds: 1.5 }, // one heart per tick at zero
 }
 
 // Passive mobs (Phase 12): pig/cow/sheep amble around, never aggro, and drop
@@ -875,5 +931,13 @@ export const AUDIO = {
   zombie: {
     groanIntervalSeconds: 6, // one random live mob groans about this often
     hearRadius: 20, // groan volume fades to zero at this distance
+  },
+  // Underwater muffle (deep water): one BiquadFilter permanently in the
+  // master chain (master → filter → destination); setUnderwater(true) ramps
+  // its cutoff down so the WHOLE mix dulls, with zero per-play cost.
+  underwater: {
+    frequency: 700, // lowpass cutoff while submerged, Hz
+    clearFrequency: 18000, // effectively transparent while surfaced
+    rampSeconds: 0.15, // cutoff glide on enter/exit
   },
 }

@@ -30,6 +30,8 @@ export class SoundEngine {
   constructor() {
     this.ctx = null // created on the first user gesture (see unlock)
     this.master = null
+    this.filter = null // permanent master-bus lowpass — the underwater muffle
+    this.underwater = false // headless-test observability (and pre-unlock latch)
     this.noise = null // shared 1s white-noise buffer, source of every burst
     this.muted = localStorage.getItem(AUDIO.storageKey) === '1'
     this.dig = null // { src, material } while the dig loop plays
@@ -49,7 +51,16 @@ export class SoundEngine {
       this.ctx = new Ctx()
       this.master = this.ctx.createGain()
       this.master.gain.value = this.muted ? 0 : AUDIO.masterVolume
-      this.master.connect(this.ctx.destination)
+      // Underwater muffle (deep water): every voice routes master → filter →
+      // destination, so one cutoff ramp dulls the whole mix. Transparent
+      // (clearFrequency) on land; setUnderwater() glides it down and back.
+      this.filter = this.ctx.createBiquadFilter()
+      this.filter.type = 'lowpass'
+      this.filter.frequency.value = this.underwater
+        ? AUDIO.underwater.frequency
+        : AUDIO.underwater.clearFrequency
+      this.master.connect(this.filter)
+      this.filter.connect(this.ctx.destination)
       // One second of white noise, reused (with random offsets) by every
       // noise-based sound instead of allocating buffers per play.
       const len = this.ctx.sampleRate
@@ -58,6 +69,20 @@ export class SoundEngine {
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1
     }
     if (this.ctx.state === 'suspended') this.ctx.resume()
+  }
+
+  // Enter/leave the underwater mix. Safe before unlock (the flag is latched
+  // and applied when the context is created); ramps rather than steps so the
+  // transition reads as the head crossing the surface, not a click.
+  setUnderwater(submerged) {
+    if (this.underwater === submerged) return
+    this.underwater = submerged
+    if (!this.filter) return
+    const target = submerged ? AUDIO.underwater.frequency : AUDIO.underwater.clearFrequency
+    const t = this.ctx.currentTime
+    this.filter.frequency.cancelScheduledValues(t)
+    this.filter.frequency.setValueAtTime(this.filter.frequency.value, t)
+    this.filter.frequency.exponentialRampToValueAtTime(target, t + AUDIO.underwater.rampSeconds)
   }
 
   setMuted(muted) {
@@ -161,6 +186,10 @@ export class SoundEngine {
       case 'runeIgnite': // a stele rune line catching ember — rising chime + crackle
         this.#tone({ type: 'sine', from: 520, to: 1040, dur: 0.35, gain: 0.25 * v })
         this.#burst({ type: 'highpass', freq: 2400, dur: 0.4, gain: 0.15 * v })
+        break
+      case 'splash': // breaking the water surface — noise slap + downward bloop
+        this.#burst({ type: 'lowpass', freq: 900, dur: 0.28, gain: 0.5 * v })
+        this.#tone({ type: 'sine', from: 340, to: 120, dur: 0.22, gain: 0.25 * v })
         break
       case 'trialComplete': // three ascending chimes — the rite fulfilled
         this.#tone({ type: 'sine', from: 440, to: 442, dur: 0.5, gain: 0.25 * v })

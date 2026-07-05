@@ -42,6 +42,10 @@ export class World {
     // their tints pre-parsed into THREE.Colors once (the mesher multiplies
     // them into vertex colors every face).
     this.biomeNoise = createFBM2D(WORLD.seed ^ WORLD.terrain.biomes.seedSalt, WORLD.terrain.biomes)
+    // Continentalness field (deep water): a third low-frequency FBM masks
+    // out ocean basins — terrainHeight shelves toward the deep seabed where
+    // it exceeds the mask band. Pure like all terrain noise.
+    this.oceanNoise = createFBM2D(WORLD.seed ^ WORLD.terrain.ocean.seedSalt, WORLD.terrain.ocean)
     this.biomeBands = WORLD.terrain.biomes.bands.map((band) => ({
       ...band,
       grassColor: new THREE.Color(band.grassTint),
@@ -93,12 +97,24 @@ export class World {
   // flat, snow end mountainous) — using the continuous noise rather than the
   // discrete band means biome borders never step-cliff.
   terrainHeight(wx, wz) {
-    const { baseHeight, amplitude, frequency, biomes } = WORLD.terrain
+    const { baseHeight, amplitude, frequency, biomes, ocean } = WORLD.terrain
     const n = this.fbm(wx * frequency, wz * frequency)
     const b = this.biomeNoise(wx * biomes.frequency, wz * biomes.frequency)
     const scale =
       biomes.amplitude.min + (biomes.amplitude.max - biomes.amplitude.min) * (b + 1) / 2
-    const h = Math.round(baseHeight + n * amplitude * scale)
+    let h = Math.round(baseHeight + n * amplitude * scale)
+    // Ocean basins (deep water): where the continentalness noise exceeds
+    // maskStart, depress the surface toward the deep seabed. smoothstep
+    // across [maskStart, maskFull] makes shores shelve gently underwater —
+    // no cliff at the coastline (the biome-relief continuity rule). Where
+    // the mask is zero the height is byte-identical to the pre-ocean
+    // generator, so ~86% of the world is untouched.
+    const o = this.oceanNoise(wx * ocean.frequency, wz * ocean.frequency)
+    if (o > ocean.maskStart) {
+      const t = Math.min(1, (o - ocean.maskStart) / (ocean.maskFull - ocean.maskStart))
+      const s = t * t * (3 - 2 * t)
+      h = Math.round(h + (ocean.floorHeight - h) * s)
+    }
     return Math.max(2, Math.min(h, WORLD.chunkHeight - 8))
   }
 

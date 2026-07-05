@@ -117,16 +117,23 @@ export class RelicHunt {
     return { x: last.x, z: last.z, y: def.maxY - 2 }
   }
 
-  // Tide shard: sea columns can be scarce (WATER.level sits well under the
-  // terrain base), so random darts miss them — instead sweep outward rings
-  // deterministically (seed-chosen start bearing) and take the first column
-  // deep enough. Two passes relax the depth if a seed has only shallow seas;
-  // terrainHeight answers the seabed for sea columns, so the shard hovers
-  // just above the sea floor.
+  // Tide shard: sweep outward rings deterministically (seed-chosen start
+  // bearing) and take the first column deep enough. The primary pass wants a
+  // genuinely dive-worthy ocean column (deep water: >= minDiveDepth blocks
+  // under the waterline, so the ±4 vertical collect band can't be reached by
+  // treading the surface — retrieving the shard takes a real breath-managed
+  // dive); the relaxation ladder keeps the module's never-fail contract on
+  // pathological seeds with only shallow seas. terrainHeight answers the
+  // seabed for sea columns, so the shard hovers just above the sea floor.
   #findSeaSpot(rand, from, def) {
     const offset = rand() * Math.PI * 2
     let last = null
-    for (const maxHeight of [WATER.level - 3, WATER.level - 2]) {
+    const ladder = [
+      WATER.level - CHALLENGE.relics.minDiveDepth,
+      WATER.level - 3,
+      WATER.level - 2,
+    ]
+    for (const maxHeight of ladder) {
       for (let r = def.minDist; r <= 600; r += 6) {
         const steps = Math.max(16, Math.floor((Math.PI * 2 * r) / 24))
         for (let a = 0; a < steps; a++) {
