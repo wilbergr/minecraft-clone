@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import * as config from './config.js'
 import { BREATH, CHALLENGE, GRAPHICS, HUNGER, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
@@ -524,4 +525,8 @@ window.__mc = {
   projectiles: combat.projectiles,
   sleep,
   cursor,
+  // The live config module (headless-test seam): most tunables are read at
+  // call time, so tests can shrink timings/radii — e.g.
+  // config.COMBAT.mobs.spawnRadiusMax — without rebuilding.
+  config,
 }

@@ -116,10 +116,12 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   (`jumpVelocity: 9` / `gravity: 32` ⇒ ~1.27-block apex); holding Space (or
   the touch ⬆ button) auto-hops each landing. Raise `stepHeight` past 1.0 to
   get auto-step instead — the step-up path is already implemented.
-- Sneak is **KeyC**, not Ctrl (pointer lock doesn't intercept Ctrl+W/Ctrl+S —
+- Sneak is **Shift** (MC scheme, mechanics PR), with **KeyC kept as an
+  alias** — never Ctrl (pointer lock doesn't intercept Ctrl+W/Ctrl+S —
   Ctrl-sneak while moving would close the tab). Sneak slows via
   `PHYSICS.sneak.speedMultiplier` and edge-stops (per axis, so you can slide
-  along a ledge).
+  along a ledge). Sprint is a double-tap-forward latch — see the
+  Minecraft-fidelity section below.
 - The player body owns the feet position; the camera is resynced to
   `feet + eyeHeight` every locked frame. To move the player programmatically
   (tests, warps) call `player.teleport(x, y, z)` — it clears velocity and
@@ -188,11 +190,14 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   applies instantly. Clock persists via `SaveManager.attachDayNight` (the
   `daynight` save slot); unlike treasure it is NOT dirty-flagged — serialize()
   reads the live clock and the while-playing autosave interval picks it up.
-- Hostile spawns are night-gated in `MobManager.update`: no spawns while
-  `daynight.isNight` is false, night cap is `DAYNIGHT.hostiles.nightMaxCount`,
-  and daylight burns remaining zombies one per `burnStaggerSeconds` (ember
-  particle burst). `mobs.daynight` is attached by main.js — when it's null
-  (bare/test runs) spawning is ungated, so old tests keep working.
+- Hostile spawns are LIGHT-gated since the mechanics PR (the night-only gate
+  is gone — see the Minecraft-fidelity section below): dark cells spawn at
+  any hour, caps stay `DAYNIGHT.hostiles.nightMaxCount` at night /
+  `COMBAT.mobs.maxCount` by day, and daylight burns remaining SKY-EXPOSED
+  hostiles one per `burnStaggerSeconds` (ember particle burst) — roofed and
+  cave mobs survive sunrise. `mobs.daynight` is attached by main.js — when
+  it's null (bare/test runs) the sky term is zero, so spawning stays
+  effectively ungated and old tests keep working.
 - Water is block id 9 (`BLOCK_WATER`, `liquid: true`, NOT solid): generation
   fills air at `y <= WATER.level` in both `Chunk.generate` and the
   `World.blockAt` unloaded-chunk path (keep the two in sync — purity rule
@@ -754,8 +759,9 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   color lerped `colorBlend` toward the water color) overwrites what DayNight
   wrote; surfaced frames restore `GRAPHICS.fogNear/fogFar` and leave color
   to DayNight.
-- Swim-down is C (sneak) in the `PlayerControls` water branch — Space wins
-  when both are held; touch inherits it through the ⬇ sneak button. Sharp
+- Swim-down is sneak (Shift, or the C alias) in the `PlayerControls` water
+  branch — Space wins when both are held; touch inherits it through the ⬇
+  sneak toggle button (added in the mechanics PR). Sharp
   edge: `PhysicsBody.step` clamps downward speed to `WATER.physics.
   sinkSpeed` and applies drag AFTER the owner sets velocity, so
   `swimDownSpeed` above sinkSpeed is effectively capped — the dive reads as
@@ -782,6 +788,63 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `player.lock()` from `page.evaluate` work without real gestures. Fog
   asserts: `scene.fog.near === WATER.fog.near` submerged,
   `GRAPHICS.fogNear` surfaced.
+
+## Minecraft-fidelity mechanics (light spawning, MC controls, fidelity pack, armor wear)
+
+- **Light-based spawning:** `world.lightAt(x, y, z, skyBrightness)` is the one
+  light query — pure, `max(skyFactor(depth) × skyBrightness, torch falloff)`
+  over `world.torches` with radius `LIGHTING.torch.distance` (protective
+  bubble ≡ visible glow; ignores walls like the visual point lights — the
+  Phase 11 no-flood-fill rule). `daynight.skyBrightness` is the sampled sun
+  intensity normalized to its keyframe max (~1 noon, ~0.1 night). Hostiles
+  spawn wherever light ≤ `COMBAT.mobs.spawnLight.maxLight` (0.25): with the
+  shipped constants that's deep caves (floor 0.15) at any hour, the surface
+  only at night (~0.1), and nothing within ~10.5 blocks of a torch.
+  `#spawnNear` tries `spawnLight.attempts` ring spots, walking each column
+  top-down for spawnable cells (solid floor + 2 air) — surface AND cave
+  pockets — with a 3D min-distance check; `spawnAt(x, z, kind, y=null)`
+  places feet at `y` when given. The dawn burn only ignites mobs with
+  `topSolidY(col) <= feet y` (sky-exposed); cave/roofed mobs survive.
+  Siege/boss (`mobs.event`) and the ocean wet-column guard are untouched.
+- **Controls are MC's:** Shift = sneak/dive (KeyC alias kept), sprint =
+  double-tap-forward latch (`PLAYER.sprint.doubleTapSeconds`), forward-only
+  by construction, cleared on forward release / sneak / unlock, and refused
+  by the optional `player.canSprintHook` (main.js: `hunger.value >
+  PLAYER.sprint.minHunger`, MC's starving rule — bare runs sprint freely).
+  Touch has a 4th action button ⬇ — a sneak TOGGLE (same thumb can't hold
+  while look-dragging) driving `keys.sneak`, cleared by `#releaseAll`
+  (`touch.sneakBtn` in tests).
+- **Fidelity pack:** bed day-click sets the spawn WITHOUT a time skip
+  (modern MC); night sleep refuses while a hostile is within
+  `SLEEP.monsterRadius` of the bed (`sleep.mobs = combat.mobs` attached in
+  main.js, null skips). Mining multiplies breakTime by
+  `COMBAT.mining.inWaterFactor` / `airborneFactor` (5× each, exclusive —
+  reads `player.body.inWater/grounded`). Attachment pops: a `world.onEdit`
+  subscriber in main.js (`popAttachmentAbove`) breaks a non-solid
+  `targetable` block (torch id 13, bed id 15) into its drop when the cell
+  under it is no longer solid — one level, cascades via the recursive edit;
+  `onBlocksExploded` sweeps carved cells so the blast's top shell pops too.
+- **Armor durability:** `armor()` items carry `armor.durability` from
+  `COMBAT.armorDurability` (leather 80, iron 192); `Armor.slots` hold
+  `{ id, durability }`. Every reduced hit (`Armor.reduce`, points computed
+  BEFORE wear) ticks 1 off each equipped piece; at 0 the piece vanishes and
+  `armor.onBreak` fires (main.js → the new `toolBreak` voice). Durability
+  rides `Inventory.add(id, count, durability)` (now also for armor) through
+  equip/unequip/drops; `Armor.deserialize` accepts the old bare-string slot
+  shape (→ full durability), so the `armor` save key migrated with NO schema
+  bump — `SAVE.schemaVersion` is still 4. Slot durability bars + tooltips
+  cover armor via `ITEMS[id].tool?.durability ?? armor?.durability`; the HUD
+  shield row has a worst-piece wear underline (`#armor-durability`).
+- Headless seams: `__mc.config` exposes the LIVE config module — shrink
+  `config.COMBAT.mobs.spawnRadiusMin/Max` for deterministic spawn-ring
+  tests, etc. Double-tap tests must dispatch `keydown W / keyup / keydown`
+  SYNCHRONOUSLY in one evaluate — headless timers stretch (a setTimeout(80)
+  can take ~1.8s under SwiftShader), blowing the 0.25s window. Dive rate
+  asserts: sampled `body.velocity.y` is post-drag, ≈ −2.15 held vs ≈ −1.2
+  passive — assert the gap, not the raw `swimDownSpeed` knob. A cave pocket
+  for spawn tests: probe columns with a node scene-stub (`new World({ add()
+  {} })`) for floor-solid/air/air cells deep below `topSolidY`; seed 1337
+  has a large one around (-60, 4, 0).
 
 ## Sharp edges
 
