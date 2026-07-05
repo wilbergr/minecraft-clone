@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import * as config from './config.js'
-import { BREATH, CHALLENGE, GRAPHICS, HUNGER, PLAYER, WATER } from './config.js'
+import { BREATH, CHALLENGE, GRAPHICS, HUNGER, LAVA, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
@@ -32,11 +32,13 @@ import { Particles } from './fx/Particles.js'
 import { Viewmodel } from './fx/Viewmodel.js'
 import { GroundItems } from './fx/GroundItems.js'
 import { TorchLights } from './fx/TorchLights.js'
+import { LavaLights } from './fx/LavaLights.js'
 import { DayNight } from './sky/DayNight.js'
 import { Clouds } from './sky/Clouds.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, isLiquid, isSolid } from './world/blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_BED, BLOCK_CHEST, BLOCK_FURNACE, BLOCK_KINGS_CACHE, BLOCK_LAVA, BLOCK_WATER, isLiquid, isSolid } from './world/blocks.js'
 import { Hunger } from './survival/Hunger.js'
 import { Breath } from './survival/Breath.js'
+import { Burning } from './survival/Burning.js'
 import { Sleep } from './survival/Sleep.js'
 import { Furnaces } from './crafting/Furnaces.js'
 import { FurnaceScreen } from './ui/furnaceScreen.js'
@@ -78,6 +80,9 @@ const clouds = new Clouds(scene)
 // Torch lighting (Phase 11): a fixed point-light pool tracks the torches
 // nearest the camera — see src/fx/TorchLights.js.
 const torchLights = new TorchLights(scene, world)
+// Lava glow (lava feature): its sibling pool tracks the nearest exposed
+// pool surfaces — see src/fx/LavaLights.js.
+const lavaLights = new LavaLights(scene, world)
 
 // Feedback layer (Phase 9): synthesized sound, break particles, ground item
 // drops, and the held-item viewmodel, bundled into the `fx` object the game
@@ -86,6 +91,7 @@ scene.add(camera) // the viewmodel is a camera child; children need the camera i
 const sounds = new SoundEngine()
 const particles = new Particles(scene)
 const drops = new GroundItems(scene, world, inventory, sounds)
+drops.particles = particles // lava-destruction embers (lava feature)
 const fx = { sounds, particles, drops, viewmodel: null, health: null, hunger: null }
 
 const interaction = new BlockInteraction(camera, world, player, scene, inventory, fx)
@@ -117,6 +123,17 @@ hunger.onStarve = () => {
 // on load); reset on respawn beside hunger below.
 const breath = new Breath()
 breath.onDrown = () => combat.health.damage(BREATH.drown.damage)
+// Burning (lava feature): contact ticks while the body midsection is in
+// lava, plus the after-burn that lingers after climbing out (extinguished by
+// water). Damage rides health.damage() DIRECTLY — armor never reduces it,
+// the same environmental precedent as drowning above. Embers at the camera
+// give every tick a visible beat.
+const burning = new Burning()
+burning.onBurn = (damage) => {
+  combat.health.damage(damage)
+  const p = camera.position
+  particles.burst(p.x, p.y - 0.4, p.z, LAVA.ember.color, LAVA.ember.count)
+}
 const furnaces = new Furnaces()
 const chests = new Chests() // placed-chest contents (inventory overhaul); no tick — inert storage
 const enderStore = new EnderStore() // the King's Cache global store; also inert
@@ -140,6 +157,16 @@ bindSlotTooltips()
 
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
+// Load guard (lava feature): a save written before lava existed can restore
+// the player inside a newly-flooded cave bottom — burning from frame one is
+// a bad beat. blockAt answers from the generator + edit overlay even before
+// chunks exist, so the check is correct here; teleport up to the surface.
+{
+  const p = player.body.position
+  if (world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === BLOCK_LAVA) {
+    player.teleport(p.x, world.surfaceY(p.x, p.z), p.z)
+  }
+}
 save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
@@ -323,6 +350,7 @@ bindHud(combat.health, () => {
   combat.respawn()
   hunger.reset() // fresh spawn, fresh appetite
   breath.reset() // and fresh lungs — a drowning death can't respawn gasping
+  burning.reset() // and no lingering fire — a lava death can't respawn burning
 })
 bindHungerHud(hunger)
 bindBreathHud(breath)
@@ -413,37 +441,74 @@ window.addEventListener('resize', () => {
 
 const clock = new THREE.Clock()
 
-// Underwater state (Phase 10 tint + deep water fog/audio/breath): ONE
-// camera-cell test decides "submerged" for everything — the blue wash, the
-// breath drain, the fog swap, and the audio muffle can never disagree.
-// Runs after daynight.update in the loop, so the submerged fog near/far and
-// color overwrite what DayNight just wrote; surfaced frames restore
+// Submerged state (Phase 10 tint + deep water fog/audio/breath, generalized
+// for lava): ONE camera-cell test decides which liquid the head is in —
+// `liquid` holds the cell's liquid block id (0 = air) — so the washes, the
+// breath drain, the fog swaps, and the audio muffle can never disagree.
+// Breath deliberately drains only in WATER: in lava you are not holding
+// breath, you are on fire — the damage channels stay legible. Runs after
+// daynight.update in the loop, so the submerged fog near/far and color
+// overwrite what DayNight just wrote; surfaced frames restore
 // GRAPHICS.fogNear/fogFar and leave the color to DayNight.
 const waterTint = document.getElementById('water-tint')
+const lavaTint = document.getElementById('lava-tint')
 const waterFogColor = new THREE.Color(WATER.fog.color)
-let submerged = false
+const lavaFogColor = new THREE.Color(LAVA.fog.color)
+let liquid = 0 // camera-cell liquid block id, 0 while surfaced
 const updateUnderwater = () => {
   const p = camera.position
-  const now = isLiquid(
-    world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)),
-  )
-  if (now !== submerged) {
-    submerged = now
-    // Surface-crossing feedback: splash (louder going in), a spray burst at
-    // the entry point, and the master-bus low-pass muffle.
-    sounds.play('splash', { gain: now ? 1 : 0.55 })
-    if (now) particles.burst(p.x, p.y - 0.3, p.z, 0xdfefff, 18)
-    sounds.setUnderwater(now)
+  const id = world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))
+  const now = isLiquid(id) ? id : 0
+  if (now !== liquid) {
+    // Surface-crossing feedback (louder going in): splash + spray for
+    // water, sizzle + embers for lava, and the master-bus low-pass muffle —
+    // both liquids muffle through the one filter.
+    if (now === BLOCK_LAVA || liquid === BLOCK_LAVA) {
+      sounds.play('sizzle', { gain: now ? 1 : 0.55 })
+      if (now) particles.burst(p.x, p.y - 0.3, p.z, LAVA.ember.color, 18)
+    } else {
+      sounds.play('splash', { gain: now ? 1 : 0.55 })
+      if (now) particles.burst(p.x, p.y - 0.3, p.z, 0xdfefff, 18)
+    }
+    liquid = now
+    sounds.setUnderwater(now !== 0)
   }
-  waterTint.classList.toggle('hidden', !submerged)
-  if (submerged) {
+  waterTint.classList.toggle('hidden', liquid !== BLOCK_WATER)
+  // The lava wash doubles as the after-burn cue: full-strength while the
+  // camera is in lava, a faint edge glow while the after-burn ticks.
+  const afterburning = liquid !== BLOCK_LAVA && burning.isBurning
+  lavaTint.classList.toggle('hidden', liquid !== BLOCK_LAVA && !afterburning)
+  lavaTint.classList.toggle('afterburn', afterburning)
+  if (liquid === BLOCK_WATER) {
     scene.fog.near = WATER.fog.near
     scene.fog.far = WATER.fog.far
     scene.fog.color.lerp(waterFogColor, WATER.fog.colorBlend)
+  } else if (liquid === BLOCK_LAVA) {
+    scene.fog.near = LAVA.fog.near
+    scene.fog.far = LAVA.fog.far
+    scene.fog.color.lerp(lavaFogColor, LAVA.fog.colorBlend)
   } else {
     scene.fog.near = GRAPHICS.fogNear
     scene.fog.far = GRAPHICS.fogFar
   }
+}
+
+// Lava ambience (lava feature): while an exposed pool surface is nearby
+// (LavaLights already tracks the nearest), it pops and spits embers every
+// few seconds — gain fading with distance, the zombie hearRadius pattern.
+let lavaPopTimer = LAVA.pops.maxSeconds
+const updateLavaAmbience = (delta) => {
+  if (!player.isLocked) return
+  lavaPopTimer -= delta
+  if (lavaPopTimer > 0) return
+  lavaPopTimer =
+    LAVA.pops.minSeconds + Math.random() * (LAVA.pops.maxSeconds - LAVA.pops.minSeconds)
+  const near = lavaLights.nearest
+  if (!near || near.d2 > LAVA.pops.radius ** 2) return
+  const gain = 1 - Math.sqrt(near.d2) / LAVA.pops.radius
+  sounds.play('lavaPop', { gain })
+  const c = near.cell
+  particles.burst(c.x + 0.5, c.y + 1, c.z + 0.5, LAVA.ember.color, LAVA.pops.embers)
 }
 
 renderer.setAnimationLoop(() => {
@@ -460,9 +525,16 @@ renderer.setAnimationLoop(() => {
       sprinting: player.isSprinting,
       mining: interaction.mining && !!interaction.target,
     })
-    // Breath shares hunger's gate (menus/death freeze it) and the submerged
-    // flag updateUnderwater maintains each frame.
-    breath.update(delta, { submerged })
+    // Breath shares hunger's gate (menus/death freeze it) and the camera
+    // liquid updateUnderwater maintains each frame — water only, on purpose.
+    breath.update(delta, { submerged: liquid === BLOCK_WATER })
+    // Burning shares the same gate; body-midsection flags (you burn wading
+    // chest-deep, not only when your eyes go under). The body's inWater
+    // means "any liquid", so real water is inWater && !inLava.
+    burning.update(delta, {
+      inLava: player.body.inLava,
+      inWater: player.body.inWater && !player.body.inLava,
+    })
   }
   if (player.isLocked || furnaceScreen.isOpen) furnaces.update(delta)
   hunt.update(delta, camera.position)
@@ -476,7 +548,9 @@ renderer.setAnimationLoop(() => {
   daynight.update(player.isLocked ? delta : 0)
   clouds.update(delta, camera.position)
   torchLights.update(camera.position)
+  lavaLights.update(camera.position)
   updateUnderwater()
+  updateLavaAmbience(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)
@@ -521,6 +595,8 @@ window.__mc = {
   chestScreen,
   enderStore,
   torchLights,
+  lavaLights,
+  burning,
   armor: combat.armor,
   projectiles: combat.projectiles,
   sleep,

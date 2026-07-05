@@ -1,7 +1,12 @@
 import * as THREE from 'three'
-import { LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_WATER, isSolid } from './blocks.js'
+import { LAVA, LIGHTING, WATER, WORLD } from '../config.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_WATER, isSolid } from './blocks.js'
 import { uvRect } from './atlas.js'
+
+// Warm vertex-color floor for solid faces directly exposed to lava (lava
+// feature): brighter than any cave depth factor, so pool floors and walls
+// read hot at zero runtime cost. Parsed once — config colors are static.
+const LAVA_FACE_TINT = new THREE.Color(LIGHTING.lava.faceTint)
 
 // Sky-light factor [minSkyLight, 1] for an air cell `depth` blocks below its
 // column's top solid block (<= 0 means open sky). The Phase 11 budget depth
@@ -62,6 +67,11 @@ export class Chunk {
     this.blocks = new Uint8Array(this.size * this.size * this.height)
     this.mesh = null
     this.waterMesh = null // translucent water pass, a child of `mesh` (Phase 10)
+    this.lavaMesh = null // unlit lava pass, also a child of `mesh` (lava feature)
+    // Exposed lava surface cells (world coords), recorded while building the
+    // lava mesh: feeds LavaLights, world.lightAt's spawn suppression, and
+    // the ambience pops. Rebuilt on every remesh — same lifecycle as the mesh.
+    this.lavaSurfaces = []
   }
 
   index(x, y, z) {
@@ -179,7 +189,8 @@ export class Chunk {
       for (let z = 0; z < this.size; z++) {
         for (let y = 0; y < this.height; y++) {
           const id = this.blocks[this.index(x, y, z)]
-          if (id === BLOCK_AIR || id === BLOCK_WATER) continue // water has its own pass
+          // Liquids have their own passes (water below, lava after it).
+          if (id === BLOCK_AIR || id === BLOCK_WATER || id === BLOCK_LAVA) continue
           const block = BLOCKS[id]
           if (block.shape === 'torch') {
             this.#emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color)
@@ -195,13 +206,19 @@ export class Chunk {
 
           for (const face of FACES) {
             const [dx, dy, dz] = face.dir
-            if (this.#neighborSolid(x + dx, y + dy, z + dz, baseX, baseZ)) {
-              continue
-            }
+            const nid = this.#neighborId(x + dx, y + dy, z + dz, baseX, baseZ)
+            if (isSolid(nid)) continue
             // Vertex color = tint only (the atlas tile carries the albedo).
             color.setScalar(face.shade)
-            const top = this.#colTop(x + dx, z + dz, baseX, baseZ, colTops)
-            color.multiplyScalar(skyFactor(top - (y + dy)))
+            if (nid === BLOCK_LAVA) {
+              // The cell this face is exposed to IS lava (lava feature):
+              // paint it lava-lit instead of cave-dark — mesh-time, radius
+              // 1 only, the Phase 11 no-flood-fill budget rule.
+              color.multiply(LAVA_FACE_TINT)
+            } else {
+              const top = this.#colTop(x + dx, z + dz, baseX, baseZ, colTops)
+              color.multiplyScalar(skyFactor(top - (y + dy)))
+            }
             if (block.biomeTint === 'all' || (block.biomeTint === 'top' && dy === 1)) {
               const biome = this.#biome(x, z, baseX, baseZ, biomes)
               color.multiply(block.biomeTint === 'all' ? biome.leafColor : biome.grassColor)
@@ -238,6 +255,7 @@ export class Chunk {
       this.mesh.position.set(baseX, 0, baseZ)
     }
     this.#buildWaterMesh(baseX, baseZ)
+    this.#buildLavaMesh(baseX, baseZ)
     return this.mesh
   }
 
@@ -394,8 +412,73 @@ export class Chunk {
     }
   }
 
-  // Neighbor block id for the water pass (the solid pass only needs
-  // solidity). Below the world reads as stone so sea bottoms stay closed.
+  // Third render pass (lava feature): all lava faces in one OPAQUE, UNLIT
+  // mesh — world.lavaMaterial is MeshBasic, so pools render full-bright in
+  // pitch-dark caves with zero lights (the Boss crown/core glow idiom).
+  // Structure mirrors the water pass: a child of the solid mesh, culled
+  // against itself and solids, faces meeting air drawn, undersides hidden,
+  // open tops dropped LAVA.surfaceDrop for a liquid line. While building,
+  // every open-top cell's world coords land in this.lavaSurfaces — the
+  // exposed-surface registry consumed by LavaLights, world.lightAt (spawn
+  // suppression), and the ambience pops. A lava-vs-water boundary is
+  // unreachable in generated terrain (seabedKeep seals sea columns —
+  // probe-lava.mjs stands guard on the invariant).
+  #buildLavaMesh(baseX, baseZ) {
+    const positions = []
+    const normals = []
+    const colors = []
+    const indices = []
+    const color = new THREE.Color()
+    const lava = BLOCKS[BLOCK_LAVA]
+    this.lavaSurfaces = []
+
+    for (let x = 0; x < this.size; x++) {
+      for (let z = 0; z < this.size; z++) {
+        for (let y = 0; y < this.height; y++) {
+          if (this.blocks[this.index(x, y, z)] !== BLOCK_LAVA) continue
+          const open = // air directly above: an exposed pool surface cell
+            this.#neighborId(x, y + 1, z, baseX, baseZ) === BLOCK_AIR
+          if (open) this.lavaSurfaces.push({ x: baseX + x, y, z: baseZ + z })
+          for (const face of FACES) {
+            const [dx, dy, dz] = face.dir
+            if (dy === -1) continue // the pool floor hides lava undersides
+            const neighbor = this.#neighborId(x + dx, y + dy, z + dz, baseX, baseZ)
+            if (neighbor === BLOCK_LAVA || isSolid(neighbor)) continue
+
+            const faceColor = dy === 1 ? lava.color.top : lava.color.side
+            color.set(faceColor).multiplyScalar(face.shade)
+            const ndx = positions.length / 3
+            for (const [ox, oy, oz] of face.corners) {
+              const top = oy === 1 && open ? 1 - LAVA.surfaceDrop : oy
+              positions.push(x + ox, y + top, z + oz)
+              normals.push(dx, dy, dz)
+              colors.push(color.r, color.g, color.b)
+            }
+            indices.push(ndx, ndx + 1, ndx + 2, ndx + 2, ndx + 1, ndx + 3)
+          }
+        }
+      }
+    }
+
+    if (positions.length === 0 && !this.lavaMesh) return
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    geometry.setIndex(indices)
+
+    if (this.lavaMesh) {
+      this.lavaMesh.geometry.dispose()
+      this.lavaMesh.geometry = geometry
+    } else {
+      this.lavaMesh = new THREE.Mesh(geometry, this.world.lavaMaterial)
+      this.mesh.add(this.lavaMesh) // local coords match the parent's
+    }
+  }
+
+  // Neighbor block id for the liquid passes and lava-lit face tinting (the
+  // old solid pass only needed solidity). Below the world reads as stone so
+  // sea and pool bottoms stay closed.
   #neighborId(x, y, z, baseX, baseZ) {
     if (y < 0) return 3
     if (y >= this.height) return BLOCK_AIR
@@ -405,19 +488,13 @@ export class Chunk {
     return this.world.blockAt(baseX + x, y, baseZ + z)
   }
 
-  #neighborSolid(x, y, z, baseX, baseZ) {
-    if (y < 0) return true // never draw the underside of the world
-    if (y >= this.height) return false
-    if (x >= 0 && x < this.size && z >= 0 && z < this.size) {
-      return isSolid(this.blocks[this.index(x, y, z)])
-    }
-    return isSolid(this.world.blockAt(baseX + x, y, baseZ + z))
-  }
-
   dispose() {
     if (this.mesh) {
       this.waterMesh?.geometry.dispose()
       this.waterMesh = null
+      this.lavaMesh?.geometry.dispose()
+      this.lavaMesh = null
+      this.lavaSurfaces = []
       this.mesh.geometry.dispose()
       this.mesh = null
     }

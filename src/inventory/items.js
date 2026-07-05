@@ -73,6 +73,9 @@ export const ITEMS = {
   // The King's Trial reward (granted once at completion, no recipe): every
   // placed cache opens the same global store — see src/crafting/EnderStore.js.
   kings_cache: blockItem('kings_cache', 17, "King's Cache"),
+  // Lava-crust block (Nether prep): mined with a diamond pickaxe only —
+  // the future portal frame material.
+  obsidian: blockItem('obsidian', 20, 'Obsidian'),
   // Sheep bonus drop — the bed-crafting ingredient.
   wool: { id: 'wool', name: 'Wool', maxStack: INVENTORY.maxStack, glyph: '❋', tint: '#e8e6df' },
   // Coal ore drop (Phase 11). The natural furnace fuel — fuel wiring into

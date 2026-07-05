@@ -360,6 +360,25 @@ body.touch-mode #hotbar {
   background: rgba(20, 70, 150, 0.35);
 }
 
+/* Lava wash (lava feature): the water tint's sibling, hotter and heavier —
+   visibility should collapse inside a pool. `.afterburn` is the on-fire
+   lingering after climbing out: a faint edge glow instead of the full wash. */
+#lava-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: rgba(226, 89, 14, 0.5);
+}
+
+#lava-tint.afterburn {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(226, 89, 14, 0) 55%,
+    rgba(226, 89, 14, 0.35) 100%
+  );
+}
+
 /* --- Hunger bar (Phase 12): drumsticks mirroring the hearts row ----------- */
 
 #hunger-bar {

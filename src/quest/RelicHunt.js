@@ -95,7 +95,11 @@ export class RelicHunt {
   // cave field for the first air pocket (carved cell over a solid floor) at
   // or below def.maxY. Collected by REACHING the pocket — the ±4 vertical
   // proximity band means standing on the surface 40 blocks up never counts.
+  // The scan floor is clamped above the lava fill (lava feature): carved
+  // cells at or below WORLD.terrain.lava.level are lava now, and an opaque,
+  // damaging pool with the shard invisible inside it is a broken quest beat.
   #findCaveSpot(rand, from, def) {
+    const floor = Math.max(WORLD.terrain.caves.minY, WORLD.terrain.lava.level + 1)
     let last = null
     for (let tries = 0; tries < 240; tries++) {
       const angle = rand() * Math.PI * 2
@@ -105,7 +109,7 @@ export class RelicHunt {
       const h = this.world.terrainHeight(x, z)
       if (h - 1 <= WATER.level + 1) continue // sea/beach columns keep the seabed sealed
       last = { x, z }
-      for (let y = Math.min(def.maxY, h - 8); y > WORLD.terrain.caves.minY; y--) {
+      for (let y = Math.min(def.maxY, h - 8); y > floor; y--) {
         if (this.world.caveAt(x, y, z, h) && !this.world.caveAt(x, y - 1, z, h)) {
           return { x, z, y: y + 0.5 }
         }

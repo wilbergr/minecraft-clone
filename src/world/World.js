@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_OBSIDIAN, BLOCK_TORCH, BLOCK_WATER, isSolid, isTargetable } from './blocks.js'
 import { createFBM2D, createValueNoise3D, hash2D, hash3D } from './noise.js'
 import { createAtlasTexture } from './atlas.js'
 import { Chunk, skyFactor } from './Chunk.js'
@@ -34,6 +34,10 @@ export class World {
       side: THREE.DoubleSide,
       depthWrite: false,
     })
+    // Lava pass (lava feature): UNLIT — MeshBasic ignores every scene light,
+    // so pools render full-bright in pitch-dark caves (the Boss crown/core
+    // glow idiom). Opaque: no transparency workarounds, normal depth writes.
+    this.lavaMaterial = new THREE.MeshBasicMaterial({ vertexColors: true })
     this.fbm = createFBM2D(WORLD.seed, WORLD.terrain)
     // Cave field (Phase 11): two octaves of 3D value noise, seeded off the
     // world seed so caves are as deterministic as the rest of the terrain.
@@ -152,20 +156,55 @@ export class World {
     return n > threshold
   }
 
-  // Below-surface block including scattered features: cave carving first,
-  // then the base layering, with deep stone occasionally replaced by an ore
-  // from the depth-banded WORLD.terrain.ores table (first matching band wins).
-  // Callers looping a column pass `biome` (one lookup per column instead of
-  // per block); single-block queries let it default.
+  // Is (wx, wy, wz) a generated lava cell? Carved cave space at or below the
+  // lava level floods with lava (lava feature) — pure like caveAt, so both
+  // generation paths and the obsidian crust below agree. Callers that know
+  // the column height pass `h`; single queries let it default.
+  lavaAt(wx, wy, wz, h = this.terrainHeight(wx, wz)) {
+    return wy <= WORLD.terrain.lava.level && this.caveAt(wx, wy, wz, h)
+  }
+
+  // Below-surface block including scattered features: cave carving first
+  // (cave cells at or below the lava level flood with lava — the fill lives
+  // HERE, the one function both Chunk.generate and the unloaded-chunk
+  // blockAt path share, so purity holds with no mirroring), then the base
+  // layering, with deep stone occasionally replaced by an ore from the
+  // depth-banded WORLD.terrain.ores table (first matching band wins), and
+  // finally stone touching a lava cell crusting into obsidian. Ores win over
+  // the crust on purpose — a diamond vein in a pool wall stays a diamond
+  // vein (the "guarded by lava" tension). Callers looping a column pass
+  // `biome` (one lookup per column instead of per block); single-block
+  // queries let it default.
   terrainBlock(wx, wy, wz, h, biome = this.biomeAt(wx, wz)) {
-    if (this.caveAt(wx, wy, wz, h)) return BLOCK_AIR
+    if (this.caveAt(wx, wy, wz, h)) {
+      return wy <= WORLD.terrain.lava.level ? BLOCK_LAVA : BLOCK_AIR
+    }
     const id = this.blockForDepth(wy, h, biome)
     if (id !== 3) return id
     for (const ore of WORLD.terrain.ores) {
       if (wy < ore.minY || wy > ore.maxY) continue
       if (hash3D(WORLD.seed ^ ore.salt, wx, wy, wz) < ore.chance) return ore.blockId
     }
+    // Obsidian crust (Nether prep): any lava neighbor requires that
+    // neighbor's y <= lava.level, so cells above level + 1 can't qualify —
+    // the height gate keeps the 6-neighbor test off the hot path.
+    if (wy <= WORLD.terrain.lava.level + 1 && this.#lavaAdjacent(wx, wy, wz, h)) {
+      return BLOCK_OBSIDIAN
+    }
     return id
+  }
+
+  // Does any of the 6 neighbor cells hold generated lava? Same-column
+  // neighbors reuse the caller's height; horizontal ones compute their own
+  // (pure, so the crust matches across chunk borders and blockAt queries).
+  #lavaAdjacent(wx, wy, wz, h) {
+    if (this.lavaAt(wx, wy + 1, wz, h) || this.lavaAt(wx, wy - 1, wz, h)) return true
+    return (
+      this.lavaAt(wx + 1, wy, wz) ||
+      this.lavaAt(wx - 1, wy, wz) ||
+      this.lavaAt(wx, wy, wz + 1) ||
+      this.lavaAt(wx, wy, wz - 1)
+    )
   }
 
   // Does a tree stand on the column at (wx, wz)? Trees are a pure function of
@@ -436,20 +475,44 @@ export class World {
   // depth sky light (skyFactor of how far the cell sits below its column's
   // top solid block) scaled by the time-of-day `skyBrightness`
   // (daynight.skyBrightness — pass 0 for "no sky contribution"), maxed with
-  // the nearest placed torch's falloff. The torch radius reuses
-  // LIGHTING.torch.distance so the protective bubble always equals the
-  // visibly-lit bubble; like the visual point lights, torch light ignores
-  // walls (the Phase 11 budget rule — no flood-fill). Consumed by
+  // the nearest placed torch's falloff and the nearest exposed lava
+  // surface's (lava feature — pools suppress spawns like torches). The
+  // radii reuse LIGHTING.torch/lava.distance so the protective bubble always
+  // equals the visibly-lit bubble; like the visual point lights, both terms
+  // ignore walls (the Phase 11 budget rule — no flood-fill). Consumed by
   // MobManager's dark-places spawn check.
+  //
+  // Documented asymmetry: the torch term answers identically for loaded and
+  // unloaded chunks (the registry is global), but the lava term is
+  // LOADED-CHUNKS-ONLY — exposed surfaces live on chunk meshes
+  // (chunk.lavaSurfaces, rebuilt on every remesh). Safe for the one caller:
+  // the spawn picker's ring is 10–18 blocks from the player, always inside
+  // the loaded radius. A pure generator fallback would cost thousands of
+  // caveAt calls per query for a case that cannot occur.
   lightAt(wx, wy, wz, skyBrightness = 1) {
     const sky = skyFactor(this.topSolidY(wx, wz) - wy) * skyBrightness
-    let torch = 0
+    let glow = 0
     const R = LIGHTING.torch.distance
     for (const t of this.torches.values()) {
       const d2 = (t.x - wx) ** 2 + (t.y - wy) ** 2 + (t.z - wz) ** 2
-      if (d2 < R * R) torch = Math.max(torch, 1 - Math.sqrt(d2) / R)
+      if (d2 < R * R) glow = Math.max(glow, 1 - Math.sqrt(d2) / R)
     }
-    return Math.max(sky, torch)
+    const LR = LIGHTING.lava.distance
+    const S = WORLD.chunkSize
+    for (const chunk of this.chunks.values()) {
+      const cells = chunk.lavaSurfaces
+      if (!cells || cells.length === 0) continue
+      // Chunk-footprint reject before walking its surface list.
+      const minX = chunk.cx * S
+      const minZ = chunk.cz * S
+      if (wx < minX - LR || wx > minX + S + LR) continue
+      if (wz < minZ - LR || wz > minZ + S + LR) continue
+      for (const c of cells) {
+        const d2 = (c.x - wx) ** 2 + (c.y - wy) ** 2 + (c.z - wz) ** 2
+        if (d2 < LR * LR) glow = Math.max(glow, 1 - Math.sqrt(d2) / LR)
+      }
+    }
+    return Math.max(sky, glow)
   }
 
   // True once the chunk containing world column (x, z) has been generated.

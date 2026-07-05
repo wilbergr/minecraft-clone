@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { COMBAT, FEEDBACK, HUNGER, PHYSICS, PLAYER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_WATER } from '../world/blocks.js'
+import { BLOCKS, BLOCK_AIR, isLiquid } from '../world/blocks.js'
 import { CrackOverlay } from '../fx/CrackOverlay.js'
 
 // Aiming at, breaking, and placing blocks. Left click attacks a mob when the
@@ -257,10 +257,11 @@ export class BlockInteraction {
     const y = this.target.y + ny
     const z = this.target.z + nz
     if (y < 0 || y >= WORLD.chunkHeight) return false
-    // Air and water are both placeable-into (water just gets displaced —
-    // that's how you pillar up out of the sea).
+    // Air and any liquid are placeable-into (the liquid just gets displaced
+    // — pillaring out of the sea, and walling off / bridging over lava is
+    // the core counterplay for deep mining).
     const existing = this.world.blockAt(x, y, z)
-    if (existing !== BLOCK_AIR && existing !== BLOCK_WATER) return false
+    if (existing !== BLOCK_AIR && !isLiquid(existing)) return false
     if (this.#overlapsPlayer(x, y, z)) return false
     if (!this.world.setBlock(x, y, z, blockId)) return false
     this.fx.sounds?.play('place', { material: BLOCKS[blockId].material })

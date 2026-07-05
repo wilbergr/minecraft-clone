@@ -54,6 +54,7 @@ const TILE_NAMES = [
   'kings_cache_side',
   'kings_cache_bottom',
   'diamond_ore',
+  'obsidian',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -325,6 +326,12 @@ const PAINTERS = {
   kings_cache_bottom(px, rand) {
     speckle(px, rand, [50, 38, 69], 10)
     blobs(px, rand, [38, 28, 54], 4)
+  },
+  // Volcanic glass: near-black body with faint violet sheen streaks.
+  obsidian(px, rand) {
+    speckle(px, rand, [26, 20, 37], 7)
+    blobs(px, rand, [58, 44, 88], 4) // purple glints
+    blobs(px, rand, [12, 9, 18], 3) // deep-black patches
   },
 }
 

@@ -195,6 +195,14 @@ export class SoundEngine {
         this.#burst({ type: 'lowpass', freq: 900, dur: 0.28, gain: 0.5 * v })
         this.#tone({ type: 'sine', from: 340, to: 120, dur: 0.22, gain: 0.25 * v })
         break
+      case 'sizzle': // lava contact / burning item — hot hiss with a falling whine
+        this.#burst({ type: 'highpass', freq: 2600, dur: 0.5, gain: 0.45 * v })
+        this.#tone({ type: 'sawtooth', from: 320, to: 90, dur: 0.35, gain: 0.18 * v })
+        break
+      case 'lavaPop': // a pool blurps — short low bloop + a tiny crackle
+        this.#tone({ type: 'sine', from: 150, to: 55, dur: 0.18, gain: 0.35 * v })
+        this.#burst({ type: 'bandpass', freq: 750, dur: 0.06, gain: 0.2 * v })
+        break
       case 'trialComplete': // three ascending chimes — the rite fulfilled
         this.#tone({ type: 'sine', from: 440, to: 442, dur: 0.5, gain: 0.25 * v })
         this.#tone({ type: 'sine', from: 554, to: 556, dur: 0.5, gain: 0.25 * v, when: 0.22 })
