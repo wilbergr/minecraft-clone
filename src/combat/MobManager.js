@@ -6,6 +6,8 @@ import { Skeleton } from './Skeleton.js'
 import { Creeper } from './Creeper.js'
 import { Boss } from './Boss.js'
 import { PassiveMob } from './PassiveMob.js'
+import { ZombifiedPiglin } from './ZombifiedPiglin.js'
+import { MagmaCube } from './MagmaCube.js'
 
 // Owns the live mob population: periodically tops it up by spawning hostiles
 // in dark cells on a ring around the player — the mix is weighted across
@@ -40,6 +42,10 @@ const HOSTILES = {
   // (BossFight summons through it; tests too), but deliberately NOT in
   // hostileWeights — the boss can never ambient-spawn.
   boss: (world, x, z, projectiles) => new Boss(world, x, z, projectiles),
+  // Nether population (N5) — weighted in NETHER.spawn.weights, never in the
+  // overworld table (the spawn profile is per-world).
+  zombified_piglin: (world, x, z) => new ZombifiedPiglin(world, x, z),
+  magma_cube: (world, x, z) => new MagmaCube(world, x, z),
 }
 
 export class MobManager {
@@ -146,7 +152,8 @@ export class MobManager {
     // Ambient groans (Phase 9): every so often one random growling mob
     // groans, volume fading with distance, so the horde is audible offscreen.
     // Lives here (not in the mob) so mob AI stays sound-agnostic. Growlers
-    // only — pigs and skeletons don't moan like zombies.
+    // only — pigs and skeletons don't moan like zombies. `mob.voice` (N5)
+    // picks the groan variant; piglins snort where zombies moan.
     this.groanTimer -= delta
     if (this.groanTimer <= 0) {
       const growlers = this.mobs.filter((m) => m.growls)
@@ -154,7 +161,7 @@ export class MobManager {
         this.groanTimer = AUDIO.zombie.groanIntervalSeconds * (0.6 + Math.random() * 0.8)
         const mob = growlers[Math.floor(Math.random() * growlers.length)]
         const gain = 1 - mob.group.position.distanceTo(playerPos) / AUDIO.zombie.hearRadius
-        if (gain > 0) this.fx.sounds?.play('zombie', { gain })
+        if (gain > 0) this.fx.sounds?.play(mob.voice ?? 'zombie', { gain })
       }
     }
 
@@ -367,9 +374,25 @@ export class MobManager {
     if (y !== null) mob.group.position.y = y
     // Fuse-start hiss (creepers): wired here so mob AI stays sound-agnostic.
     if ('onHiss' in mob) mob.onHiss = () => this.fx.sounds?.play('fuse')
+    // Piglin anger spread (N5): hitting one turns the nearby patrol — wired
+    // here (the onHiss pattern) so the mob never holds a manager reference.
+    if ('onAngered' in mob) mob.onAngered = (from) => this.#spreadAnger(from)
     this.mobs.push(mob)
     this.scene.add(mob.group)
     return mob
+  }
+
+  // Anger every other neutral piglin within the provoked one's angerRadius.
+  // One flat pass, no cascade: a directly-set `angered` flag doesn't re-fire
+  // onAngered, so anger spreads one ring per player hit, not world-wide.
+  #spreadAnger(from) {
+    const r2 = from.cfg.angerRadius ** 2
+    for (const m of this.mobs) {
+      if (m === from || m.angered !== false) continue
+      if (m.group.position.distanceToSquared(from.group.position) <= r2) {
+        m.angered = true
+      }
+    }
   }
 
   // Passive spawn attempt (Phase 12): try a few ring spots and take the first
