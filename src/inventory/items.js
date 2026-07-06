@@ -86,6 +86,27 @@ export const ITEMS = {
   quartz: { id: 'quartz', name: 'Quartz', maxStack: INVENTORY.maxStack, glyph: '❖', tint: '#e8e4da' },
   // The quartz sink (N4): a bright decorative block for the dark dimension.
   quartz_block: blockItem('quartz_block', 27, 'Quartz Block'),
+  // The End island's body rock — mined and carried home like any block.
+  end_stone: blockItem('end_stone', 29, 'End Stone'),
+  // The gate to the End (craftable — recipes.js): twelve laid as a flat
+  // 3×3-interior ring self-activate into an End portal.
+  end_portal_frame: blockItem('end_portal_frame', 30, 'End Portal Frame'),
+  // The Ender Dragon's trophy — stamped beside the exit portal on victory,
+  // mined and placed like any block. Pure keepsake.
+  dragon_egg: blockItem('dragon_egg', 32, 'Dragon Egg'),
+  // The dragon's unique grant (never crafted, never dropped — the fight
+  // runner hands it over on victory so a void death can't destroy it).
+  // Chest-slot armor with ZERO points: wearing wings costs your chestplate,
+  // the MC risk trade. The glide model lives in PlayerControls (E5);
+  // durability wears per second gliding, not per hit.
+  elytra: {
+    id: 'elytra',
+    name: 'Elytra',
+    maxStack: 1,
+    glyph: '⩓',
+    tint: '#b8a8d8',
+    armor: { slot: 'chest', points: 0, durability: 432 },
+  },
   // Flint & steel (N3): tool kind 'igniter' matches no block, so it can't
   // mine (the bow precedent) — its whole job is lighting portal frames
   // through interaction.useItemHook. Durability wears one per ignition.

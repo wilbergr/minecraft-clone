@@ -24,6 +24,7 @@ export function bindHelp(player) {
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows — move · double-tap <kbd>W</kbd> — sprint (needs a fed hunger bar)</li>
             <li><kbd>Space</kbd> — jump (hold to keep hopping) · <kbd>Shift</kbd> — sneak (<kbd>C</kbd> works too)</li>
             <li>In water: <kbd>Space</kbd> — swim up · <kbd>Shift</kbd> — dive. Watch your bubbles — surface (or find an air pocket) before they run out</li>
+            <li>With elytra worn: tap <kbd>Space</kbd> while falling — glide. Look down to gain speed, up to bleed it; landing (or water, or a wall) folds the wings</li>
             <li>Mouse — look around</li>
             <li>Left click — attack / hold to mine (cracks show progress)</li>
             <li>Right click — use the held item: place a block, eat food, wear armor</li>

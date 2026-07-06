@@ -62,6 +62,10 @@ const TILE_NAMES = [
   'bedrock',
   'quartz_block',
   'gravel',
+  'end_stone',
+  'end_frame_top',
+  'end_frame_side',
+  'dragon_egg',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -374,6 +378,47 @@ const PAINTERS = {
     speckle(px, rand, [74, 74, 74], 24)
     blobs(px, rand, [38, 38, 38], 5)
     blobs(px, rand, [104, 104, 104], 3)
+  },
+  // End stone: pale sickly yellow with darker curdled speckling (the End).
+  end_stone(px, rand) {
+    speckle(px, rand, [222, 217, 160], 10)
+    blobs(px, rand, [196, 190, 130], 5)
+    blobs(px, rand, [236, 232, 184], 3)
+  },
+  // End portal frame, top: weathered green stone with a dark violet "eye
+  // socket" pane at the center — the activated-ring signature.
+  end_frame_top(px, rand) {
+    speckle(px, rand, [58, 74, 62], 10)
+    for (let i = 0; i < TILE; i++) {
+      for (const [x, y] of [[i, 0], [i, 15], [0, i], [15, i]]) {
+        const j = (rand() * 2 - 1) * 8
+        px(x, y, rgb(44 + j, 56 + j, 48 + j)) // darker rim
+      }
+    }
+    for (let y = 5; y <= 10; y++) {
+      for (let x = 5; x <= 10; x++) {
+        const j = (rand() * 2 - 1) * 10
+        px(x, y, rgb(28 + j, 14 + j, 46 + j)) // violet socket
+      }
+    }
+    blobs(px, rand, [80, 100, 84], 3)
+  },
+  // Frame side: the green stone body over a darker plinth base.
+  end_frame_side(px, rand) {
+    speckle(px, rand, [54, 68, 58], 10)
+    for (let y = 11; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const j = (rand() * 2 - 1) * 8
+        px(x, y, rgb(38 + j, 48 + j, 42 + j)) // plinth
+      }
+    }
+    blobs(px, rand, [76, 94, 80], 3)
+  },
+  // Dragon egg: near-black shell with faint violet scale glints.
+  dragon_egg(px, rand) {
+    speckle(px, rand, [22, 14, 30], 6)
+    blobs(px, rand, [58, 34, 84], 4) // violet glints
+    blobs(px, rand, [10, 6, 16], 3) // deep-black patches
   },
   // Polished pale quartz: a soft warm white with faint chiseled seams.
   quartz_block(px, rand) {

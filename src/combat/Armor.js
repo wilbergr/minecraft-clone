@@ -73,6 +73,20 @@ export class Armor {
     this.#emit()
   }
 
+  // Wear one specific slot (the End: elytra grinds by glide TIME, not by
+  // hits — PlayerControls ticks the chest once per glide.wearSeconds).
+  // Shatters at zero like per-hit wear.
+  wearSlot(slot, amount = 1) {
+    const piece = this.slots[slot]
+    if (!piece) return
+    piece.durability -= amount
+    if (piece.durability <= 0) {
+      this.slots[slot] = null
+      this.onBreak?.(piece.id)
+    }
+    this.#emit()
+  }
+
   // Wear the selected hotbar item (already validated to carry `armor` by the
   // caller). The consumed piece leaves the hotbar; a displaced piece goes
   // back into the inventory with its remaining durability. Returns false

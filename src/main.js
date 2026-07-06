@@ -3,9 +3,12 @@ import * as config from './config.js'
 import { BREATH, CHALLENGE, GRAPHICS, HUNGER, LAVA, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { NetherWorld } from './world/NetherWorld.js'
+import { EndWorld } from './world/EndWorld.js'
 import { Dimensions } from './world/Dimensions.js'
 import { Portals } from './world/Portals.js'
+import { EndPortal } from './world/EndPortal.js'
 import { PortalPanels } from './fx/PortalPanels.js'
+import { EndPortalPanels } from './fx/EndPortalPanels.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { TouchControls } from './player/TouchControls.js'
@@ -14,6 +17,8 @@ import { Combat } from './combat/Combat.js'
 import { SaveManager } from './save/SaveManager.js'
 import { TreasureHunt } from './treasure/TreasureHunt.js'
 import { Challenge } from './quest/Challenge.js'
+import { DragonFight } from './quest/DragonFight.js'
+import { EndProgress } from './quest/EndProgress.js'
 import { bindOverlay } from './ui/overlay.js'
 import { bindHotbar } from './ui/hotbar.js'
 import { bindHud } from './ui/hud.js'
@@ -26,6 +31,7 @@ import { bindDropKeys, bindBackdropDrop } from './ui/dropKeys.js'
 import { bindTreasureHud } from './ui/treasureHud.js'
 import { bindTreasureReveal } from './ui/treasureReveal.js'
 import { bindChallengeReveal } from './ui/challengeReveal.js'
+import { bindEndReveal } from './ui/endReveal.js'
 import { bindGuidance } from './quest/guidance.js'
 import { bindBossHud } from './ui/bossHud.js'
 import { bindHelp } from './ui/help.js'
@@ -77,10 +83,11 @@ const camera = new THREE.PerspectiveCamera(
 )
 
 const world = new World(scene)
-// The Nether (second dimension): a sibling World in the same scene, its root
-// invisible until the dimension controller (constructed below, once every
-// world-holding system exists) swaps it in.
+// The Nether (second dimension) and the End (third): sibling Worlds in the
+// same scene, their roots invisible until the dimension controller
+// (constructed below, once every world-holding system exists) swaps them in.
 const nether = new NetherWorld(scene)
+const end = new EndWorld(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
 
@@ -114,6 +121,9 @@ const interaction = new BlockInteraction(camera, world, player, scene, inventory
 const combat = new Combat(camera, world, player, inventory, interaction, scene, fx)
 fx.health = combat.health
 combat.mobs.daynight = daynight // hostile spawns are night-gated (Phase 10)
+// Elytra glide (the End): PlayerControls reads the chest wear slot to
+// deploy and ticks its glide-time wear — bare runs (armor null) never glide.
+player.armor = combat.armor
 fx.viewmodel = new Viewmodel(camera, inventory, player)
 // Quest systems are overworld-bound (dimension seam): their meshes parent
 // under the overworld root so they vanish in the Nether, their world ref is
@@ -176,6 +186,7 @@ bindSlotTooltips()
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
 save.attachNether(nether) // the Nether's edit overlay, before its first chunk
+save.attachEnd(end) // and the End's, same rule
 save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
@@ -185,6 +196,10 @@ save.attachChests(chests)
 save.attachEnderStore(enderStore)
 save.attachArmor(combat.armor)
 save.attachSleep(sleep)
+// The End's progress latches (dragonDefeated / celebrated) on the optional
+// `end` slot — the fight runner below consults them.
+const endProgress = new EndProgress()
+save.attachEndProgress(endProgress)
 
 // The King's Trial (endgame): the four-stage challenge chain, unlocked by
 // treasure-hunt completion. Constructed after attachTreasure so it sees the
@@ -281,14 +296,15 @@ const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drop
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
 const chestScreen = new ChestScreen(chests, inventory, player, world, cursor, drops, camera, sounds)
 
-// The dimension controller (the Nether): owns { overworld, nether, current }
-// and the travel swap — every world-holding system above is on its list.
-// Constructed here because it needs them all; the saved dimension is applied
-// right away (before the first frame), so a save made in the Nether loads
-// straight back into it — position was already restored by save.load().
+// The dimension controller: owns the world registry { overworld, nether,
+// end } and the travel swap — every world-holding system above is on its
+// list. Constructed here because it needs them all; the saved dimension is
+// applied right away (before the first frame), so a save made in another
+// dimension loads straight back into it — position was already restored by
+// save.load(). The lookup validates the name: a garbage/future value lands
+// in the overworld (travel no-ops on unknown names).
 const dims = new Dimensions({
-  overworld: world,
-  nether,
+  worlds: { overworld: world, nether, end },
   scene,
   player,
   interaction,
@@ -302,7 +318,9 @@ const dims = new Dimensions({
   daynight,
 })
 save.attachDimensions(dims)
-if (save.dimensionData === 'nether') dims.travel('nether')
+if (save.dimensionData && save.dimensionData !== 'overworld') {
+  dims.travel(save.dimensionData)
+}
 
 // The portal (N3): frame ignition, the stand-in-the-field charge, 8:1
 // linked travel, and the translucent field panels. The vignette rides its
@@ -323,6 +341,62 @@ portals.onIgnite = (ok, x, y, z) => {
     // The strike fizzles — a few sparks, no sound of catching.
     particles.burst(x + 0.5, y + 0.5, z + 0.5, 0xffc86e, 6)
   }
+}
+// The Ender Dragon fight (the End): BossFight's sibling, armed whenever the
+// player stands in the End with the dragon undefeated. Its meshes (healing
+// beams) parent under the End root so they vanish with the dimension; live
+// deps attach here (the mobs.daynight pattern). Leaving the dimension
+// mid-fight cancels through dims.onTravel — travel already cleared the
+// mobs, this clears the runner and mobs.event.
+const dragonFight = new DragonFight(end, end.root)
+dragonFight.mobs = combat.mobs
+dragonFight.health = combat.health
+dragonFight.player = player
+dragonFight.combat = combat
+dragonFight.inventory = inventory
+dragonFight.drops = drops
+dragonFight.camera = camera
+dragonFight.progress = endProgress
+dims.onTravel = (name) => {
+  if (name !== 'end') dragonFight.cancel()
+}
+dragonFight.onBossEvent = (type, data) => {
+  const p = data?.position
+  if (type === 'rumble') {
+    sounds.play('rumble')
+    if (p) particles.burst(p.x, p.y + 1, p.z, 0xc9a7f5, 60)
+  } else if (type === 'rise' || type === 'phase') {
+    sounds.play('dragonRoar')
+    if (p) particles.burst(p.x, p.y + 1.5, p.z, 0x9a6ae8, 80)
+  } else if (type === 'telegraph') {
+    sounds.play('dragonRoar', { gain: data.attack === 'swoop' ? 0.7 : 0.35 })
+  } else if (type === 'fireball') {
+    sounds.play('fuse', { gain: 0.5 })
+  } else if (type === 'crystalBreak') {
+    sounds.play('crystalBreak')
+    if (p) particles.burst(p.x, p.y + 0.5, p.z, config.END.dragon.crystals.color, 40)
+  } else if (type === 'victory') {
+    sounds.play('dragonRoar')
+    const nova = config.END.dragon.defeatNova
+    if (p) particles.burst(p.x, p.y + 1, p.z, nova.color, nova.particles)
+  }
+}
+
+// The End portal (the End): a flat craftable frame ring that self-activates,
+// standing on the field charges, travel is keyed on the dimension you stand
+// in (overworld → the End; the End's exit portal → home). Reuses the nether
+// portal's vignette layer and charge/travel sounds; ring completion gets its
+// own bloom.
+const endPortal = new EndPortal(dims, player, camera)
+const endPortalPanels = new EndPortalPanels(scene, dims, particles)
+endPortal.onChargeStart = () => sounds.play('portalCharge')
+endPortal.onCharge = (fraction) => {
+  portalTint.style.opacity = fraction
+}
+endPortal.onTravel = () => sounds.play('portalTravel')
+endPortal.onOpen = (x, y, z) => {
+  sounds.play('endPortalOpen')
+  particles.burst(x + 0.5, y + 0.8, z + 0.5, config.END.portal.shimmer.color, 60)
 }
 // Load guard (lava feature): a save written before lava existed can restore
 // the player inside a newly-flooded cave bottom — burning from frame one is
@@ -411,8 +485,10 @@ const falling = new FallingBlocks(drops, sounds)
 // they belong to, so the handlers never cross).
 world.onEdit(popAttachmentIn(world))
 nether.onEdit(popAttachmentIn(nether))
+end.onEdit(popAttachmentIn(end))
 world.onEdit((x, y, z) => falling.onEdit(world, x, y, z))
 nether.onEdit((x, y, z) => falling.onEdit(nether, x, y, z))
+end.onEdit((x, y, z) => falling.onEdit(end, x, y, z))
 combat.mobs.onBlocksExploded = (cells) => {
   for (const c of cells) {
     blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
@@ -422,7 +498,11 @@ combat.mobs.onBlocksExploded = (cells) => {
 }
 const reveal = bindTreasureReveal(hunt, player)
 const challengeReveal = bindChallengeReveal(challenge, player)
-bindBossHud(challenge.bossFight)
+const endReveal = bindEndReveal(dragonFight, endProgress, player)
+bindBossHud([
+  { fight: challenge.bossFight, name: 'The Hollow King' },
+  { fight: dragonFight, name: 'The Ender Dragon' },
+])
 const help = bindHelp(player)
 // The death screen, reveals, furnace, and help panel count as open UI
 // so "click to play" stays out of their way.
@@ -431,6 +511,7 @@ const anyUIOpen = () =>
   combat.health.isDead ||
   reveal.isOpen ||
   challengeReveal.isOpen ||
+  endReveal.isOpen ||
   help.isOpen ||
   furnaceScreen.isOpen ||
   chestScreen.isOpen
@@ -489,6 +570,7 @@ const updateTreasureHud = bindTreasureHud(hunt, challenge, camera, () => dims.cu
 screen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 reveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 challengeReveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
+endReveal.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 help.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 furnaceScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
 chestScreen.onToggle = (open) => (open ? refreshOverlay() : setTimeout(refreshOverlay, 150))
@@ -512,6 +594,10 @@ const guidance = bindGuidance({
   sounds,
   particles,
 })
+// End-fight messages ride the same queued banner as trial messages — it is
+// a generic subtitle strip, and the two arcs can't speak at once (different
+// dimensions).
+dragonFight.onToast = (text) => guidance.banner.announce(text)
 
 // The King's Cache grant: completing the Trial hands the player ONE cache
 // block (grant-item rather than a gated recipe — the crafting panel has no
@@ -698,6 +784,32 @@ const updateNetherAmbience = (delta) => {
   sounds.play('netherAmbience')
 }
 
+// End ambience (the End): the same timer pattern — a sparse hollow wind
+// swell over the void while the End is current.
+let endAmbienceTimer = 0
+const updateEndAmbience = (delta) => {
+  if (!player.isLocked || dims.current !== end) return
+  endAmbienceTimer -= delta
+  if (endAmbienceTimer > 0) return
+  const { minSeconds, maxSeconds } = config.END.ambience
+  endAmbienceTimer = minSeconds + Math.random() * (maxSeconds - minSeconds)
+  sounds.play('endAmbience')
+}
+
+// Glide wind (the End, elytra): a soft rushing loop stitched from repeated
+// swells while airborne on wings — the ambience timer pattern, faster.
+let glideWindTimer = 0
+const updateGlideWind = (delta) => {
+  if (!player.gliding) {
+    glideWindTimer = 0
+    return
+  }
+  glideWindTimer -= delta
+  if (glideWindTimer > 0) return
+  glideWindTimer = 1.1
+  sounds.play('wind', { gain: 0.5 + 0.5 * (player.glideSpeed / config.PLAYER.glide.maxSpeed) })
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
@@ -732,6 +844,8 @@ renderer.setAnimationLoop(() => {
     challenge.update(delta, camera.position)
     guidance.update(delta, camera.position)
   }
+  // The dragon fight is End-bound the same way the quests are overworld-bound.
+  if (dims.current === end) dragonFight.update(delta, camera.position)
   particles.update(delta)
   drops.update(delta, camera.position)
   falling.update(delta) // ungated like drops — a menu never strands a block mid-fall
@@ -744,11 +858,15 @@ renderer.setAnimationLoop(() => {
   lavaLights.update(camera.position)
   portals.update(delta)
   portalPanels.update(delta, camera.position)
+  endPortal.update(delta)
+  endPortalPanels.update(delta, camera.position)
   updateUnderwater()
   updateWaterShimmer(delta)
   updateWaterBubbles(delta)
   updateLavaAmbience(delta)
   updateNetherAmbience(delta)
+  updateEndAmbience(delta)
+  updateGlideWind(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)
@@ -768,6 +886,8 @@ window.__mc = {
   dims,
   portals,
   portalPanels,
+  endPortal,
+  endPortalPanels,
   interaction,
   renderer,
   inventory,
@@ -780,6 +900,9 @@ window.__mc = {
   challenge,
   bossFight: challenge.bossFight,
   challengeReveal,
+  dragonFight,
+  endProgress,
+  endReveal,
   herald: guidance.herald,
   wisps: guidance.wisps,
   stele: guidance.stele,

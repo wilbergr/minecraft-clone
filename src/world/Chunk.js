@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { LAVA, LIGHTING, WATER, WORLD } from '../config.js'
-import { BLOCKS, BLOCK_AIR, BLOCK_LAVA, BLOCK_PORTAL, BLOCK_WATER, isSolid } from './blocks.js'
+import { BLOCKS, BLOCK_AIR, BLOCK_END_PORTAL, BLOCK_LAVA, BLOCK_PORTAL, BLOCK_WATER, isSolid } from './blocks.js'
 import { uvRect } from './atlas.js'
 
 // Warm vertex-color floor for solid faces directly exposed to lava (lava
@@ -182,9 +182,10 @@ export class Chunk {
         for (let y = 0; y < this.height; y++) {
           const id = this.blocks[this.index(x, y, z)]
           // Liquids have their own passes (water below, lava after it); the
-          // portal field is never meshed at all — it renders as registry-
-          // driven scene panels (src/fx/PortalPanels.js).
-          if (id === BLOCK_AIR || id === BLOCK_WATER || id === BLOCK_LAVA || id === BLOCK_PORTAL) continue
+          // portal fields (nether + End) are never meshed at all — they
+          // render as registry-driven scene panels (src/fx/PortalPanels.js,
+          // src/fx/EndPortalPanels.js).
+          if (id === BLOCK_AIR || id === BLOCK_WATER || id === BLOCK_LAVA || id === BLOCK_PORTAL || id === BLOCK_END_PORTAL) continue
           const block = BLOCKS[id]
           if (block.shape === 'torch') {
             this.#emitTorch(positions, normals, colors, uvs, indices, x, y, z, block, color)

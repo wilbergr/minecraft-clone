@@ -1116,8 +1116,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   factor (one `blockAt` at `floor(y - 0.05)`); PhysicsBody never reads it,
   and airborne feet sit in air so jumps escape the drag. New sticky blocks =
   one field, zero code.
-- **Quartz block** (id 27): 4 quartz → 1, decorative. The last block id in
-  use is 27 — the next feature takes 28.
+- **Quartz block** (id 27): 4 quartz → 1, decorative. (The last block id in
+  use is 32 — gravel took 28, the End took 29–32; the next feature takes 33.)
 - Already shipped in N1–N3 (don't re-add): netherrack `FUEL_SECONDS` row,
   the Nether bed-refusal toast (main.js `blockUseHandlers[BLOCK_BED]`
   checks `dims.current`), and quest-UI dimension gating (treasureHud
@@ -1280,6 +1280,109 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   Combat.update pause); spilled entities are recognizable by `e.noEvict`.
   Suite: `node tools/test-death-drops.mjs` (build + `npm install --no-save
   puppeteer-core` first).
+
+## The End (third dimension, Ender Dragon, elytra)
+
+- **Dimensions is an N-world registry now**: `new Dimensions({ worlds:
+  { overworld, nether, end }, … })`, `dims.name` reverse-looks-up `current`,
+  `travel(name)` resolves `dims.worlds[name]` and NO-OPS on unknown names
+  (main.js applies any saved dimension directly). Named accessors
+  `dims.overworld/nether/end` survive for Portals/tests. The per-world look
+  moved ONTO the World instances: `world.atmosphere` ({ skyColor, fog } |
+  null = DayNight owns it) and `world.containerPrefix` ('' | 'N|' | 'E|') —
+  the controller reads both; adding a world is one registry entry.
+  `dims.onTravel` is assigned in main.js to cancel the dragon fight on any
+  dimension leave — don't reassign it, wrap it.
+- **EndWorld** (`src/world/EndWorld.js`, knobs in `END`): the NetherWorld
+  contract — full-height `terrainHeight`, the whole island in `terrainBlock`
+  as a pure function. A floating end-stone lens (~88 across, surface y
+  60–64, teardrop underside to y 32, void below — `PHYSICS.voidY` handles
+  falls) + six flat-topped obsidian pillars on a seed-rotated ring, exposed
+  as `end.pillars` ([{x, z, top}] — the crystal pedestals, no world queries
+  needed). Inert fluid (`level: -1`), `hasSky` false, EMPTY spawn profile
+  (nothing ambient-spawns; the fight runner owns the population), inherited
+  `skyFactor`/`surfaceY` (no roof — but `surfaceY` answers 0 on void
+  columns, so only query island columns). Retune with
+  `node tools/probe-end.mjs` (asserts island metrics + overworld height AND
+  nether block checksums — a third dimension must never move the first two).
+- **End portal** (`src/world/EndPortal.js`): a flat 3×3-interior ring of 12
+  craftable frame blocks (block 30; 2 obsidian + 2 quartz block + 1 diamond
+  each) that SELF-ACTIVATES on completion — no eye item (the "no flint"
+  divergence). Field block 31 = the block-26 never-meshed archetype,
+  horizontal, riding the `world.endPortals` registry (a SECOND map — the
+  nether-portal systems assume vertical 2×3 clusters and stay untouched)
+  through setBlock/#recordEdit/#rebuildRegistries; no save key. Detection +
+  collapse are onEdit subscribers on overworld + End only (never the
+  Nether); the charge tests the FEET cell (`player.body.position`, floored)
+  — the field sits at floor level, the camera-cell test would never see it.
+  Travel keys on the standing dimension: overworld → End (first arrival
+  stamps the 5×5 obsidian platform at `END.arrival`, idempotent, anchored to
+  the DESIGN surfaceY so digging can't drift it); End → home (bed spawn via
+  `player.spawnHook`, else world spawn). One-way until victory by
+  construction: the only End-side field is the victory-stamped exit portal.
+  The NETHER portal is guarded OUT of the End (tryIgnite/update bail outside
+  the overworld⇄nether pair — its #travel is a binary flip).
+- **Shared flight seams (built here, the ghast reuses them)**:
+  `PhysicsBody.gravityScale` (default 1, multiplied into the AIR gravity
+  integration only — liquids keep their own tables; 0 = float with collision
+  intact) and `Projectiles.spawn` opts `gravity` (default null = the live
+  `COMBAT.projectiles.gravity` read; 0 = straight fireballs). Both additive;
+  every existing body/arrow byte-identical at the defaults.
+- **The dragon** (`src/combat/EnderDragon.js`, knobs in `END.dragon`):
+  KINEMATIC — update() drives `group.position` along orbit/swoop/perch paths
+  and never steps the body (hit tests still work: melee via part userData,
+  arrows via body.half/height). Phases are fight BEATS, not health bands:
+  1 crystals (runner heals it, never perches), 2 perch cycles (crystals
+  dead; perched damage ×1.5 — the melee window), 3 enrage under 0.33 health.
+  The swoop is a quadratic bezier SOLVED to pass through the player's marked
+  position at t=0.5 (P1 = 2M − (P0+P2)/2); `startAttack(key, playerPos)` is
+  the public headless seam (forces any attack, telegraph still runs).
+  `mob.persistent` (new, MobManager) skips the distance-despawn — the arena
+  outspans despawnRadius; the void check still applies. Crystals
+  (`src/combat/EndCrystal.js`) are Mob-shaped fight entities in HOSTILES as
+  'end_crystal' — health 1, kinematic spin/bob, never persisted (every
+  attempt faces all six).
+- **DragonFight** (`src/quest/DragonFight.js`, BossFight's sibling owned by
+  main.js): arms whenever the player stands in the End with
+  `endProgress.dragonDefeated` false → rumble → rise + 6 crystals + healing
+  beams (meshes under the END root so they vanish on travel). Runner-side
+  healing (`healPerCrystalPerSecond × alive`) drives the HP-bar refill;
+  crystal pops route through `combat.hurtPlayer` (armor counts); NO leash —
+  the void is the wall. Victory: latch `EndProgress.dragonDefeated`
+  (optional `end` save slot via `save.attachEndProgress`), stamp the exit
+  ring (12 frames — EndPortal's detector self-activates it, fill + bloom
+  free) + dragon egg (block 32) as edits, grant the ONE elytra runner-side
+  (`inventory.add` + throw overflow — never a death drop, the void would
+  eat it), fire onComplete → `bindEndReveal` (END_MESSAGE + celebrated
+  guard). `bindBossHud` now takes a LIST of { fight, name } — only one can
+  be live (different dimensions). End toasts ride the Herald banner queue.
+- **Elytra**: item in E4 (armor chest slot, 0 points, durability 432,
+  maxStack 1, never crafted); glide model in `PlayerControls.#updateGlide`
+  (knobs in `PLAYER.glide`): deploys on a FRESH Space press (the
+  `jumpTapped` #onKey edge — held-Space auto-hop can't auto-deploy; touch
+  taps ride jumpBuffer) while airborne + descending + wings worn. While
+  gliding it owns the body's whole velocity (pitch-to-speed momentum, look
+  steering, A/D bank, constant sink + gravityScale 0.12) and clears
+  fallDistance; exits on grounded/inWater/hitWall/wings-gone. Wear is glide
+  TIME via the new `Armor.wearSlot('chest')` (1 per glide.wearSeconds).
+  `player.armor` is attached by main.js — bare runs never glide.
+- **Save**: all optional keys — `endEdits` (attachEnd), `end`
+  ({ dragonDefeated, celebrated }, attachEndProgress), `dimension: 'end'`;
+  containers reuse their maps under 'E|'. `SAVE.schemaVersion` stayed 4;
+  pre-End saves load clean (verified in the suite).
+- **Headless** (`node tools/test-end.mjs`, strict port 4746; build + `npm
+  install --no-save puppeteer-core` first): covers all five phases + the
+  pre-End-save and reload-into-End compatibility passes; writes git-ignored
+  `tools/end-*.png`. Seams: `__mc.endPortal` (travelCount),
+  `__mc.endPortalPanels`, `__mc.dragonFight` (`.dragon/.crystals/.beams`),
+  `__mc.endProgress`, `__mc.endReveal`; sound counters
+  `endPortalOpen/dragonRoar/crystalBreak/wind/endAmbience`. Sharp edges: a
+  test that wants the island QUIET sets `endProgress.dragonDefeated = true`
+  before traveling (the fight self-arms); the E2 test ring persists in
+  endPortals, so later asserts count SPECIFIC cells, not map size; a
+  gravityScale-1 restore after floating at y 90 is a LETHAL fall — teleport
+  down before resuming; shrink `END.dragon.summonSeconds/rise.seconds` and
+  hold `attacks.perch.seconds` open for kill windows.
 
 ## Sharp edges
 

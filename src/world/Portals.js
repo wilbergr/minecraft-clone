@@ -45,6 +45,13 @@ export class Portals {
   // it, in both orientations. Returns true when a portal ignited.
   tryIgnite(world, target) {
     if (!target) return false
+    // The Nether portal pair is strictly overworld ⇄ nether: igniting a
+    // frame in any other dimension (the End) must fizzle — #travel is a
+    // binary flip and would "return" the player at 8:1-scaled coordinates.
+    if (world !== this.dims.overworld && world !== this.dims.nether) {
+      this.onIgnite?.(false, target.x, target.y, target.z)
+      return false
+    }
     const [nx, ny, nz] = target.normal
     const cx = target.x + nx
     const cy = target.y + ny
@@ -186,6 +193,10 @@ export class Portals {
 
   update(delta) {
     const world = this.dims.current
+    // Same overworld ⇄ nether guard as tryIgnite: no charge outside the pair
+    // (no nether-portal cells can exist elsewhere, but the guard keeps
+    // #travel's binary flip honest by construction).
+    if (world !== this.dims.overworld && world !== this.dims.nether) return
     const p = this.camera.position
     const inField =
       world.blockAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) === BLOCK_PORTAL

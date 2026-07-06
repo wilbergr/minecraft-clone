@@ -1416,6 +1416,63 @@ body.touch-mode .help-touch {
   background: rgba(255, 176, 102, 0.3);
 }
 
+/* End completion reveal: the challenge modal's sibling, void-violet. */
+#end-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 6, 18, 0.75);
+  z-index: 9;
+}
+
+#end-panel {
+  text-align: center;
+  color: #eef2f7;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  background: rgba(11, 6, 18, 0.92);
+  border: 1px solid rgba(201, 167, 245, 0.55);
+  box-shadow: 0 0 60px rgba(154, 106, 232, 0.3);
+  max-width: min(480px, calc(100vw - 2rem));
+}
+
+#end-panel h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2rem;
+  color: #c9a7f5;
+}
+
+#end-sigil {
+  color: #d86ae8;
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  animation: sparkle-pulse 1.6s ease-in-out infinite;
+}
+
+#end-reveal-message {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+#end-continue-btn {
+  font: inherit;
+  font-size: 1rem;
+  color: #eef2f7;
+  margin-top: 1.25rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 167, 245, 0.5);
+  background: rgba(154, 106, 232, 0.15);
+  cursor: pointer;
+}
+
+#end-continue-btn:hover {
+  background: rgba(154, 106, 232, 0.3);
+}
+
 /* --- King's Trial guidance layer -------------------------------------------- */
 
 /* The Herald's banner: a cinematic subtitle strip above the hotbar carrying

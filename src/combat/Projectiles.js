@@ -36,8 +36,11 @@ export class Projectiles {
     return this.arrows.length
   }
 
-  // Loose an arrow. `fromPlayer` decides which side it can hit.
-  spawn(origin, velocity, { fromPlayer = false, damage = 2 } = {}) {
+  // Loose an arrow. `fromPlayer` decides which side it can hit. `gravity`
+  // (the shared flying-mob seam) overrides the global arc per projectile —
+  // null keeps the live COMBAT.projectiles.gravity read; 0 flies straight
+  // (the dragon fireball / future ghast fireball).
+  spawn(origin, velocity, { fromPlayer = false, damage = 2, gravity = null } = {}) {
     if (this.arrows.length >= COMBAT.projectiles.maxCount) this.#remove(0)
     const mesh = new THREE.Mesh(this.geometry, this.material)
     const head = new THREE.Mesh(this.headGeometry, this.headMaterial)
@@ -49,6 +52,7 @@ export class Projectiles {
       velocity: velocity.clone(),
       fromPlayer,
       damage,
+      gravity,
       age: 0,
       stuck: false,
       stuckAge: 0,
@@ -74,7 +78,7 @@ export class Projectiles {
         continue
       }
 
-      a.velocity.y -= cfg.gravity * delta
+      a.velocity.y -= (a.gravity ?? cfg.gravity) * delta
       const pos = a.mesh.position
       const move = a.velocity.length() * delta
       const steps = Math.max(1, Math.ceil(move / MAX_STEP))

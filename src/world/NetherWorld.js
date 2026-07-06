@@ -43,6 +43,10 @@ export class NetherWorld extends World {
     // (columns generate full-height), but MobManager's wet-column guard and
     // the liquid mesh passes read the fluid identity from here.
     this.fluid = { id: BLOCK_LAVA, level: NETHER.terrain.lava.level }
+    // Static red haze + container key prefix (dimension seams — the
+    // controller reads both off the instance, the config-driven pattern).
+    this.atmosphere = { skyColor: NETHER.skyColor, fog: NETHER.fog }
+    this.containerPrefix = 'N|'
     // The Nether's own light rig: no sun (nothing drives it — DayNight owns
     // only the overworld's), a warm dim ambient so unlit faces stay readable.
     this.sun.intensity = 0

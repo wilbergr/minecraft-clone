@@ -226,6 +226,31 @@ export class SoundEngine {
         this.#tone({ type: 'sine', from: 55, to: 38, dur: 3.0, gain: 0.16 * v })
         this.#tone({ type: 'triangle', from: 82, to: 66, dur: 2.4, gain: 0.08 * v, when: 0.6 })
         break
+      case 'wind': // glide rush — a broad airy swell, repeated into a loop
+        this.#burst({ type: 'bandpass', freq: 900, dur: 1.4, gain: 0.2 * v })
+        this.#burst({ type: 'highpass', freq: 2000, dur: 1.2, gain: 0.08 * v, when: 0.2 })
+        break
+      case 'dragonRoar': // the Ender Dragon — wider and colder than the King's roar
+        this.#burst({ type: 'lowpass', freq: 700, dur: 1.5, gain: 0.6 * v })
+        this.#tone({ type: 'sawtooth', from: 110, to: 42, dur: 1.5, gain: 0.4 * v })
+        this.#tone({ type: 'sawtooth', from: 74, to: 30, dur: 1.5, gain: 0.3 * v })
+        this.#tone({ type: 'sine', from: 880, to: 440, dur: 0.5, gain: 0.08 * v })
+        break
+      case 'crystalBreak': // an end crystal shatters — glassy snap + falling shards
+        this.#burst({ type: 'highpass', freq: 3400, dur: 0.25, gain: 0.5 * v })
+        this.#tone({ type: 'sine', from: 1560, to: 520, dur: 0.3, gain: 0.25 * v })
+        this.#tone({ type: 'sine', from: 2080, to: 780, dur: 0.22, gain: 0.15 * v, when: 0.05 })
+        break
+      case 'endPortalOpen': // the ring catches — a deep bloom under a rising chime
+        this.#burst({ type: 'lowpass', freq: 340, dur: 1.4, gain: 0.55 * v })
+        this.#tone({ type: 'sine', from: 90, to: 45, dur: 1.2, gain: 0.4 * v })
+        this.#tone({ type: 'sine', from: 660, to: 1320, dur: 0.9, gain: 0.14 * v, when: 0.2 })
+        break
+      case 'endAmbience': // hollow wind over the void — airier and colder than the Nether's
+        this.#burst({ type: 'bandpass', freq: 480, dur: 3.6, gain: 0.14 * v })
+        this.#tone({ type: 'sine', from: 130, to: 96, dur: 3.2, gain: 0.08 * v })
+        this.#tone({ type: 'sine', from: 196, to: 174, dur: 2.6, gain: 0.05 * v, when: 0.8 })
+        break
       case 'trialComplete': // three ascending chimes — the rite fulfilled
         this.#tone({ type: 'sine', from: 440, to: 442, dur: 0.5, gain: 0.25 * v })
         this.#tone({ type: 'sine', from: 554, to: 556, dur: 0.5, gain: 0.25 * v, when: 0.22 })

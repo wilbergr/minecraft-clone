@@ -22,20 +22,23 @@ import { SAVE, WORLD } from '../config.js'
 //     chests: { "x,y,z": { slots: [...] } },  // Chests.serialize() (inventory overhaul)
 //     enderChest: { granted, slots: [...] },  // EnderStore.serialize() — the global
 //                               // King's Cache contents + one-time grant latch
-//     dimension: 'overworld' | 'nether',  // where the player stood (the Nether);
+//     dimension: 'overworld' | 'nether' | 'end',  // where the player stood;
 //                               // absent = overworld
 //     netherEdits: { "cx,cz": [...] },  // NetherWorld.serializeEdits() — the
 //                               // Nether's own sparse edit overlay
+//     endEdits: { "cx,cz": [...] },  // EndWorld.serializeEdits() (the End)
+//     end: { dragonDefeated, celebrated },  // EndProgress.serialize() (the End)
 //   }
 //
 // `hunger`, `furnaces`, `armor`, `spawn`, `challenge`, `cursor`, `chests`,
-// `enderChest`, `dimension`, and `netherEdits` are optional keys (Phase 12
-// onward): older saves simply lack them and load with a full bar / no
-// furnace contents / nothing worn / the origin spawn / a fresh trial / an
-// empty hand / empty chests / an empty ungranted cache / the overworld and
-// an untouched Nether — absent keys never invalidate a save on their own.
-// (Nether-placed furnace/chest state rides the existing `furnaces`/`chests`
-// maps under 'N|'-prefixed keys — same shape, no new slot.)
+// `enderChest`, `dimension`, `netherEdits`, `endEdits`, and `end` are
+// optional keys (Phase 12 onward): older saves simply lack them and load
+// with a full bar / no furnace contents / nothing worn / the origin spawn /
+// a fresh trial / an empty hand / empty chests / an empty ungranted cache /
+// the overworld, an untouched Nether, and an untouched End — absent keys
+// never invalidate a save on their own. (Nether/End-placed furnace/chest
+// state rides the existing `furnaces`/`chests` maps under 'N|'/'E|'-prefixed
+// keys — same shape, no new slot.)
 //
 // Terrain is never saved — it regenerates from the seed, and only the player's
 // block-edit overlay (World.edits) is persisted, so storage stays proportional
@@ -72,8 +75,12 @@ export class SaveManager {
     this.cursorData = null
     this.nether = null // wired by attachNether (the Nether's edit overlay)
     this.netherData = null
+    this.end = null // wired by attachEnd (the End's edit overlay)
+    this.endData = null
+    this.endProgress = null // wired by attachEndProgress (dragon latches)
+    this.endProgressData = null // loaded `end` slot, applied by attachEndProgress
     this.dims = null // wired by attachDimensions — serialize reads it live
-    this.dimensionData = null // loaded 'nether'/'overworld', applied by main.js
+    this.dimensionData = null // loaded dimension name, applied by main.js
     this.dirty = false
     this.sinceAutosave = 0
     this.saveCount = 0 // informational (browser verification hooks onto this)
@@ -182,6 +189,22 @@ export class SaveManager {
     world.onEdit(() => (this.dirty = true))
   }
 
+  // The End's edit overlay (the End): attachNether verbatim for the third
+  // world. Called once after load(), before its first chunk generates.
+  attachEnd(world) {
+    this.end = world
+    if (this.endData !== null) world.deserializeEdits(this.endData)
+    world.onEdit(() => (this.dirty = true))
+  }
+
+  // And the End's progress latches ({ dragonDefeated, celebrated } on the
+  // optional `end` slot — the attachTreasure pattern). Called after load().
+  attachEndProgress(progress) {
+    progress.deserialize(this.endProgressData)
+    this.endProgress = progress
+    progress.onChange(() => (this.dirty = true))
+  }
+
   // And the dimension controller: serialize() reads the current dimension
   // live (like the daynight clock); main.js applies the loaded value with
   // dims.travel once every system is wired. Called once after load().
@@ -229,6 +252,8 @@ export class SaveManager {
       this.sleepData = data.spawn ?? null
       this.cursorData = data.cursor ?? null
       this.netherData = data.netherEdits ?? null
+      this.endData = data.endEdits ?? null
+      this.endProgressData = data.end ?? null
       this.dimensionData = data.dimension ?? null
       this.dirty = false
       return true
@@ -258,6 +283,8 @@ export class SaveManager {
       spawn: this.sleep ? (this.sleep.serialize() ?? undefined) : (this.sleepData ?? undefined),
       cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,
       netherEdits: this.nether ? this.nether.serializeEdits() : (this.netherData ?? undefined),
+      endEdits: this.end ? this.end.serializeEdits() : (this.endData ?? undefined),
+      end: this.endProgress ? this.endProgress.serialize() : (this.endProgressData ?? undefined),
       dimension: this.dims ? this.dims.name : (this.dimensionData ?? undefined),
     }
   }

@@ -419,6 +419,67 @@ export const BLOCKS = {
     material: 'sand',
     tool: { kind: 'shovel', minTier: 0 },
   },
+  29: {
+    id: 29,
+    name: 'End Stone',
+    // The End island's body rock (the End): pale speckled stone, drops
+    // itself — the take-home souvenir block.
+    solid: true,
+    color: { top: 0xe6e2a8, side: 0xded9a0, bottom: 0xd2cd96 },
+    tex: { top: 'end_stone', side: 'end_stone', bottom: 'end_stone' },
+    drop: 'end_stone',
+    hardness: 3,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
+  30: {
+    id: 30,
+    name: 'End Portal Frame',
+    // The craftable gate to the End (obsidian + quartz block + diamond —
+    // see recipes.js): lay twelve as a flat 3×3-interior ring and it
+    // SELF-ACTIVATES (no eye-of-ender item exists — the flint-&-steel
+    // "no flint" divergence precedent). Detection/collapse live in
+    // src/world/EndPortal.js. Blast-resistant like obsidian; drops itself,
+    // so a mis-laid ring is recoverable.
+    solid: true,
+    blastResistant: true,
+    color: { top: 0x3a4a3e, side: 0x2e3a32, bottom: 0x27302a },
+    tex: { top: 'end_frame_top', side: 'end_frame_side', bottom: 'end_frame_side' },
+    drop: 'end_portal_frame',
+    hardness: 4,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 3 },
+  },
+  31: {
+    id: 31,
+    name: 'End Portal',
+    // The End portal field: the block-26 archetype verbatim — non-solid,
+    // non-targetable, walked through, never mined (break the frame instead),
+    // and NEVER MESHED (the chunk mesher skips it; no tex). Rendered as
+    // horizontal translucent panels driven by the world.endPortals registry
+    // (src/fx/EndPortalPanels.js), which setBlock keeps in lockstep with the
+    // edit overlay exactly like nether-portal cells. No item — created by
+    // ring completion only.
+    solid: false,
+    color: { top: 0x140a24, side: 0x140a24, bottom: 0x140a24 },
+    drop: null,
+  },
+  32: {
+    id: 32,
+    name: 'Dragon Egg',
+    // The Ender Dragon's trophy (the End): stamped beside the exit portal on
+    // victory. A pure placeable keepsake — the King's Crown precedent says
+    // trophies can just be the point. Blast-resistant so a stray creeper
+    // back home can't vaporize the one copy.
+    solid: true,
+    blastResistant: true,
+    color: { top: 0x1a0f21, side: 0x150c1c, bottom: 0x110a17 },
+    tex: { top: 'dragon_egg', side: 'dragon_egg', bottom: 'dragon_egg' },
+    drop: 'dragon_egg',
+    hardness: 1.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -436,6 +497,10 @@ export const BLOCK_QUARTZ_ORE = 24
 export const BLOCK_BEDROCK = 25
 export const BLOCK_PORTAL = 26
 export const BLOCK_GRAVEL = 28
+export const BLOCK_END_STONE = 29
+export const BLOCK_END_FRAME = 30
+export const BLOCK_END_PORTAL = 31
+export const BLOCK_DRAGON_EGG = 32
 
 export function isSolid(id) {
   const block = BLOCKS[id]

@@ -9,6 +9,8 @@ import { PassiveMob } from './PassiveMob.js'
 import { ZombifiedPiglin } from './ZombifiedPiglin.js'
 import { MagmaCube } from './MagmaCube.js'
 import { Drowned } from './Drowned.js'
+import { EnderDragon } from './EnderDragon.js'
+import { EndCrystal } from './EndCrystal.js'
 
 // Owns the live mob population: periodically tops it up by spawning hostiles
 // in dark cells on a ring around the player — the mix is weighted across
@@ -50,6 +52,10 @@ const HOSTILES = {
   // The Drowned (deep-water sequel) — weighted in COMBAT.mobs.aquaticWeights
   // (the fluid-column spawn branch), never in the land table.
   drowned: (world, x, z) => new Drowned(world, x, z),
+  // The End's fight population (the End): summoned only by DragonFight —
+  // never in any spawn weights (the End's ambient profile is empty anyway).
+  dragon: (world, x, z, projectiles) => new EnderDragon(world, x, z, projectiles),
+  end_crystal: (world, x, z) => new EndCrystal(world, x, z),
 }
 
 export class MobManager {
@@ -209,8 +215,11 @@ export class MobManager {
       const dz = mob.group.position.z - playerPos.z
       // Too far behind a travelling player, or fallen out of a mined-open
       // world floor (Phase 8: mobs fall for real) — either way, gone.
+      // `persistent` mobs (the dragon and its crystals — the End's arena
+      // spans wider than despawnRadius) skip the distance check; the void
+      // still claims anything.
       if (
-        dx * dx + dz * dz > COMBAT.mobs.despawnRadius ** 2 ||
+        (!mob.persistent && dx * dx + dz * dz > COMBAT.mobs.despawnRadius ** 2) ||
         mob.group.position.y < PHYSICS.voidY
       ) {
         this.#remove(i)

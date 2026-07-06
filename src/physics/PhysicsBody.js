@@ -34,6 +34,11 @@ export class PhysicsBody {
     this.inLava = false // midsection specifically in lava (lava feature)
     this.fallDistance = 0 // blocks descended since last grounded
     this.onLand = null // callback(blocksFallen) — fires on touching down
+    // Gravity multiplier (the shared flying-mob/elytra seam): 1 = normal,
+    // ~0.1 = a glide's gentle sink, 0 = a floating body that steers all
+    // three axes itself (collision sweeps still apply). Owners set it per
+    // frame or once; nothing else in the body reads speed intent.
+    this.gravityScale = 1
   }
 
   // Advance the body by `delta` seconds. `sneak` slows nothing here (speed is
@@ -85,7 +90,7 @@ export class PhysicsBody {
       this.velocity.y *= Math.exp(-w.drag * delta) // dive momentum bleeds off
     } else {
       this.velocity.y = Math.max(
-        vy0 - PHYSICS.gravity * delta,
+        vy0 - PHYSICS.gravity * this.gravityScale * delta,
         -PHYSICS.terminalVelocity,
       )
     }
