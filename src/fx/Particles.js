@@ -16,6 +16,10 @@ export class Particles {
     this.colors = new Float32Array(n * 3)
     this.velocities = new Float32Array(n * 3)
     this.life = new Float32Array(n) // seconds remaining; <= 0 = dead
+    // Per-slot gravity multiplier (water-visuals polish): 1 = normal debris,
+    // negative = buoyant (rising bubbles). Set per burst, default 1, so
+    // every existing caller keeps byte-identical behavior.
+    this.gravityScale = new Float32Array(n).fill(1)
     this.cursor = 0 // next pool slot to hand out
     this.liveCount = 0
     for (let i = 0; i < n; i++) this.positions[i * 3 + 1] = -1000 // parked
@@ -38,13 +42,20 @@ export class Particles {
     this.burst(x + 0.5, y + 0.5, z + 0.5, color, FEEDBACK.particles.perBreak)
   }
 
-  burst(x, y, z, colorHex, count) {
-    const { poolSize, speed, lifetimeSeconds } = FEEDBACK.particles
+  // opts (all optional, defaults = classic debris): gravityScale — per-slot
+  // gravity multiplier (negative rises); speed — initial scatter velocity;
+  // lifetimeSeconds — base lifetime for this burst.
+  burst(x, y, z, colorHex, count, opts = {}) {
+    const { poolSize } = FEEDBACK.particles
+    const speed = opts.speed ?? FEEDBACK.particles.speed
+    const lifetimeSeconds = opts.lifetimeSeconds ?? FEEDBACK.particles.lifetimeSeconds
+    const gravityScale = opts.gravityScale ?? 1
     for (let k = 0; k < count; k++) {
       const i = this.cursor
       this.cursor = (this.cursor + 1) % poolSize
       if (this.life[i] <= 0) this.liveCount++
       this.life[i] = lifetimeSeconds * (0.6 + Math.random() * 0.4)
+      this.gravityScale[i] = gravityScale
       this.positions[i * 3] = x + (Math.random() - 0.5) * 0.5
       this.positions[i * 3 + 1] = y + (Math.random() - 0.5) * 0.5
       this.positions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.5
@@ -73,7 +84,7 @@ export class Particles {
         this.liveCount--
         continue
       }
-      this.velocities[i * 3 + 1] -= gravity * delta
+      this.velocities[i * 3 + 1] -= gravity * this.gravityScale[i] * delta
       this.positions[i * 3] += this.velocities[i * 3] * delta
       this.positions[i * 3 + 1] += this.velocities[i * 3 + 1] * delta
       this.positions[i * 3 + 2] += this.velocities[i * 3 + 2] * delta

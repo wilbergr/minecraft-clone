@@ -876,6 +876,28 @@ export const WATER = {
     color: 0x2a6fd4, // matches the water block's side color (blocks.js)
     colorBlend: 0.8, // how far fog color lerps from the sky toward `color`
   },
+  // Water-visuals polish: the surface "breathes" via a slow sine on the
+  // shared waterMaterial's opacity — ONE uniform write per frame, zero
+  // remeshing (geometry animation is forbidden). Runs on real time like the
+  // clouds, so water stays alive behind menus too.
+  shimmer: {
+    amplitude: 0.05, // opacity swings ± this around WATER.opacity
+    periodSeconds: 4, // one full sine cycle
+  },
+  // Rising bubbles around the submerged player (and a puff on entry) via the
+  // particle pool's per-burst gravityScale — negative = buoyant. Ambience,
+  // so the emitter gates on player.isLocked like the lava pops.
+  bubbles: {
+    minSeconds: 0.5, // random wait between ambient emissions
+    maxSeconds: 1.2,
+    count: 3, // bubbles per ambient emission
+    entryCount: 10, // extra rising burst on water entry (beside the spray)
+    color: 0xcfe8ff,
+    gravityScale: -0.28, // gentle upward acceleration (fraction of gravity)
+    speed: 0.5, // initial scatter velocity — a wobble, not a pop
+    lifetimeSeconds: 1.3, // longer than debris so the rise reads
+    radius: 0.8, // horizontal scatter around the camera
+  },
 }
 
 // Lava (lava feature): the underground hazard & light source. Generated in

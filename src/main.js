@@ -551,7 +551,17 @@ const updateUnderwater = () => {
       if (now) particles.burst(p.x, p.y - 0.3, p.z, LAVA.ember.color, 18)
     } else {
       sounds.play('splash', { gain: now ? 1 : 0.55 })
-      if (now) particles.burst(p.x, p.y - 0.3, p.z, 0xdfefff, 18)
+      if (now) {
+        particles.burst(p.x, p.y - 0.3, p.z, 0xdfefff, 18)
+        // Entry feel (water-visuals polish): a buoyant burst beside the
+        // falling spray — the head plunging in shakes loose rising bubbles.
+        const b = WATER.bubbles
+        particles.burst(p.x, p.y - 0.5, p.z, b.color, b.entryCount, {
+          gravityScale: b.gravityScale,
+          speed: b.speed,
+          lifetimeSeconds: b.lifetimeSeconds,
+        })
+      }
     }
     liquid = now
     sounds.setUnderwater(now !== 0)
@@ -579,6 +589,40 @@ const updateUnderwater = () => {
     scene.fog.far = base.far
     if (base.color !== null) scene.fog.color.setHex(base.color)
   }
+}
+
+// Water shimmer (water-visuals polish): the surface breathes via a slow sine
+// on the active world's waterMaterial opacity — one uniform write per frame,
+// NO remeshing. Real-time like the clouds (menus don't freeze the sea), and
+// per-frame like the fog so both dimensions' materials stay coherent (the
+// Nether's water pass simply never has faces to show it on).
+let shimmerT = 0
+const updateWaterShimmer = (delta) => {
+  const { amplitude, periodSeconds } = WATER.shimmer
+  shimmerT = (shimmerT + delta) % periodSeconds
+  dims.current.waterMaterial.opacity =
+    WATER.opacity + Math.sin((shimmerT / periodSeconds) * Math.PI * 2) * amplitude
+}
+
+// Ambient rising bubbles (water-visuals polish): occasional buoyant motes
+// around the submerged camera, on the lava-pops throttle pattern — gated on
+// being in control, cheap (a few pool slots per second at most).
+let bubbleTimer = 0
+const updateWaterBubbles = (delta) => {
+  if (!player.isLocked || liquid !== BLOCK_WATER) return
+  bubbleTimer -= delta
+  if (bubbleTimer > 0) return
+  const b = WATER.bubbles
+  bubbleTimer = b.minSeconds + Math.random() * (b.maxSeconds - b.minSeconds)
+  const p = camera.position
+  particles.burst(
+    p.x + (Math.random() - 0.5) * b.radius * 2,
+    p.y - 0.6,
+    p.z + (Math.random() - 0.5) * b.radius * 2,
+    b.color,
+    b.count,
+    { gravityScale: b.gravityScale, speed: b.speed, lifetimeSeconds: b.lifetimeSeconds },
+  )
 }
 
 // Lava ambience (lava feature): while an exposed pool surface is nearby
@@ -657,6 +701,8 @@ renderer.setAnimationLoop(() => {
   portals.update(delta)
   portalPanels.update(delta, camera.position)
   updateUnderwater()
+  updateWaterShimmer(delta)
+  updateWaterBubbles(delta)
   updateLavaAmbience(delta)
   updateNetherAmbience(delta)
   updateFootsteps()
