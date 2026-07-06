@@ -60,6 +60,7 @@ const TILE_NAMES = [
   'glowstone',
   'quartz_ore',
   'bedrock',
+  'quartz_block',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -372,6 +373,16 @@ const PAINTERS = {
     speckle(px, rand, [74, 74, 74], 24)
     blobs(px, rand, [38, 38, 38], 5)
     blobs(px, rand, [104, 104, 104], 3)
+  },
+  // Polished pale quartz: a soft warm white with faint chiseled seams.
+  quartz_block(px, rand) {
+    speckle(px, rand, [228, 223, 212], 6)
+    for (let x = 0; x < TILE; x++) {
+      const j = (rand() * 2 - 1) * 4
+      px(x, 0, rgb(240 + j, 236 + j, 226 + j)) // top highlight edge
+      px(x, 15, rgb(198 + j, 192 + j, 180 + j)) // bottom shade edge
+    }
+    blobs(px, rand, [210, 204, 192], 3)
   },
 }
 

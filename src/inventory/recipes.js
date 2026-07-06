@@ -40,6 +40,9 @@ export const RECIPES = [
   // Flint & steel (the Nether): no flint item exists — iron + coal is the
   // documented divergence (the bow's "no string" precedent above).
   { id: 'flint_and_steel', input: [['iron_ingot', 1], ['coal', 1]], output: ['flint_and_steel', 1] },
+  // Quartz block (N4): the mined gem's decorative sink — 4 gems compress
+  // into one clean white building block.
+  { id: 'quartz_block', input: [['quartz', 4]], output: ['quartz_block', 1] },
   // Armor (Phase 13): leather from cows, iron from smelted ingots. Right
   // click a piece to wear it.
   { id: 'leather_helmet', input: [['leather', 5]], output: ['leather_helmet', 1] },

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { COMBAT, PHYSICS } from '../config.js'
+import { BLOCKS } from '../world/blocks.js'
 import { PhysicsBody } from '../physics/PhysicsBody.js'
 
 // Shared mob base (Phase 13, generalized from the Phase 4 Zombie): the
@@ -56,6 +57,15 @@ export class Mob {
   locomote(delta, moveDir, speed, hop = true) {
     if (moveDir) this.group.rotation.y = Math.atan2(moveDir.x, moveDir.z)
     const body = this.body
+    // Walked-on slow factor (N4, soul sand): the PlayerControls twin — one
+    // feet-cell blockAt, only when actually moving. Mobs wade through soul
+    // sand as slowly as the player does.
+    if (moveDir && speed > 0) {
+      const p = this.group.position
+      speed *=
+        BLOCKS[this.world.blockAt(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z))]
+          ?.slow ?? 1
+    }
     body.velocity.x = (moveDir ? moveDir.x * speed : 0) + this.knock.x
     body.velocity.z = (moveDir ? moveDir.z * speed : 0) + this.knock.z
     this.knock.multiplyScalar(Math.exp(-8 * delta))
