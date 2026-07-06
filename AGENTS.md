@@ -1131,6 +1131,37 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   the clean way to suppress ambient spawns during scripted mob tests
   (spawnAt bypasses it).
 
+## Water-visuals polish (shimmer + rising bubbles)
+
+- The two §7 "cut for v1" deep-water rows, resurrected: the water surface
+  animates via a slow sine on `waterMaterial.opacity` — ONE uniform write
+  per frame in main.js (`updateWaterShimmer`, knobs in `WATER.shimmer`),
+  written to `dims.current.waterMaterial` and running on REAL time like the
+  clouds (menus don't freeze the sea). NEVER animate water geometry —
+  per-frame remeshing is forbidden; the headless suite pins the chunk
+  position-attribute `version` to stand guard. The water atlas tile stayed
+  cut: the water pass emits no UVs and its material has no map, so a texture
+  means new mesher UV plumbing — revisit only with a broader pass.
+- `Particles.burst(x, y, z, color, count, opts?)` grew an optional opts arg:
+  `gravityScale` (per-slot Float32Array multiplier on the global gravity —
+  negative = buoyant, default 1 keeps every existing caller byte-identical),
+  `speed` (initial scatter), and `lifetimeSeconds` (per-burst base life).
+  Still one pooled THREE.Points, one draw call. Rising bubbles are just
+  bursts with `gravityScale < 0` — reuse them instead of new mesh systems.
+- Bubble knobs live in `WATER.bubbles`: the ambient emitter
+  (`updateWaterBubbles`, lava-pops throttle pattern) gates on
+  `player.isLocked` + the camera-cell liquid being water; water ENTRY also
+  fires a buoyant burst beside the existing falling spray, inside
+  `updateUnderwater`'s transition branch.
+- Headless suite: `node tools/test-water-visuals.mjs` (build +
+  `npm install --no-save puppeteer-core` first; strict port 4742) — shimmer
+  oscillation/bounds, no-remesh guard, default-burst fall regression, bubble
+  rise, entry + ambient emissions underwater, breath/fog/tint regressions;
+  writes the git-ignored `tools/water-visuals.png`. Sharp edge: buoyant test
+  particles with long lifetimes outlive later test phases — detect NEW
+  emissions with an exclusion set of already-live negative-gravity slots,
+  never by "any negative slot".
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE
