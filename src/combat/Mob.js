@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { COMBAT, PHYSICS } from '../config.js'
 import { BLOCKS } from '../world/blocks.js'
 import { PhysicsBody } from '../physics/PhysicsBody.js'
+import { mobSkin } from './mobSkins.js'
 
 // Shared mob base (Phase 13, generalized from the Phase 4 Zombie): the
 // box-part body pattern, per-mob cloned materials with the red hurt flash,
@@ -21,6 +22,8 @@ export class Mob {
     this.knock = new THREE.Vector3() // decaying knockback impulse
     this.flashTimer = 0
     this.materials = {}
+    this.skinDef = null // shared per-type skin resources (mobSkins.js)
+    this.skinMeshes = [] // meshes on the shared material — flash swaps them
     this.group = null
     this.body = null
   }
@@ -32,6 +35,24 @@ export class Mob {
       this.materials[name] = new THREE.MeshLambertMaterial({ color })
     }
     return this.materials
+  }
+
+  // Textured-skin path (mob-textures PR): fetch the type's SHARED material +
+  // UV-mapped geometries from the per-type cache. Falls back to the old
+  // per-mob flat-color materials when no skin exists (node probes, unknown
+  // types) — subclasses branch their body build on the return value.
+  makeSkin(type, colors) {
+    this.skinDef = mobSkin(type)
+    if (!this.skinDef) this.makeMaterials(colors)
+    return this.skinDef
+  }
+
+  // A body part on the type's shared skin material; registered so setFlash
+  // can swap it to the shared flash material and back.
+  skinnedPart(name, x, y, z) {
+    const mesh = this.part(this.skinDef.geoms[name], this.skinDef.material, x, y, z)
+    this.skinMeshes.push(mesh)
+    return mesh
   }
 
   // One body part; userData.mob maps attack raycast intersections back here.
@@ -94,9 +115,17 @@ export class Mob {
     for (const mat of Object.values(this.materials)) {
       mat.emissive.setHex(on ? 0x8a1a1a : 0x000000)
     }
+    // Skinned meshes share ONE material per type, so the flash is a material
+    // swap (never an emissive write — that would flash the whole kind).
+    if (this.skinDef) {
+      const mat = on ? this.skinDef.flashMaterial : this.skinDef.material
+      for (const mesh of this.skinMeshes) mesh.material = mat
+    }
   }
 
   dispose() {
+    // Per-mob clones only — shared skin materials/textures are cached
+    // forever (atlas semantics) and must never be disposed here.
     for (const mat of Object.values(this.materials)) mat.dispose()
   }
 }

@@ -30,13 +30,25 @@ export class Skeleton extends Mob {
     this.wanderDir = null
     this.wanderTimer = 0
     this.shootTimer = COMBAT.mobs.skeleton.shootIntervalSeconds * 0.5
-    this.makeMaterials(COLORS)
+    this.makeSkin('skeleton', COLORS)
     this.attachBody(this.#buildBody(), x, z, PHYSICS.mobAABB)
   }
 
   #buildBody() {
-    const m = this.materials
     const group = new THREE.Group()
+    if (this.skinDef) {
+      // Skull face + rib-shaded torso off the shared skeleton sheet.
+      group.add(
+        this.skinnedPart('head', 0, 1.75, 0),
+        this.skinnedPart('body', 0, 1.125, 0),
+        this.skinnedPart('limb', -0.12, 0.375, 0),
+        this.skinnedPart('limb', 0.12, 0.375, 0),
+        this.skinnedPart('arm', -0.28, 1.38, 0.24),
+        this.skinnedPart('arm', 0.28, 1.38, 0.24),
+      )
+      return group
+    }
+    const m = this.materials
     group.add(
       this.part(GEOM.head, m.bone, 0, 1.75, 0),
       this.part(GEOM.body, m.ribs, 0, 1.125, 0),

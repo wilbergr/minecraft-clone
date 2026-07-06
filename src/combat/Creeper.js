@@ -30,13 +30,33 @@ export class Creeper extends Mob {
     this.hissing = false
     this.exploded = false // MobManager detonates and removes when set
     this.onHiss = null // callback() — fuse-start sound, wired by MobManager
-    this.makeMaterials(COLORS)
+    // The fuse pulse animates emissive continuously PER MOB, so the creeper
+    // can't sit on the shared skin material like other skinned mobs: it
+    // clones it once (the texture stays shared) and keeps the per-mob
+    // emissive path for both the pulse and the hurt flash. makeSkin's
+    // fallback (node) fills `materials` with the flat colors instead.
+    const skin = this.makeSkin('creeper', COLORS)
+    if (skin) this.materials = { skin: skin.material.clone() }
     this.attachBody(this.#buildBody(), x, z, AABB)
   }
 
   #buildBody() {
     const m = this.materials
     const group = new THREE.Group()
+    if (this.skinDef) {
+      const g = this.skinDef.geoms
+      // NOT skinnedPart: these meshes ride the per-mob clone, never the
+      // shared material, so the flash swap must not touch them.
+      group.add(
+        this.part(g.head, m.skin, 0, 1.45, 0),
+        this.part(g.body, m.skin, 0, 0.8, 0),
+        this.part(g.leg, m.skin, -0.15, 0.175, 0.2),
+        this.part(g.leg, m.skin, 0.15, 0.175, 0.2),
+        this.part(g.leg, m.skin, -0.15, 0.175, -0.2),
+        this.part(g.leg, m.skin, 0.15, 0.175, -0.2),
+      )
+      return group
+    }
     group.add(
       this.part(GEOM.head, m.skin, 0, 1.45, 0),
       this.part(GEOM.body, m.skin, 0, 0.8, 0),

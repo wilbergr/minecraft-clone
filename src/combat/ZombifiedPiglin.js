@@ -14,7 +14,7 @@ const COLORS = { skin: 0xc98d72, shirt: 0x7d8a3f, pants: 0x8a6d2e }
 
 export class ZombifiedPiglin extends Zombie {
   constructor(world, x, z) {
-    super(world, x, z, COMBAT.mobs.zombifiedPiglin, COLORS)
+    super(world, x, z, COMBAT.mobs.zombifiedPiglin, COLORS, 'zombified_piglin')
     this.angered = false
     this.voice = 'piglin' // ambient groan variant (MobManager's picker)
     this.onAngered = null // callback(mob) — MobManager spreads the anger

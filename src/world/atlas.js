@@ -72,10 +72,12 @@ const TILE_NAMES = [
 // Each painter gets (px, rand): px(x, y, cssColor) sets one pixel, rand() is
 // the tile's seeded PRNG. Helpers below keep them terse.
 
-const rgb = (r, g, b) => `rgb(${r | 0},${g | 0},${b | 0})`
+// rgb/speckle/blobs are exported: mobSkins.js (the mob-texture sibling of
+// this module) paints its skin sheets with the same vocabulary.
+export const rgb = (r, g, b) => `rgb(${r | 0},${g | 0},${b | 0})`
 
 // Base color with per-pixel brightness jitter — the workhorse noise fill.
-function speckle(px, rand, [r, g, b], jitter) {
+export function speckle(px, rand, [r, g, b], jitter) {
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
       const j = (rand() * 2 - 1) * jitter
@@ -85,7 +87,7 @@ function speckle(px, rand, [r, g, b], jitter) {
 }
 
 // Scatter `count` little 2×2-ish blobs of a color (ore flecks, pebbles).
-function blobs(px, rand, [r, g, b], count) {
+export function blobs(px, rand, [r, g, b], count) {
   for (let i = 0; i < count; i++) {
     const bx = 1 + Math.floor(rand() * (TILE - 3))
     const by = 1 + Math.floor(rand() * (TILE - 3))

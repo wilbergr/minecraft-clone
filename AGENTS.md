@@ -1384,6 +1384,48 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   down before resuming; shrink `END.dragon.summonSeconds/rise.seconds` and
   hold `attacks.perch.seconds` open for kill windows.
 
+## Procedural mob skins (textured mobs)
+
+- `src/combat/mobSkins.js` is the atlas.js of mobs: per mob TYPE it draws a
+  64×64 canvas "skin sheet" of 16×16 tiles (seeded painters reusing the
+  exported atlas `rgb`/`speckle`/`blobs` vocabulary), builds ONE shared
+  `MeshLambertMaterial` (+ one red-emissive `flashMaterial` for the hurt
+  flash) and a set of UV-remapped `BoxGeometry` parts whose faces sample
+  tiles — the head's `pz` (front) face gets the face tile. Everything is
+  cached forever per type (`mobSkin(type)`), so material/texture/geometry
+  counts are CONSTANT in mob count; `typeof document`-guarded, returning
+  null in node so probes and bare runs fall back to the original flat-color
+  materials. Part sizes in the skin defs MUST mirror the subclass `GEOM`
+  dims — cosmetics only, hitboxes are the separate AABBs.
+- Skinned mobs share one material, so the hurt flash is a material SWAP:
+  `Mob.makeSkin(type, colors)` + `Mob.skinnedPart(name, x, y, z)` register
+  meshes in `mob.skinMeshes`, and `setFlash` exchanges shared normal/flash
+  materials (never an emissive write — that would flash the whole kind).
+  `Mob.dispose` still only disposes `this.materials` (per-mob clones);
+  shared skin resources are never disposed. Boss/dragon/crystal keep the
+  old per-mob `makeMaterials` path untouched.
+- The CREEPER is the one exception: its fuse pulse animates emissive
+  continuously per mob, so it clones the shared material once per creeper
+  (`skin.material.clone()` — the texture stays shared) into
+  `this.materials.skin` and keeps the old emissive path; its meshes are
+  deliberately NOT `skinnedPart`s. The MAGMA CUBE goes the other way: the
+  textured body is ONE mesh (ember eyes baked into the face tile — the
+  fallback keeps the two eye meshes), and its base material carries a warm
+  `emissive` from the skin def (flash still overrides red).
+- Variants ride the N5 seam grown by one arg: `new Zombie(world, x, z, cfg,
+  colors, skinType)` — drowned passes `'drowned'`, the piglin
+  `'zombified_piglin'`; PassiveMob passes its `kind` (pig/cow/sheep each
+  have a sheet). New mob = one `SKINS` entry (parts + tile painters);
+  unknown types just fall back to flat colors.
+- Headless suite: `node tools/test-mob-textures.mjs` (build + `npm install
+  --no-save puppeteer-core` first; strict port 4757) — asserts mapped
+  materials per type, per-type sharing/bounded counts, flash isolation,
+  the node fallback, combat/spawn spot-checks; writes git-ignored
+  `tools/mob-textures-{overworld,nether}.png`. For posed screenshots:
+  zero the live cfg speeds, set `wanderTimer = 999` / `wanderDir = null`
+  (+ `shootTimer`/`hopTimer` where they exist) — unlocking the pointer
+  instead would raise the overlay over the frame.
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE
