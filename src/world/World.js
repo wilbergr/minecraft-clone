@@ -530,6 +530,10 @@ export class World {
   get spawnProfile() {
     return {
       weights: COMBAT.mobs.hostileWeights,
+      // Aquatic table (deep-water sequel): what rises in fluid-covered
+      // columns. Overworld-only — NetherWorld's profile omits the key, so
+      // MobManager never spawns anything in the lava seas.
+      aquaticWeights: COMBAT.mobs.aquaticWeights,
       cap: COMBAT.mobs.maxCount,
       nightCap: DAYNIGHT.hostiles.nightMaxCount,
       maxLight: COMBAT.mobs.spawnLight.maxLight,
