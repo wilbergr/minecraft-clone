@@ -59,6 +59,8 @@ export const ITEMS = {
   dirt: blockItem('dirt', 2, 'Dirt'),
   stone: blockItem('stone', 3, 'Stone'),
   sand: blockItem('sand', 4, 'Sand'),
+  // Falling blocks feature: sand's gray gravity sibling (block 28).
+  gravel: blockItem('gravel', 28, 'Gravel'),
   wood: blockItem('wood', 5, 'Wood'),
   planks: blockItem('planks', 7, 'Planks'),
   iron_ore: blockItem('iron_ore', 8, 'Iron Ore'),

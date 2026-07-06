@@ -67,6 +67,11 @@ export const BLOCKS = {
     id: 4,
     name: 'Sand',
     solid: true,
+    // `gravity` (falling blocks): when an edit leaves the cell below
+    // non-solid, the block converts into a falling entity and settles on the
+    // first solid surface (src/fx/FallingBlocks.js). Edit-driven only —
+    // generated beaches never spontaneously collapse.
+    gravity: true,
     color: { top: 0xdccf94, side: 0xd2c489, bottom: 0xc2b47c },
     tex: { top: 'sand', side: 'sand', bottom: 'sand' },
     drop: 'sand',
@@ -399,6 +404,21 @@ export const BLOCKS = {
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 1 },
   },
+  28: {
+    id: 28,
+    name: 'Gravel',
+    // Sand's gray sibling (falling blocks): the second gravity block. Not
+    // generated anywhere yet — placeable/obtainable via drops only; a
+    // generation pocket (MC-style underground veins) is a future follow-up.
+    solid: true,
+    gravity: true,
+    color: { top: 0x7e7872, side: 0x767068, bottom: 0x6b655e },
+    tex: { top: 'gravel', side: 'gravel', bottom: 'gravel' },
+    drop: 'gravel',
+    hardness: 0.4,
+    material: 'sand',
+    tool: { kind: 'shovel', minTier: 0 },
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -415,6 +435,7 @@ export const BLOCK_GLOWSTONE = 23
 export const BLOCK_QUARTZ_ORE = 24
 export const BLOCK_BEDROCK = 25
 export const BLOCK_PORTAL = 26
+export const BLOCK_GRAVEL = 28
 
 export function isSolid(id) {
   const block = BLOCKS[id]

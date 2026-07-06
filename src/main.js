@@ -35,6 +35,7 @@ import { createFootsteps } from './audio/Footsteps.js'
 import { Particles } from './fx/Particles.js'
 import { Viewmodel } from './fx/Viewmodel.js'
 import { GroundItems } from './fx/GroundItems.js'
+import { FallingBlocks } from './fx/FallingBlocks.js'
 import { TorchLights } from './fx/TorchLights.js'
 import { LavaLights } from './fx/LavaLights.js'
 import { DayNight } from './sky/DayNight.js'
@@ -396,14 +397,24 @@ const popAttachmentIn = (w) => (x, y, z) => {
   if (above.drop) drops.spawn(x + 0.5, y + 1.7, z + 0.5, above.drop)
   sounds.play('break', { material: above.material })
 }
+// Falling gravity blocks (sand/gravel): an edit that unsupports one converts
+// it into a falling entity that lands as another edit — see
+// src/fx/FallingBlocks.js. Rides the same two triggers as attachment pops:
+// the per-world onEdit subscriber, and the post-explosion cell sweep below
+// (explosions emit onEdit once at the blast center, so the carved shell
+// needs the explicit sweep).
+const falling = new FallingBlocks(drops, sounds)
 // Each world pops its own attachments (edits only ever happen in the world
 // they belong to, so the handlers never cross).
 world.onEdit(popAttachmentIn(world))
 nether.onEdit(popAttachmentIn(nether))
+world.onEdit((x, y, z) => falling.onEdit(world, x, y, z))
+nether.onEdit((x, y, z) => falling.onEdit(nether, x, y, z))
 combat.mobs.onBlocksExploded = (cells) => {
   for (const c of cells) {
     blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
     popAttachmentIn(dims.current)(c.x, c.y, c.z)
+    falling.onEdit(dims.current, c.x, c.y, c.z)
   }
 }
 const reveal = bindTreasureReveal(hunt, player)
@@ -691,6 +702,7 @@ renderer.setAnimationLoop(() => {
   }
   particles.update(delta)
   drops.update(delta, camera.position)
+  falling.update(delta) // ungated like drops — a menu never strands a block mid-fall
   fx.viewmodel.update(delta)
   // The sky keeps rendering behind menus, but game time only passes while
   // the player is in control — matching the physics/combat pause.
@@ -745,6 +757,7 @@ window.__mc = {
   sounds,
   particles,
   drops,
+  falling,
   viewmodel: fx.viewmodel,
   daynight,
   clouds,

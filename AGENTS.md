@@ -1201,6 +1201,48 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   running — parallel worktrees run vite previews too, and a foreign server
   squatting your strict port otherwise makes you test STALE code (the
   fetch-loop "wait for the port" pattern can't tell whose server answered).
+## Falling blocks (sand & gravel)
+
+- `gravity: true` on a blocks.js row (sand 4, gravel 28) makes it fall when
+  an EDIT leaves the cell below non-solid — `src/fx/FallingBlocks.js`
+  converts it to air + a full-size falling cube (self-contained tween, knobs
+  in `FALLING`) that sweeps down via `world.blockAt` and `setBlock`s where it
+  lands. Both ends are overlay edits, so generator purity holds and generated
+  beaches/deserts NEVER spontaneously collapse (generation doesn't fire
+  onEdit; `deserializeEdits` doesn't either, so loading can't trigger falls).
+- Triggers are exactly the popAttachmentIn pair in main.js: the per-world
+  `onEdit` subscribers plus the `onBlocksExploded` cell sweep. `falling.
+  onEdit(w, x, y, z)` checks the cell ABOVE the edit (unsupported column —
+  cascades upward through the recursive setBlock→onEdit chain) and the cell
+  itself (sand placed in mid-air falls immediately, MC-style).
+- `tryFall` pushes the entity BEFORE its setBlock(air): the recursion means
+  a column's entities land bottom-of-column-first, so a mixed sand/gravel
+  stack re-settles in its original order (the headless suite asserts this).
+  `FALLING.maxSpeed` stays under 1 block per clamped 0.1s frame — faster
+  lets the cube's center skip a cell and land beneath a 1-thick floor.
+- Landing rules: the rest cell is one above the first SOLID cell below, so
+  liquids are fallen through and the landing setBlock replaces the water/
+  lava cell (the no-flow rule); a torch/bed occupying the rest cell is
+  spilled as a ground drop first; landing in the player's cell is safe by
+  construction — PhysicsBody's embedded self-heal (`PHYSICS.ejectSpeed`)
+  lifts them on top. Entities carry their spawn world and parent the mesh
+  under `world.root`, so dimension travel mid-fall just hides them while
+  they finish landing as overlay edits (no Dimensions.js changes needed).
+- Falling entities are transient (mob/drop precedent): a save mid-fall loses
+  the block on reload (it's air in the overlay until it lands) — falls last
+  well under a second, accepted. `tileTexture(name)` in atlas.js is the
+  one-tile NearestFilter texture seam the cube mesh uses (cached, null in
+  node). Gravel (block 28, item `gravel`) is NOT generated anywhere yet —
+  obtainable via drops only; underground veins are a future follow-up. The
+  next free block id is 29.
+- Headless suite: `node tools/test-falling-blocks.mjs` (build + `npm install
+  --no-save puppeteer-core` first); `__mc.falling` (`count`, `blocks`,
+  `tryFall`). SHARP EDGE for every suite: sibling worktrees run vite
+  previews concurrently — check `pgrep -fa "vite preview"` before picking a
+  "unique" port; a strictPort collision makes the test silently hit ANOTHER
+  build's server (ports 4731/4738/4741/4742/4747/4761 are taken). The suite
+  adopts the drowned suite's served-bundle-hash guard, which turns that
+  failure mode into an immediate loud abort.
 
 ## Sharp edges
 

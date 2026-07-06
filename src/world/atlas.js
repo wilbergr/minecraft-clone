@@ -61,6 +61,7 @@ const TILE_NAMES = [
   'quartz_ore',
   'bedrock',
   'quartz_block',
+  'gravel',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -384,6 +385,12 @@ const PAINTERS = {
     }
     blobs(px, rand, [210, 204, 192], 3)
   },
+  // Pebbled gray-brown: a mid-gray body with light and dark pebble blobs.
+  gravel(px, rand) {
+    speckle(px, rand, [126, 120, 112], 14)
+    blobs(px, rand, [152, 146, 138], 5)
+    blobs(px, rand, [94, 88, 82], 4)
+  },
 }
 
 // --- Atlas assembly ----------------------------------------------------------
@@ -441,6 +448,39 @@ export function createAtlasTexture() {
   texture.minFilter = THREE.NearestFilter
   texture.generateMipmaps = false
   texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+// One-tile texture (falling-block entity cubes): the same pixels the chunk
+// atlas renders, as a standalone NearestFilter map for a full-size cube mesh.
+// Cached per tile name; null without a DOM (node generator probes).
+const tileTextures = new Map()
+export function tileTexture(name) {
+  if (typeof document === 'undefined' || !SLOT.has(name)) return null
+  let texture = tileTextures.get(name)
+  if (!texture) {
+    const slot = SLOT.get(name)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = TILE
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(
+      buildCanvas(),
+      (slot % GRID) * TILE,
+      Math.floor(slot / GRID) * TILE,
+      TILE,
+      TILE,
+      0,
+      0,
+      TILE,
+      TILE,
+    )
+    texture = new THREE.CanvasTexture(canvas)
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.NearestFilter
+    texture.generateMipmaps = false
+    texture.colorSpace = THREE.SRGBColorSpace
+    tileTextures.set(name, texture)
+  }
   return texture
 }
 
