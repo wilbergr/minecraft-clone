@@ -121,6 +121,9 @@ const interaction = new BlockInteraction(camera, world, player, scene, inventory
 const combat = new Combat(camera, world, player, inventory, interaction, scene, fx)
 fx.health = combat.health
 combat.mobs.daynight = daynight // hostile spawns are night-gated (Phase 10)
+// Elytra glide (the End): PlayerControls reads the chest wear slot to
+// deploy and ticks its glide-time wear — bare runs (armor null) never glide.
+player.armor = combat.armor
 fx.viewmodel = new Viewmodel(camera, inventory, player)
 // Quest systems are overworld-bound (dimension seam): their meshes parent
 // under the overworld root so they vanish in the Nether, their world ref is
@@ -793,6 +796,20 @@ const updateEndAmbience = (delta) => {
   sounds.play('endAmbience')
 }
 
+// Glide wind (the End, elytra): a soft rushing loop stitched from repeated
+// swells while airborne on wings — the ambience timer pattern, faster.
+let glideWindTimer = 0
+const updateGlideWind = (delta) => {
+  if (!player.gliding) {
+    glideWindTimer = 0
+    return
+  }
+  glideWindTimer -= delta
+  if (glideWindTimer > 0) return
+  glideWindTimer = 1.1
+  sounds.play('wind', { gain: 0.5 + 0.5 * (player.glideSpeed / config.PLAYER.glide.maxSpeed) })
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
@@ -849,6 +866,7 @@ renderer.setAnimationLoop(() => {
   updateLavaAmbience(delta)
   updateNetherAmbience(delta)
   updateEndAmbience(delta)
+  updateGlideWind(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)

@@ -559,6 +559,73 @@ try {
     await page.evaluate(() => __mc.player.lock())
   }
 
+  console.log('E5: elytra glide')
+  {
+    // Equip the granted elytra through the real right-click-equip path.
+    const equipped = await page.evaluate(() => {
+      const slot = __mc.inventory.slots.findIndex((s) => s?.id === 'elytra')
+      __mc.inventory.select(slot)
+      __mc.armor.equipSelected()
+      return __mc.armor.slots.chest?.id
+    })
+    assert(equipped === 'elytra', 'elytra equips into the chest wear slot')
+
+    // Return to the End for the glide (defeated = a quiet island) and fall
+    // from high over the center.
+    await page.evaluate(() => {
+      __mc.dims.travel('end', { x: 0.5, y: 66, z: 36.5 })
+    })
+    await page.waitForFunction(() => __mc.world.chunkReadyAt(0, 0))
+    await page.evaluate(() => {
+      // Level the camera (the E4 lookAt left it pitched) and step off.
+      __mc.camera.quaternion.set(0, 0, 0, 1)
+      __mc.player.teleport(0.5, 95, 0.5)
+    })
+    await page.waitForFunction(() => __mc.player.body.velocity.y < -2)
+    // A fresh Space press mid-fall deploys — synchronous keydown/keyup in
+    // ONE evaluate (headless timers stretch).
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))
+      document.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', bubbles: true }))
+    })
+    await page.waitForFunction(() => __mc.player.gliding)
+    const glide = await page.evaluate(() => ({
+      gravityScale: __mc.player.body.gravityScale,
+      expectedScale: __mc.config.PLAYER.glide.gravityScale,
+      vy: __mc.player.body.velocity.y,
+      horizontal: Math.hypot(__mc.player.body.velocity.x, __mc.player.body.velocity.z),
+    }))
+    assert(glide.gravityScale === glide.expectedScale, 'glide engages the gravityScale seam')
+    assert(glide.vy > -6, `glide sink is gentle vs free fall (vy ${glide.vy.toFixed(1)})`)
+    assert(glide.horizontal >= 5, `momentum carries forward (${glide.horizontal.toFixed(1)} blocks/s)`)
+
+    // Pitch down: speed rises (assert the gap, not the knob) — set the dive
+    // through the same YXZ euler the controls read. The screenshot lands
+    // mid-dive, island filling the frame.
+    await page.evaluate(() => {
+      __mc.camera.rotation.set(-0.55, __mc.camera.rotation.y, 0, 'YXZ')
+      window.__e5speed = __mc.player.glideSpeed
+    })
+    await page.waitForFunction(() => __mc.player.glideSpeed > window.__e5speed + 2)
+    assert(true, 'diving gains speed (pitch-to-speed momentum)')
+    await page.screenshot({ path: join(HERE, 'end-elytra-glide.png') })
+
+    // The dive lands on the island: contact exits the glide, gravity restores.
+    await page.waitForFunction(() => !__mc.player.gliding && __mc.player.body.grounded, {
+      timeout: 60_000,
+    })
+    const landed = await page.evaluate(() => ({
+      gravityScale: __mc.player.body.gravityScale,
+      durability: __mc.armor.slots.chest?.durability ?? 0,
+      wind: __mc.sounds.stats.byName.wind ?? 0,
+      alive: !__mc.health.isDead,
+    }))
+    assert(landed.gravityScale === 1, 'landing restores normal gravity')
+    assert(landed.durability > 0 && landed.durability < 432, 'glide time wore the wings')
+    assert(landed.wind >= 1, 'wind voice plays while gliding')
+    assert(landed.alive, 'the flare landing is survivable')
+  }
+
   console.log(consoleErrors.length ? `console errors:\n${consoleErrors.join('\n')}` : 'no console errors')
   assert(consoleErrors.length === 0, 'zero console errors')
 } finally {

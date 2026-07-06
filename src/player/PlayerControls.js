@@ -66,6 +66,15 @@ export class PlayerControls {
     // Optional custom respawn-point provider (bed spawn, wired in main.js):
     // returns feet {x, y, z} to respawn at, or null for the default spawn.
     this.spawnHook = null
+    // Elytra glide (the End): `armor` is attached by main.js (combat owns
+    // it) — bare runs never deploy. Deployment wants a FRESH jump press
+    // (jumpTapped, an #onKey edge) so the held-Space auto-hop never
+    // auto-deploys; touch taps arrive through the existing jumpBuffer.
+    this.armor = null
+    this.gliding = false
+    this.glideSpeed = 0
+    this.jumpTapped = false
+    this.glideWear = 0
 
     this.respawn()
 
@@ -185,6 +194,7 @@ export class PlayerControls {
         this.keys.right = down
         break
       case 'Space':
+        if (down && !this.keys.jump) this.jumpTapped = true // fresh-press edge (glide deploy)
         this.keys.jump = down
         break
       // Shift sneaks (MC scheme); C stays as an alias for pre-remap muscle
@@ -225,6 +235,17 @@ export class PlayerControls {
     if (!this.isLocked) {
       this.isSprinting = false
       this.sprintLatch = false // unlock drops a held sprint, like MC
+      this.jumpTapped = false
+      return
+    }
+
+    // Elytra glide (the End): while deployed the glide model owns the
+    // body's whole velocity — the WASD/jump/dive scheme below is bypassed.
+    if (this.#updateGlide(delta)) {
+      this.isSprinting = false
+      this.body.step(delta)
+      this.#syncCamera(delta)
+      this.#updateFov(delta, true) // flight reads fast — the sprint FOV cue
       return
     }
 
@@ -315,10 +336,76 @@ export class PlayerControls {
 
     // Sprint that actually covers ground (same "moving" test as the FOV cue).
     this.isSprinting = sprinting && this.velocity.lengthSq() > 1
+    this.jumpTapped = false // a press that didn't deploy is spent
 
     this.body.step(delta, { sneak: sneaking })
     this.#syncCamera(delta)
-    this.#updateFov(delta, sprinting)
+    this.#updateFov(delta, sprinting && this.velocity.lengthSq() > 1)
+  }
+
+  // The glide model (~PLAYER.glide): deploy on a fresh jump press while
+  // airborne, descending, wings equipped; pitch-to-speed with momentum —
+  // s += (gain·sin(−pitch) − drag·s)·dt, velocity = look·s with a constant
+  // sink term, residual gravity through the gravityScale seam. Returns true
+  // while the glide owns the frame.
+  #updateGlide(delta) {
+    const g = PLAYER.glide
+    const body = this.body
+    const hasWings = this.armor?.slots.chest?.id === 'elytra'
+
+    if (!this.gliding) {
+      const tapped = this.jumpTapped || this.jumpBuffer > 0
+      this.jumpTapped = false
+      if (
+        !hasWings ||
+        !tapped ||
+        body.grounded ||
+        body.inWater ||
+        body.velocity.y >= 0
+      ) {
+        return false
+      }
+      this.gliding = true
+      this.jumpBuffer = 0
+      this.glideSpeed = Math.max(g.minSpeed, Math.hypot(body.velocity.x, body.velocity.z))
+      body.gravityScale = g.gravityScale
+    }
+
+    // Exit on any contact — the flare landing, a wave, a clipped pillar —
+    // or the wings breaking mid-air (wear below).
+    if (body.grounded || body.inWater || body.hitWall || !hasWings) {
+      this.gliding = false
+      this.glideSpeed = 0
+      body.gravityScale = 1
+      return false
+    }
+
+    const e = this.#euler.setFromQuaternion(this.camera.quaternion)
+    const pitch = e.x // negative = looking down
+    this.glideSpeed += (g.gain * Math.sin(-pitch) - g.drag * this.glideSpeed) * delta
+    this.glideSpeed = Math.max(g.minSpeed, Math.min(g.maxSpeed, this.glideSpeed))
+    const horizontal = this.glideSpeed * Math.cos(pitch)
+    const sin = Math.sin(e.y)
+    const cos = Math.cos(e.y)
+    // Steering is by look; A/D add a gentle bank drift.
+    const bank = ((this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0)) * g.bankSpeed
+    body.velocity.x = -sin * horizontal + cos * bank
+    body.velocity.z = -cos * horizontal - sin * bank
+    body.velocity.y = this.glideSpeed * Math.sin(pitch) - g.sink
+    // Knockback still lands mid-air (a dragon swoop mid-glide shoves).
+    body.velocity.x += this.knock.x
+    body.velocity.z += this.knock.z
+    this.knock.multiplyScalar(Math.exp(-8 * delta))
+    body.fallDistance = 0 // gliding IS the fall-damage escape (the water rule)
+
+    // Wear: glide time grinds the wings; at zero armor.onBreak plays the
+    // snap and the missing piece exits the glide next frame.
+    this.glideWear += delta
+    while (this.glideWear >= g.wearSeconds) {
+      this.glideWear -= g.wearSeconds
+      this.armor.wearSlot('chest')
+    }
+    return true
   }
 
   // Camera rides at eye height over the feet, dipping while sneaking.
@@ -333,10 +420,9 @@ export class PlayerControls {
     this.camera.position.set(p.x, p.y + PLAYER.eyeHeight - this.eyeOffset, p.z)
   }
 
-  // Sprint speed cue: widen the FOV a touch while actually moving fast.
-  #updateFov(delta, sprinting) {
-    const moving = this.velocity.lengthSq() > 1
-    const target = GRAPHICS.fov + (sprinting && moving ? PHYSICS.sprintFov.boost : 0)
+  // Speed cue: widen the FOV a touch while moving fast (sprint or glide).
+  #updateFov(delta, boosted) {
+    const target = GRAPHICS.fov + (boosted ? PHYSICS.sprintFov.boost : 0)
     if (Math.abs(this.camera.fov - target) < 0.01) return
     this.camera.fov = THREE.MathUtils.damp(
       this.camera.fov,

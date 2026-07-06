@@ -519,6 +519,22 @@ export const PLAYER = {
   damping: 12, // higher = snappier stop (velocity decay per second)
   reach: 5, // max distance for breaking/placing blocks, in blocks
   spawnPoint: { x: 0.5, z: 8.5 }, // initial spawn AND respawn-on-death column
+  // Elytra glide (the End): deployed by a FRESH jump press while airborne,
+  // descending, with elytra in the chest armor slot. Pitch-to-speed with
+  // momentum — diving gains speed, pulling up bleeds it, `sink` never stops
+  // pulling down, so sustained flight requires terrain: no creative flight
+  // by construction. Rides the PhysicsBody.gravityScale seam (E3); exits on
+  // ground/water/wall contact or the wings breaking.
+  glide: {
+    gain: 14, // speed gained per second at a full -90° dive (scales by sin)
+    drag: 0.35, // fraction of speed bled per second
+    minSpeed: 6, // never stalls below this while deployed
+    maxSpeed: 28,
+    sink: 1.6, // constant downward pull, blocks/s — the "no hovering" term
+    gravityScale: 0.12, // residual gravity while deployed (E3 seam)
+    bankSpeed: 3.5, // A/D lateral drift, blocks/s
+    wearSeconds: 1, // one durability per this many seconds gliding (~7 min total)
+  },
 }
 
 // Physics & movement feel (Phase 8): gravity, jumping, and AABB voxel

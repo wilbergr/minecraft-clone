@@ -226,6 +226,10 @@ export class SoundEngine {
         this.#tone({ type: 'sine', from: 55, to: 38, dur: 3.0, gain: 0.16 * v })
         this.#tone({ type: 'triangle', from: 82, to: 66, dur: 2.4, gain: 0.08 * v, when: 0.6 })
         break
+      case 'wind': // glide rush — a broad airy swell, repeated into a loop
+        this.#burst({ type: 'bandpass', freq: 900, dur: 1.4, gain: 0.2 * v })
+        this.#burst({ type: 'highpass', freq: 2000, dur: 1.2, gain: 0.08 * v, when: 0.2 })
+        break
       case 'dragonRoar': // the Ender Dragon — wider and colder than the King's roar
         this.#burst({ type: 'lowpass', freq: 700, dur: 1.5, gain: 0.6 * v })
         this.#tone({ type: 'sawtooth', from: 110, to: 42, dur: 1.5, gain: 0.4 * v })
