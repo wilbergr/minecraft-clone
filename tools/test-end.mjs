@@ -323,6 +323,63 @@ try {
     await page.evaluate(() => __mc.player.lock())
   }
 
+  console.log('E3: shared flight seams')
+  {
+    // gravityScale 0: a mid-air body holds altitude; back at 1 it falls.
+    await page.evaluate(() => {
+      __mc.player.body.gravityScale = 0
+      __mc.player.teleport(0.5, 90, 8.5)
+    })
+    await page.waitForFunction(() => {
+      window.__e3frames = (window.__e3frames ?? 0) + 1
+      return window.__e3frames > 12
+    })
+    const float = await page.evaluate(() => ({
+      y: __mc.player.body.position.y,
+      vy: __mc.player.body.velocity.y,
+    }))
+    assert(Math.abs(float.y - 90) < 0.01 && float.vy === 0, 'gravityScale 0 body floats (y stable)')
+    await page.evaluate(() => {
+      __mc.player.body.gravityScale = 1
+    })
+    await page.waitForFunction(() => __mc.player.body.position.y < 89)
+    assert(true, 'gravityScale 1 restores normal gravity')
+    // Park safely on the ground before the projectile phase — the free fall
+    // from 90 would otherwise be lethal (teleport clears fall distance).
+    await page.evaluate(() => {
+      const w = __mc.world
+      __mc.player.teleport(0.5, w.surfaceY(0.5, 8.5), 8.5)
+    })
+    await page.waitForFunction(() => __mc.player.body.grounded && !__mc.health.isDead)
+
+    // Per-projectile gravity: a gravity-0 projectile flies flat while a
+    // default one arcs down, from the same spawn.
+    const arc = await page.evaluate(() => {
+      const origin = __mc.camera.position.clone().set(0.5, 90, 8.5)
+      const vel = __mc.camera.position.clone().set(6, 0, 0)
+      const flat = __mc.projectiles.spawn(origin, vel, { gravity: 0 })
+      const ballistic = __mc.projectiles.spawn(origin, vel)
+      window.__e3arrows = { flat, ballistic, y0: 90 }
+      return __mc.projectiles.count
+    })
+    assert(arc === 2, 'two test projectiles in flight')
+    await page.waitForFunction(() => {
+      const a = window.__e3arrows
+      return a.ballistic.mesh.position.y < a.y0 - 1 || a.ballistic.stuck
+    })
+    const seams = await page.evaluate(() => {
+      const a = window.__e3arrows
+      return {
+        flatVy: a.flat.velocity.y,
+        flatY: a.flat.mesh.position.y,
+        ballisticY: a.ballistic.mesh.position.y,
+      }
+    })
+    assert(seams.flatVy === 0 && Math.abs(seams.flatY - 90) < 0.01, 'gravity-0 projectile flies flat')
+    assert(seams.ballisticY < 89, 'default projectile still arcs (live cfg read)')
+    await page.evaluate(() => __mc.projectiles.clear())
+  }
+
   console.log(consoleErrors.length ? `console errors:\n${consoleErrors.join('\n')}` : 'no console errors')
   assert(consoleErrors.length === 0, 'zero console errors')
 } finally {
