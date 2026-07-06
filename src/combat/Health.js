@@ -34,8 +34,11 @@ export class Health {
     if (this.isDead) return
     this.value = Math.max(0, this.value - amount)
     this.sinceDamage = 0
-    this.#emit()
+    // onDeath runs BEFORE the emit so the fatal onChange describes the
+    // post-death world: the death-screen render reads state the death hook
+    // just settled (did the inventory spill? — see Combat.deathSpillHook).
     if (this.isDead) this.onDeath?.()
+    this.#emit()
   }
 
   heal(amount) {
