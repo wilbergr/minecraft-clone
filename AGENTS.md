@@ -107,11 +107,30 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - One shared model: `src/physics/PhysicsBody.js` — an AABB (feet-center
   `position`, `width`/`height` from `PHYSICS.playerAABB` / `PHYSICS.mobAABB`)
-  swept axis-by-axis X → Z → Y against `world.blockAt()` each `step(delta)`,
-  sub-stepped so no axis moves > 0.4 blocks per sweep (the 0.1s delta clamp +
-  terminal velocity would tunnel otherwise). Downward block sets `grounded`;
-  horizontal block sets `hitWall` (zombies read it to hop 1-block steps).
-  All tunables in `PHYSICS` (src/config.js).
+  swept axis-by-axis **Y → X → Z (Minecraft's order — Y-first is
+  load-bearing, see the fall-damage note below)** against `world.blockAt()`
+  each `step(delta)`, sub-stepped so no axis moves > 0.4 blocks per sweep
+  (the 0.1s delta clamp + terminal velocity would tunnel otherwise).
+  Downward block sets `grounded`; horizontal block sets `hitWall` (zombies
+  read it to hop 1-block steps). All tunables in `PHYSICS` (src/config.js).
+- Fall-damage over-count (the "2-block fall hurts" bug) had TWO causes; do
+  not reintroduce either. (1) The sweeps used to run X → Z → Y: moving
+  horizontally at the pre-drop height overflies step corners, so descending
+  stairs/hillsides never touched down and `fallDistance` accumulated across
+  the whole slope — a walk down 4 stairs landed as one 5-block "fall" (2
+  damage). Y-first hugs terrain, so every real step contact fires `onLand`
+  and resets the counter (and `grounded` is fresh for the step-up/edge-stop
+  checks). (2) PlayerControls' damping integrator used `accel = speed·k·Δ`,
+  whose steady state overshoots the configured speed by `kΔ/(1−e^(−kΔ))` —
+  +72% at the clamped 0.1s delta (walk 5 ran at ~8.6), +10% at 60fps —
+  fast enough to make even walking ballistic over 1-block descents. It is
+  `speed·(1−damp)` now: exact at any frame delta. The damage formula was
+  always MC-correct (`floor(fell − 3)` HP, grace 3, `PHYSICS.fall`).
+  Residual: sprint (1.8× = 9 b/s vs MC's 1.3×) still genuinely clears
+  1-block steps on sustained 1:1 descents and accumulates real fall damage
+  — authentic ballistics at that speed; only retuning sprint would change
+  it. Regression suite: `node tools/test-fall-damage.mjs` (build +
+  `npm install --no-save puppeteer-core` first).
 - Traversal is MC-style: `stepHeight: 0.6` means full blocks take a jump
   (`jumpVelocity: 9` / `gravity: 32` ⇒ ~1.27-block apex); holding Space (or
   the touch ⬆ button) auto-hops each landing. Raise `stepHeight` past 1.0 to

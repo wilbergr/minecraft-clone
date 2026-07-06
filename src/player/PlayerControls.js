@@ -282,7 +282,14 @@ export class PlayerControls {
           ? PHYSICS.sneak.speedMultiplier
           : 1) *
       (this.body.inWater ? liquid.moveMultiplier : 1) // swimming is slower
-    const accel = speed * PLAYER.damping * delta
+    // Per-frame input gain. (1 - damp) — NOT damping·delta — makes the
+    // steady state land exactly on `speed` at ANY frame delta (the two agree
+    // as delta→0, but damping·delta overshoots by kΔ/(1−e^(−kΔ)): +72% at
+    // the clamped 0.1s delta, +10% at 60fps). The overshoot made configured
+    // walk speed 5 run at ~8.6 on slow clients — fast enough to fly clear
+    // over 1-block steps on descents, which is how staircase walks turned
+    // into accumulated "falls" (see PhysicsBody's Y-first note).
+    const accel = speed * (1 - damp)
 
     if (this.keys.forward) this.velocity.z -= accel
     if (this.keys.back) this.velocity.z += accel

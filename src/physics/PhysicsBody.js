@@ -5,10 +5,19 @@ import { BLOCK_LAVA, isLiquid, isSolid } from '../world/blocks.js'
 // Axis-aligned bounding-box voxel physics (Phase 8), shared by the player and
 // mobs. A body is a width×height×width box whose `position` is the center of
 // its feet. Each step() integrates gravity into `velocity`, then sweeps the
-// box axis by axis (X, then Z, then Y) against solid blocks via
-// world.blockAt() — which answers for unloaded chunks too, so collision never
-// depends on what happens to be meshed. A blocked downward move sets
-// `grounded`; a blocked horizontal move sets `hitWall` (mobs use it to hop).
+// box axis by axis (Y first, then X, then Z — Minecraft's order) against
+// solid blocks via world.blockAt() — which answers for unloaded chunks too,
+// so collision never depends on what happens to be meshed. A blocked downward
+// move sets `grounded`; a blocked horizontal move sets `hitWall` (mobs use it
+// to hop).
+//
+// Y-BEFORE-XZ IS LOAD-BEARING for fall damage: sweeping horizontally first
+// moves the box at its pre-drop height, so a body skimming down a staircase
+// or hillside clears each step edge before the vertical sweep runs and never
+// touches down — fallDistance then accumulates across the whole descent and a
+// 2-block-looking hop lands as a 5-block "fall". Dropping first (like MC)
+// hugs the terrain, so every real step contact registers as a landing and
+// resets the counter.
 //
 // Sub-stepping: moves are split so no axis travels more than half a block per
 // sweep — the frame delta is clamped at 0.1s and headless/slow clients really
@@ -103,10 +112,13 @@ export class PhysicsBody {
     const dt = delta / steps
     for (let i = 0; i < steps; i++) {
       // Velocity is re-read each sub-step: a clamp zeroes the axis, so later
-      // sub-steps stop pushing into the wall (or floor).
+      // sub-steps stop pushing into the wall (or floor). Vertical goes first
+      // (see the header comment) — descending bodies must touch down before
+      // the horizontal move carries them past the step edge, and `grounded`
+      // is then fresh for the step-up/edge-stop checks below.
+      if (this.#sweepVertical(vyMove * dt)) vyMove = 0
       this.#sweepHorizontal('x', v.x * dt, sneak)
       this.#sweepHorizontal('z', v.z * dt, sneak)
-      if (this.#sweepVertical(vyMove * dt)) vyMove = 0
     }
   }
 
