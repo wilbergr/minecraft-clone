@@ -16,6 +16,14 @@ export const TREASURE_MESSAGE =
 export const CHALLENGE_MESSAGE =
   'The Hollow King has fallen. The realm is yours, champion!'
 
+// ---------------------------------------------------------------------------
+// END_MESSAGE — the payoff revealed when the Ender Dragon falls (the End).
+// Captain: personalize this text before release. Plain string; the End
+// reveal modal (src/ui/endReveal.js) renders it verbatim.
+// ---------------------------------------------------------------------------
+export const END_MESSAGE =
+  'The Ender Dragon has fallen. The void is quiet — take your wings and fly home, champion!'
+
 // Treasure hunt tunables (Phase 6). Three glowing tokens sit at
 // seed-deterministic spots: the first a ring-distance from spawn, each next
 // one a ring-distance from the previous token, at seed-chosen bearings — so
@@ -1131,6 +1139,77 @@ export const END = {
   // Ambience: a sparse hollow-wind swell while the End is current (the
   // Nether-ambience timer pattern in main.js).
   ambience: { minSeconds: 18, maxSeconds: 30 },
+  // The Ender Dragon (src/combat/EnderDragon.js + src/quest/DragonFight.js).
+  // KINEMATIC flight: the dragon owns group.position along orbit/swoop/perch
+  // paths — no physics body step, so it can't tunnel or get stuck; the Mob
+  // base's body still gives melee and arrows their hit tests. Fight shape:
+  // phase 1 the six pillar-top crystals visibly heal it (they are the
+  // objective); crystals gone -> phase 2 perch cycles (the damage window);
+  // under `enrageAt` health -> phase 3 (faster everything).
+  dragon: {
+    health: 200,
+    aabb: { width: 3, height: 2 }, // generous — a big target is the point
+    summonSeconds: 3, // rumble between arrival and the rise
+    rise: { fromDepth: 12, seconds: 3 }, // ascends from below the island center
+    orbit: {
+      radius: 24, // the pillar ring — crystals stay in the fight's frame
+      height: 80,
+      speed: 8, // blocks/s along the circle
+      bobAmplitude: 1.5,
+      bobSpeed: 0.7,
+    },
+    healPerCrystalPerSecond: 1, // phase 1: plinking loses to 6 crystals
+    enrageAt: 0.33, // health fraction — phase 3
+    enrageCooldownFactor: 0.7,
+    enrageSpeedFactor: 1.3, // swoop/return speeds scale up in phase 3
+    roarSeconds: 2, // invulnerable phase-transition announcement
+    knockbackFactor: 0, // you don't shove a dragon
+    attacks: {
+      // Dive through the player's marked position; contact shoves hard —
+      // near the rim the void IS the damage.
+      swoop: {
+        telegraphSeconds: 1.2,
+        cooldownSeconds: 9,
+        speed: 24,
+        damage: 8,
+        contactRadius: 3,
+      },
+      // Orbit-fired straight projectile (the E3 gravity-0 seam). No world
+      // damage — the island must survive dozens of attempts.
+      fireball: {
+        telegraphSeconds: 0.6,
+        cooldownSeconds: 4.5,
+        speed: 14,
+        damage: 5,
+      },
+      // Phase 2+: land at the island center — the melee window. ALL damage
+      // economy lives here; damage taken is multiplied while perched.
+      perch: {
+        cooldownSeconds: 16,
+        seconds: 7,
+        damageFactor: 1.5,
+        descendSpeed: 10,
+      },
+    },
+    // End crystals (src/combat/EndCrystal.js): fight-runner entities on the
+    // pillar tops, health 1 (any hit), healing the dragon while alive.
+    crystals: {
+      health: 1,
+      aabb: { width: 0.8, height: 1.1 },
+      popDamage: 3, // face-tanking the pedestal hurts (through armor)
+      popRadius: 2.5,
+      color: 0xd86ae8,
+      coreColor: 0xf3e9ff,
+      beam: { color: 0xc46ae8, radius: 0.07, opacity: 0.45 },
+      bob: { amplitude: 0.15, speed: 2 },
+      spinSpeed: 1.2,
+    },
+    // Victory stamps (all ordinary edits): the exit portal ring at the
+    // island center (the frame ring self-activates through the normal
+    // detector) and the dragon egg trophy beside it.
+    egg: { dx: 3, dz: 3 },
+    defeatNova: { color: 0xc9a7f5, particles: 120 },
+  },
 }
 
 // Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as

@@ -77,7 +77,8 @@ export class SaveManager {
     this.netherData = null
     this.end = null // wired by attachEnd (the End's edit overlay)
     this.endData = null
-    this.endProgressData = null // loaded `end` slot (dragon progress, the End)
+    this.endProgress = null // wired by attachEndProgress (dragon latches)
+    this.endProgressData = null // loaded `end` slot, applied by attachEndProgress
     this.dims = null // wired by attachDimensions — serialize reads it live
     this.dimensionData = null // loaded dimension name, applied by main.js
     this.dirty = false
@@ -196,6 +197,14 @@ export class SaveManager {
     world.onEdit(() => (this.dirty = true))
   }
 
+  // And the End's progress latches ({ dragonDefeated, celebrated } on the
+  // optional `end` slot — the attachTreasure pattern). Called after load().
+  attachEndProgress(progress) {
+    progress.deserialize(this.endProgressData)
+    this.endProgress = progress
+    progress.onChange(() => (this.dirty = true))
+  }
+
   // And the dimension controller: serialize() reads the current dimension
   // live (like the daynight clock); main.js applies the loaded value with
   // dims.travel once every system is wired. Called once after load().
@@ -275,7 +284,7 @@ export class SaveManager {
       cursor: this.cursor ? (this.cursor.serialize() ?? undefined) : undefined,
       netherEdits: this.nether ? this.nether.serializeEdits() : (this.netherData ?? undefined),
       endEdits: this.end ? this.end.serializeEdits() : (this.endData ?? undefined),
-      end: this.endProgressData ?? undefined,
+      end: this.endProgress ? this.endProgress.serialize() : (this.endProgressData ?? undefined),
       dimension: this.dims ? this.dims.name : (this.dimensionData ?? undefined),
     }
   }

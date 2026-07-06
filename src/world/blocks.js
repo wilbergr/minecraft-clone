@@ -464,6 +464,22 @@ export const BLOCKS = {
     color: { top: 0x140a24, side: 0x140a24, bottom: 0x140a24 },
     drop: null,
   },
+  32: {
+    id: 32,
+    name: 'Dragon Egg',
+    // The Ender Dragon's trophy (the End): stamped beside the exit portal on
+    // victory. A pure placeable keepsake — the King's Crown precedent says
+    // trophies can just be the point. Blast-resistant so a stray creeper
+    // back home can't vaporize the one copy.
+    solid: true,
+    blastResistant: true,
+    color: { top: 0x1a0f21, side: 0x150c1c, bottom: 0x110a17 },
+    tex: { top: 'dragon_egg', side: 'dragon_egg', bottom: 'dragon_egg' },
+    drop: 'dragon_egg',
+    hardness: 1.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -484,6 +500,7 @@ export const BLOCK_GRAVEL = 28
 export const BLOCK_END_STONE = 29
 export const BLOCK_END_FRAME = 30
 export const BLOCK_END_PORTAL = 31
+export const BLOCK_DRAGON_EGG = 32
 
 export function isSolid(id) {
   const block = BLOCKS[id]

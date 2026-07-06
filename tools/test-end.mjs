@@ -79,7 +79,10 @@ try {
   console.log('E1: the End dimension')
   {
     // Travel straight in via the controller seam, feet on the arrival column.
+    // The dragon fight is E4's business — latch it defeated for now so the
+    // dimension checks (esp. mobs.count === 0) see a quiet island.
     await page.evaluate(() => {
+      __mc.endProgress.dragonDefeated = true
       __mc.dims.travel('end', { x: 0.5, y: 66, z: 36.5 })
     })
     await page.waitForFunction(() => __mc.world.chunkReadyAt(0, 36))
@@ -378,6 +381,182 @@ try {
     assert(seams.flatVy === 0 && Math.abs(seams.flatY - 90) < 0.01, 'gravity-0 projectile flies flat')
     assert(seams.ballisticY < 89, 'default projectile still arcs (live cfg read)')
     await page.evaluate(() => __mc.projectiles.clear())
+  }
+
+  console.log('E4: the Ender Dragon fight')
+  {
+    // Shrink the slow beats, un-latch the E1 stub, and enter the End.
+    await page.evaluate(() => {
+      const d = __mc.config.END.dragon
+      d.summonSeconds = 0.4
+      d.rise.seconds = 0.6
+      d.attacks.perch.seconds = 30 // hold the perch open for the kill window
+      __mc.endProgress.dragonDefeated = false
+      __mc.dims.travel('end', { x: 0.5, y: 66, z: 36.5 })
+    })
+    await page.waitForFunction(() => __mc.world.chunkReadyAt(0, 0))
+    // Arm → rumble → rise: the dragon and six crystals appear pinned.
+    await page.waitForFunction(
+      () => __mc.mobs.mobs.some((m) => m.kind === 'dragon'),
+      { timeout: 60_000 },
+    )
+    const armed = await page.evaluate(() => ({
+      crystals: __mc.mobs.mobs.filter((m) => m.kind === 'end_crystal').length,
+      pinned: __mc.dragonFight.dragon !== null && __mc.dragonFight.crystals.length === 6,
+      beams: __mc.dragonFight.beams.length,
+      event: __mc.mobs.event,
+      barVisible: !document.getElementById('boss-bar').classList.contains('hidden'),
+      barName: document.getElementById('boss-name').textContent,
+    }))
+    assert(armed.crystals === 6, 'six end crystals rise on the pillar tops')
+    assert(armed.pinned, 'dragon + crystals pinned by reference')
+    assert(armed.beams === 6, 'six healing beams render')
+    assert(armed.event, 'mobs.event set for the fight')
+    assert(armed.barVisible && armed.barName === 'The Ender Dragon', 'boss HP bar shows the dragon')
+
+    // Wait for the dragon to reach its orbit (rise -> return -> orbit).
+    await page.waitForFunction(() => __mc.dragonFight.dragon.state === 'orbit', {
+      timeout: 60_000,
+    })
+    await page.evaluate(() => {
+      __mc.camera.lookAt(__mc.dragonFight.dragon.group.position)
+    })
+    await page.screenshot({ path: join(HERE, 'end-dragon-fight.png') })
+
+    // Phase 1 healing: damage the dragon, watch the crystals knit it back.
+    const healed = await page.evaluate(() => {
+      const dragon = __mc.dragonFight.dragon
+      __mc.mobs.hit(dragon, 40, { x: 1, y: 0, z: 0 })
+      window.__e4hp = dragon.health
+      return dragon.health
+    })
+    assert(healed <= 160, 'the dragon takes damage in phase 1')
+    await page.waitForFunction(() => __mc.dragonFight.dragon.health > window.__e4hp + 1)
+    assert(true, 'live crystals visibly heal the dragon back')
+
+    // Forced attacks (the startAttack seam): swoop telegraph -> dive; a
+    // fireball spawns a gravity-0 projectile.
+    await page.evaluate(() => {
+      __mc.dragonFight.dragon.startAttack('swoop', __mc.camera.position)
+    })
+    const teleSwoop = await page.evaluate(() => ({
+      state: __mc.dragonFight.dragon.state,
+      attack: __mc.dragonFight.dragon.attack,
+    }))
+    assert(teleSwoop.state === 'telegraph' && teleSwoop.attack === 'swoop', 'swoop telegraphs first')
+    await page.waitForFunction(() => __mc.dragonFight.dragon.state === 'swoop', {
+      timeout: 30_000,
+    })
+    assert(true, 'telegraph resolves into the dive')
+    await page.waitForFunction(() => __mc.dragonFight.dragon.state === 'orbit', {
+      timeout: 60_000,
+    })
+    await page.evaluate(() => {
+      __mc.dragonFight.dragon.startAttack('fireball', __mc.camera.position)
+    })
+    await page.waitForFunction(() => __mc.projectiles.count > 0, { timeout: 30_000 })
+    const fireball = await page.evaluate(() =>
+      __mc.projectiles.arrows.some((a) => a.gravity === 0 && !a.fromPlayer),
+    )
+    assert(fireball, 'the fireball is a gravity-0 hostile projectile')
+
+    // Shatter all six crystals: fx counters + the phase-2 turn.
+    await page.evaluate(() => {
+      for (const c of [...__mc.dragonFight.crystals]) {
+        __mc.mobs.hit(c, 9, { x: 0, y: 0, z: 1 })
+      }
+    })
+    await page.waitForFunction(() => __mc.dragonFight.crystals.length === 0)
+    const afterCrystals = await page.evaluate(() => ({
+      beams: __mc.dragonFight.beams.length,
+      breaks: __mc.sounds.stats.byName.crystalBreak ?? 0,
+      phase: __mc.dragonFight.dragon.phase,
+    }))
+    assert(afterCrystals.beams === 0, 'healing beams removed with their crystals')
+    assert(afterCrystals.breaks >= 6, 'crystalBreak voice fired per crystal')
+    assert(afterCrystals.phase === 2, 'crystals gone -> phase 2')
+
+    // No more healing: damage sticks now.
+    const stays = await page.evaluate(() => {
+      const dragon = __mc.dragonFight.dragon
+      __mc.mobs.hit(dragon, 20, { x: 1, y: 0, z: 0 })
+      window.__e4hp2 = dragon.health
+      return dragon.health
+    })
+    await page.waitForFunction(() => {
+      window.__e4ticks = (window.__e4ticks ?? 0) + 1
+      return window.__e4ticks > 20
+    })
+    const later = await page.evaluate(() => __mc.dragonFight.dragon.health)
+    assert(later <= stays + 0.01, 'no healing once the crystals are gone')
+
+    // The perch: phase 2 opens the melee window at the island center.
+    await page.evaluate(() => {
+      __mc.dragonFight.dragon.cooldowns.perch = 0.01
+    })
+    await page.waitForFunction(() => __mc.dragonFight.dragon.state === 'perched', {
+      timeout: 90_000,
+    })
+    const perch = await page.evaluate(() => {
+      const p = __mc.dragonFight.dragon.group.position
+      return { x: p.x, y: p.y, z: p.z }
+    })
+    assert(Math.hypot(perch.x - 0.5, perch.z - 0.5) < 2, 'the dragon perches at the island center')
+
+    // The kill — victory latches, stamps, grants, reveals.
+    await page.evaluate(() => {
+      __mc.mobs.hit(__mc.dragonFight.dragon, 9999, { x: 1, y: 0, z: 0 })
+    })
+    await page.waitForFunction(() => __mc.endProgress.dragonDefeated, { timeout: 30_000 })
+    const victory = await page.evaluate(() => {
+      const end = __mc.dims.end
+      const cy = end.surfaceY(0.5, 0.5)
+      // E2 left its own test ring in this world, so count the exit portal's
+      // nine interior cells (-1..1 around the center) rather than the map size.
+      let exitField = 0
+      for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
+          if (end.endPortals.has(`${x},${cy},${z}`)) exitField++
+        }
+      }
+      return {
+        exitField,
+        egg: end.blockAt(__mc.config.END.dragon.egg.dx, cy, __mc.config.END.dragon.egg.dz),
+        elytra: __mc.inventory.countOf('elytra'),
+        reveal: __mc.endReveal.isOpen,
+        state: __mc.dragonFight.state,
+        event: __mc.mobs.event,
+        barHidden: document.getElementById('boss-bar').classList.contains('hidden'),
+        celebrated: __mc.endProgress.celebrated,
+      }
+    })
+    assert(victory.exitField === 9, 'exit portal stamped + self-activated at the center')
+    assert(victory.egg === 32, 'dragon egg stamped beside the ring')
+    assert(victory.elytra === 1, 'elytra granted through the runner')
+    assert(victory.reveal && victory.celebrated, 'END_MESSAGE reveal opened + celebrated latched')
+    assert(victory.state === 'idle' && !victory.event, 'runner reset clean')
+    assert(victory.barHidden, 'boss bar hides on victory')
+
+    // Dismiss the reveal; the fight must never re-arm.
+    await page.click('#end-continue-btn')
+    await page.waitForFunction(() => !__mc.endReveal.isOpen)
+    await page.evaluate(() => __mc.player.lock())
+    await page.waitForFunction(() => {
+      window.__e4idle = (window.__e4idle ?? 0) + 1
+      return window.__e4idle > 20
+    })
+    const rearm = await page.evaluate(() => ({
+      state: __mc.dragonFight.state,
+      count: __mc.mobs.count,
+    }))
+    assert(rearm.state === 'idle' && rearm.count === 0, 'defeated dragon never re-arms')
+
+    // Fly home through the exit portal (still shrunk to 0.4s charge).
+    const cy = await page.evaluate(() => __mc.dims.end.surfaceY(0.5, 0.5))
+    await page.evaluate((y) => __mc.player.teleport(0.5, y, 0.5), cy)
+    await page.waitForFunction(() => __mc.dims.name === 'overworld', { timeout: 60_000 })
+    assert(true, 'the exit portal carries the champion home')
+    await page.evaluate(() => __mc.player.lock())
   }
 
   console.log(consoleErrors.length ? `console errors:\n${consoleErrors.join('\n')}` : 'no console errors')

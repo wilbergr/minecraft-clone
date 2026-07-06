@@ -65,6 +65,7 @@ const TILE_NAMES = [
   'end_stone',
   'end_frame_top',
   'end_frame_side',
+  'dragon_egg',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -412,6 +413,12 @@ const PAINTERS = {
       }
     }
     blobs(px, rand, [76, 94, 80], 3)
+  },
+  // Dragon egg: near-black shell with faint violet scale glints.
+  dragon_egg(px, rand) {
+    speckle(px, rand, [22, 14, 30], 6)
+    blobs(px, rand, [58, 34, 84], 4) // violet glints
+    blobs(px, rand, [10, 6, 16], 3) // deep-black patches
   },
   // Polished pale quartz: a soft warm white with faint chiseled seams.
   quartz_block(px, rand) {
