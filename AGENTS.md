@@ -1085,6 +1085,52 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   `portalTravel`/`netherAmbience`. Nether floor near origin on seed 1337:
   the arrival pocket is (0, 57, 0).
 
+## Nether mobs & survival polish (N5 + N4)
+
+- **Zombified piglin** (`src/combat/ZombifiedPiglin.js`): the Zombie class is
+  now parameterized — `new Zombie(world, x, z, cfg, colors)` — and the chase
+  branch gates on `wantsToChase()` (base: always true). The piglin overrides
+  it with an `angered` flag set in an overridden `hurt` (any hit provokes,
+  including the killing blow and the manager's lava tick — harmless). Anger
+  SPREAD lives in MobManager (`#spreadAnger`, wired through `mob.onAngered`
+  in `spawnAt` — the onHiss pattern): one flat pass angering neutral piglins
+  within `cfg.angerRadius`, no cascade (a directly-set flag doesn't re-fire
+  the hook). Drops `gold_ore` via the normal cfg.drop plumbing. Ambient
+  groans play `mob.voice ?? 'zombie'` — the piglin's is the new `piglin`
+  SoundEngine voice.
+- **Magma cube** (`src/combat/MagmaCube.js`): single-box Mob that moves ONLY
+  in hops — grounded, a timer launches it (`body.velocity.y =
+  cfg.hopVelocity` set BEFORE `locomote`, which never writes y except the
+  hitWall hop) toward the player inside aggroRange, randomly otherwise;
+  `locomote(…, hop=false)` so hitWall can't stack a second jump. `lavaProof:
+  true` skips the manager's lava burn tick. Drops nothing. Squash-stretch
+  scales group.scale.y (feet-anchored origin, so it reads as weight).
+- Both live in `HOSTILES` and `NETHER.spawn.weights` (0.7/0.3, cap 6) —
+  never in `COMBAT.mobs.hostileWeights`. Config blocks:
+  `COMBAT.mobs.zombifiedPiglin` / `.magmaCube`. Mob cfg objects are held by
+  REFERENCE, so tests can mutate live (e.g. `config.COMBAT.mobs.
+  zombifiedPiglin.wanderSpeed = 0` freezes neutral piglins for drift asserts).
+- **Soul sand slowdown** (N4): a generic `slow` field on the blocks.js row
+  (soul sand 0.4), read OWNER-SIDE only — `PlayerControls.update` and
+  `Mob.locomote` each multiply their move speed by the feet-cell block's
+  factor (one `blockAt` at `floor(y - 0.05)`); PhysicsBody never reads it,
+  and airborne feet sit in air so jumps escape the drag. New sticky blocks =
+  one field, zero code.
+- **Quartz block** (id 27): 4 quartz → 1, decorative. The last block id in
+  use is 27 — the next feature takes 28.
+- Already shipped in N1–N3 (don't re-add): netherrack `FUEL_SECONDS` row,
+  the Nether bed-refusal toast (main.js `blockUseHandlers[BLOCK_BED]`
+  checks `dims.current`), and quest-UI dimension gating (treasureHud
+  `isActive` + the `dims.current === world` update gate, which covers the
+  wisps/stele through guidance.update).
+- Headless suite: `node tools/test-nether-mobs.mjs` (build + `npm install
+  --no-save puppeteer-core` first) — covers all of the above plus a portal
+  round-trip and overworld night-spawn regression, and writes the
+  git-ignored `tools/nether-mobs-pair.png` screenshot. Ground-drop entities
+  carry `itemId`, not `id` (test-assert sharp edge). `mobs.event = true` is
+  the clean way to suppress ambient spawns during scripted mob tests
+  (spawnAt bypasses it).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE
