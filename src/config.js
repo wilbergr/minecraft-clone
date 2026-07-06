@@ -1065,6 +1065,60 @@ export const NETHER = {
   },
 }
 
+// The End (third dimension): an EndWorld instance beside the overworld and
+// Nether (src/world/EndWorld.js), reached through the End portal and home to
+// the Ender Dragon. A floating end-stone island over pure void — falling off
+// is lethal via the existing PHYSICS.voidY, no new code. Everything
+// End-shaped lives here; retune the island with `node tools/probe-end.mjs`.
+export const END = {
+  // Static void atmosphere: near-black violet, fog wider than the Nether's
+  // 12/40 — the End sells emptiness, not claustrophobia. The far plane keeps
+  // the island rim and pillars visible from the center.
+  skyColor: 0x0b0612,
+  fog: { near: 20, far: 60, color: 0x0b0612 },
+  lighting: {
+    // A low cool-white sun gives faces directional contrast against the
+    // black sky (the Nether zeroes its sun; the End needs the modelling).
+    sunIntensity: 0.35,
+    sunColor: 0xcfd4ff,
+    ambientIntensity: 0.45,
+    ambientColor: 0xb8a8d8, // dim lavender
+  },
+  // The island lens (probe-tuned on seed 1337 — see tools/probe-end.mjs):
+  // ~88 blocks across, surface y 60–64 (62 matches the overworld baseHeight —
+  // familiar eye level), underside tapering to y 32 as a teardrop. All pure
+  // functions of (WORLD.seed, x, z).
+  island: {
+    radius: 44, // base lens radius before the ragged-coastline noise
+    edgeSalt: 0xe0d1,
+    edgeAmplitude: 8, // coastline raggedness, blocks around `radius`
+    surfaceY: 62, // plateau height
+    topSalt: 0xe0d2,
+    topAmplitude: 3, // surface relief, softening toward the rim
+    maxDepth: 30, // underside taper depth at the island center
+    depthSalt: 0xe0d3,
+    minBottom: 8, // the underside never reaches below this y
+  },
+  // Six obsidian pillars on a fixed ring — the crystal pedestals. Tops are
+  // flat obsidian; positions/heights are pure functions of the seed, so the
+  // dragon fight computes crystal positions with no world queries.
+  pillars: {
+    count: 6,
+    ringRadius: 24,
+    radius: 2.2, // cells within this of a pillar axis are obsidian
+    heightSalt: 0xe0d4,
+    minHeight: 12, // pillar height above island.surfaceY
+    maxHeight: 22,
+  },
+  // Portal arrival: feet land by the island rim at this probed column
+  // (surface y 62, clear of pillars); a 5×5 obsidian platform is stamped
+  // there as edits on first arrival.
+  arrival: { x: 0, z: 36 },
+  // Ambience: a sparse hollow-wind swell while the End is current (the
+  // Nether-ambience timer pattern in main.js).
+  ambience: { minSeconds: 18, maxSeconds: 30 },
+}
+
 // Hunger (Phase 12): a 10-drumstick bar (2 points each, same unit scheme as
 // health) drained by time, sprinting, and mining. Health regen is gated on
 // being well-fed (Health.regenGate, wired in main.js); at zero hunger the

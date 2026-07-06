@@ -419,6 +419,19 @@ export const BLOCKS = {
     material: 'sand',
     tool: { kind: 'shovel', minTier: 0 },
   },
+  29: {
+    id: 29,
+    name: 'End Stone',
+    // The End island's body rock (the End): pale speckled stone, drops
+    // itself — the take-home souvenir block.
+    solid: true,
+    color: { top: 0xe6e2a8, side: 0xded9a0, bottom: 0xd2cd96 },
+    tex: { top: 'end_stone', side: 'end_stone', bottom: 'end_stone' },
+    drop: 'end_stone',
+    hardness: 3,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -436,6 +449,7 @@ export const BLOCK_QUARTZ_ORE = 24
 export const BLOCK_BEDROCK = 25
 export const BLOCK_PORTAL = 26
 export const BLOCK_GRAVEL = 28
+export const BLOCK_END_STONE = 29
 
 export function isSolid(id) {
   const block = BLOCKS[id]

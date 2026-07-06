@@ -3,6 +3,7 @@ import * as config from './config.js'
 import { BREATH, CHALLENGE, GRAPHICS, HUNGER, LAVA, PLAYER, WATER } from './config.js'
 import { World } from './world/World.js'
 import { NetherWorld } from './world/NetherWorld.js'
+import { EndWorld } from './world/EndWorld.js'
 import { Dimensions } from './world/Dimensions.js'
 import { Portals } from './world/Portals.js'
 import { PortalPanels } from './fx/PortalPanels.js'
@@ -77,10 +78,11 @@ const camera = new THREE.PerspectiveCamera(
 )
 
 const world = new World(scene)
-// The Nether (second dimension): a sibling World in the same scene, its root
-// invisible until the dimension controller (constructed below, once every
-// world-holding system exists) swaps it in.
+// The Nether (second dimension) and the End (third): sibling Worlds in the
+// same scene, their roots invisible until the dimension controller
+// (constructed below, once every world-holding system exists) swaps them in.
 const nether = new NetherWorld(scene)
+const end = new EndWorld(scene)
 const player = new PlayerControls(camera, renderer.domElement, world)
 const inventory = new Inventory()
 
@@ -176,6 +178,7 @@ bindSlotTooltips()
 const save = new SaveManager({ world, player, inventory, health: combat.health })
 save.load()
 save.attachNether(nether) // the Nether's edit overlay, before its first chunk
+save.attachEnd(end) // and the End's, same rule
 save.attachCursor(cursor)
 save.attachTreasure(hunt)
 save.attachDayNight(daynight)
@@ -281,14 +284,15 @@ const screen = new InventoryScreen(inventory, player, combat.armor, cursor, drop
 const furnaceScreen = new FurnaceScreen(furnaces, inventory, player, cursor, drops, camera)
 const chestScreen = new ChestScreen(chests, inventory, player, world, cursor, drops, camera, sounds)
 
-// The dimension controller (the Nether): owns { overworld, nether, current }
-// and the travel swap — every world-holding system above is on its list.
-// Constructed here because it needs them all; the saved dimension is applied
-// right away (before the first frame), so a save made in the Nether loads
-// straight back into it — position was already restored by save.load().
+// The dimension controller: owns the world registry { overworld, nether,
+// end } and the travel swap — every world-holding system above is on its
+// list. Constructed here because it needs them all; the saved dimension is
+// applied right away (before the first frame), so a save made in another
+// dimension loads straight back into it — position was already restored by
+// save.load(). The lookup validates the name: a garbage/future value lands
+// in the overworld (travel no-ops on unknown names).
 const dims = new Dimensions({
-  overworld: world,
-  nether,
+  worlds: { overworld: world, nether, end },
   scene,
   player,
   interaction,
@@ -302,7 +306,9 @@ const dims = new Dimensions({
   daynight,
 })
 save.attachDimensions(dims)
-if (save.dimensionData === 'nether') dims.travel('nether')
+if (save.dimensionData && save.dimensionData !== 'overworld') {
+  dims.travel(save.dimensionData)
+}
 
 // The portal (N3): frame ignition, the stand-in-the-field charge, 8:1
 // linked travel, and the translucent field panels. The vignette rides its
@@ -411,8 +417,10 @@ const falling = new FallingBlocks(drops, sounds)
 // they belong to, so the handlers never cross).
 world.onEdit(popAttachmentIn(world))
 nether.onEdit(popAttachmentIn(nether))
+end.onEdit(popAttachmentIn(end))
 world.onEdit((x, y, z) => falling.onEdit(world, x, y, z))
 nether.onEdit((x, y, z) => falling.onEdit(nether, x, y, z))
+end.onEdit((x, y, z) => falling.onEdit(end, x, y, z))
 combat.mobs.onBlocksExploded = (cells) => {
   for (const c of cells) {
     blockBreakHandlers[c.id]?.(c.x, c.y, c.z)
@@ -698,6 +706,18 @@ const updateNetherAmbience = (delta) => {
   sounds.play('netherAmbience')
 }
 
+// End ambience (the End): the same timer pattern — a sparse hollow wind
+// swell over the void while the End is current.
+let endAmbienceTimer = 0
+const updateEndAmbience = (delta) => {
+  if (!player.isLocked || dims.current !== end) return
+  endAmbienceTimer -= delta
+  if (endAmbienceTimer > 0) return
+  const { minSeconds, maxSeconds } = config.END.ambience
+  endAmbienceTimer = minSeconds + Math.random() * (maxSeconds - minSeconds)
+  sounds.play('endAmbience')
+}
+
 renderer.setAnimationLoop(() => {
   // Clamp delta so a backgrounded tab doesn't produce a huge jump on resume.
   const delta = Math.min(clock.getDelta(), 0.1)
@@ -749,6 +769,7 @@ renderer.setAnimationLoop(() => {
   updateWaterBubbles(delta)
   updateLavaAmbience(delta)
   updateNetherAmbience(delta)
+  updateEndAmbience(delta)
   updateFootsteps()
   updateTreasureHud()
   save.update(delta)

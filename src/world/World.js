@@ -86,6 +86,16 @@ export class World {
     // Sky flag (dimension seam): gates the dawn burn and DayNight visuals —
     // false under the Nether's solid roof.
     this.hasSky = true
+    // Static atmosphere descriptor (dimension seam): null means "DayNight
+    // owns the sky/fog" (the overworld); other worlds carry
+    // { skyColor, fog: { near, far, color } } and the dimension controller
+    // paints it on travel — each world owns its own look.
+    this.atmosphere = null
+    // Container key prefix (dimension seam): furnaces/chests are keyed by
+    // position, and the prefix keeps a Nether ('N|') or End ('E|') container
+    // at (x,y,z) distinct from an overworld one there. Bare for the
+    // overworld so old saves' keys stay valid.
+    this.containerPrefix = ''
     this.genQueue = [] // [cx, cz] pairs pending generation, nearest first
     // Edit listeners (King's Trial PR 2 promoted the old single-assignment
     // onEdit callback to a list): SaveManager marks the save dirty, the

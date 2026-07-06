@@ -62,6 +62,7 @@ const TILE_NAMES = [
   'bedrock',
   'quartz_block',
   'gravel',
+  'end_stone',
 ]
 
 // --- Per-tile painters -------------------------------------------------------
@@ -374,6 +375,12 @@ const PAINTERS = {
     speckle(px, rand, [74, 74, 74], 24)
     blobs(px, rand, [38, 38, 38], 5)
     blobs(px, rand, [104, 104, 104], 3)
+  },
+  // End stone: pale sickly yellow with darker curdled speckling (the End).
+  end_stone(px, rand) {
+    speckle(px, rand, [222, 217, 160], 10)
+    blobs(px, rand, [196, 190, 130], 5)
+    blobs(px, rand, [236, 232, 184], 3)
   },
   // Polished pale quartz: a soft warm white with faint chiseled seams.
   quartz_block(px, rand) {

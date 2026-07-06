@@ -86,6 +86,8 @@ export const ITEMS = {
   quartz: { id: 'quartz', name: 'Quartz', maxStack: INVENTORY.maxStack, glyph: '❖', tint: '#e8e4da' },
   // The quartz sink (N4): a bright decorative block for the dark dimension.
   quartz_block: blockItem('quartz_block', 27, 'Quartz Block'),
+  // The End island's body rock — mined and carried home like any block.
+  end_stone: blockItem('end_stone', 29, 'End Stone'),
   // Flint & steel (N3): tool kind 'igniter' matches no block, so it can't
   // mine (the bow precedent) — its whole job is lighting portal frames
   // through interaction.useItemHook. Durability wears one per ignition.
