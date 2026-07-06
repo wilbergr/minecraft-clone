@@ -841,6 +841,19 @@ export const FEEDBACK = {
   },
 }
 
+// Falling gravity blocks (sand & gravel — `gravity: true` in blocks.js).
+// An edit that leaves such a block unsupported converts it into a falling
+// entity that tweens down and setBlocks where it lands — see
+// src/fx/FallingBlocks.js. Purely edit-driven: generated terrain never falls.
+export const FALLING = {
+  gravity: 22, // blocks/s^2 — self-contained tween, not PHYSICS.gravity
+  // Cap under 1 block per clamped 0.1s frame: faster and the cube's center
+  // could skip a cell in one step and land beneath a 1-thick floor.
+  maxSpeed: 9,
+  size: 0.98, // slightly sub-cell so the cube never z-fights terrain faces
+  maxEntities: 64, // oldest force-settles past this (mass collapses stay bounded)
+}
+
 // Day/night cycle (Phase 10). `time` is the fraction of a full cycle:
 // 0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight. The clock only
 // advances while the player is in control (menus pause time like they pause
