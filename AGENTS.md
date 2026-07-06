@@ -1162,6 +1162,46 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   emissions with an exclusion set of already-live negative-gravity slots,
   never by "any negative slot".
 
+## The Drowned (aquatic hostile, deep-water sequel)
+
+- `src/combat/Drowned.js` extends Zombie through the N5 cfg/colors seam;
+  config in `COMBAT.mobs.drowned`. Its update swaps AI by medium: submerged
+  (`body.inWater`) it swim-chases in 3D — horizontal via `locomote`, vertical
+  by setting `body.velocity.y` BEFORE the physics step (the player's
+  held-Space idiom; water gravity/drag run after the owner, so the knob is
+  effectively capped by `WATER.physics.sinkSpeed` downward), melee on 3D
+  distance (attacks from below). Out of water `super.update()` runs the whole
+  Zombie ground AI at the slower `chaseSpeed`. Drops `rotten_flesh`.
+- Aquatic spawning: `#spawnNear`'s fluid-covered-column skip now branches to
+  `#trySpawnAquatic`, which rolls `profile.aquaticWeights` — a SEPARATE table
+  from the land weights (`COMBAT.mobs.aquaticWeights = { drowned: 1 }`,
+  carried by the overworld `spawnProfile` only; NetherWorld's profile omits
+  the key, so nothing ever rises in lava seas). The mob is placed at a random
+  fully-submerged cell (feet + head both water) of a column at least
+  `aquaticSpawn.minDepth` deep. Land hostiles still never spawn in water and
+  the drowned never rolls on dry columns, by construction.
+- The light gate reuses `world.lightAt`, but the SKY term is attenuated
+  `aquaticSpawn.lightPerDepth` per block of water above the cell first
+  (underwater cells sit above their column's topSolidY, so skyFactor is 1
+  and plain lightAt would read full daylight): at night any deep column
+  spawns, at noon only cells under ~9.4+ blocks of water (the deepest
+  basins). Torch/glowstone falloff passes through unattenuated — placed
+  lights still suppress.
+- The dawn burn skips submerged mobs (`!m.body?.inWater` in the findLastIndex
+  predicate) — a drowned ignites only once it's out of the water; this also
+  correctly exempts any land mob that wandered into the sea.
+- `mobs.spawnAt` now stamps `mob.kind` (class names minify away — tests key
+  off it).
+- Headless suite: `node tools/test-drowned.mjs` (build + `npm install
+  --no-save puppeteer-core` first; screenshot artifact
+  `tools/drowned-underwater.png`). Deep-ocean test spot on seed 1337:
+  (186, 8) — every spawn-ring column 10–18 blocks out is water-covered and
+  ≥ 3 deep, about half ≥ 12 deep, so all-drowned ambient asserts hold there.
+  The suite verifies the served bundle hash against `dist/index.html` before
+  running — parallel worktrees run vite previews too, and a foreign server
+  squatting your strict port otherwise makes you test STALE code (the
+  fetch-loop "wait for the port" pattern can't tell whose server answered).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

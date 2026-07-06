@@ -8,6 +8,7 @@ import { Boss } from './Boss.js'
 import { PassiveMob } from './PassiveMob.js'
 import { ZombifiedPiglin } from './ZombifiedPiglin.js'
 import { MagmaCube } from './MagmaCube.js'
+import { Drowned } from './Drowned.js'
 
 // Owns the live mob population: periodically tops it up by spawning hostiles
 // in dark cells on a ring around the player — the mix is weighted across
@@ -46,6 +47,9 @@ const HOSTILES = {
   // overworld table (the spawn profile is per-world).
   zombified_piglin: (world, x, z) => new ZombifiedPiglin(world, x, z),
   magma_cube: (world, x, z) => new MagmaCube(world, x, z),
+  // The Drowned (deep-water sequel) — weighted in COMBAT.mobs.aquaticWeights
+  // (the fluid-column spawn branch), never in the land table.
+  drowned: (world, x, z) => new Drowned(world, x, z),
 }
 
 export class MobManager {
@@ -122,9 +126,13 @@ export class MobManager {
     if (this.daynight && !night && !this.event && this.world.hasSky) {
       this.burnTimer -= delta
       if (this.burnTimer <= 0) {
+        // Submerged mobs never ignite (deep-water sequel): a drowned under
+        // the waterline is not sky-exposed, whatever topSolidY (the seabed)
+        // says — it burns only once it has climbed out after you.
         const i = this.mobs.findLastIndex(
           (m) =>
             !m.passive &&
+            !m.body?.inWater &&
             this.world.topSolidY(
               Math.floor(m.group.position.x),
               Math.floor(m.group.position.z),
@@ -324,12 +332,16 @@ export class MobManager {
       const x = Math.floor(playerPos.x + Math.sin(angle) * dist)
       const z = Math.floor(playerPos.z + Math.cos(angle) * dist)
       // Fluid-covered column (deep water, per-world since the Nether): the
-      // SURFACE here is the seabed — a horde rising on the sea floor
+      // SURFACE here is the seabed — a land horde rising on the sea floor
       // (zombies pathing underwater, skeletons shooting through water)
-      // reads as broken. Skip the whole column; ocean nights are quiet on
-      // purpose, and ocean caves are sealed under the seabed anyway
-      // (caves.seabedKeep).
-      if (this.world.terrainHeight(x, z) <= this.world.fluid.level) continue
+      // reads as broken, so the land table never rolls here. Instead the
+      // column goes to the AQUATIC table (deep-water sequel): the drowned
+      // spawns submerged mid-column. Worlds without an aquatic table (the
+      // Nether — lava seas) still skip outright.
+      if (this.world.terrainHeight(x, z) <= this.world.fluid.level) {
+        if (this.#trySpawnAquatic(x, z, playerPos, profile, skyBrightness)) return
+        continue
+      }
       const cells = []
       const topY = this.world.topSolidY(x, z)
       let below = this.world.blockAt(x, WORLD.terrain.caves.minY - 1, z)
@@ -350,18 +362,53 @@ export class MobManager {
         (x + 0.5 - playerPos.x) ** 2 + (y - playerPos.y) ** 2 + (z + 0.5 - playerPos.z) ** 2
       if (d2 < spawnRadiusMin ** 2) continue
       if (this.world.lightAt(x, y, z, skyBrightness) > profile.maxLight) continue
-      let roll = Math.random() * totalWeight
-      let kind = 'zombie'
-      for (const [name, weight] of Object.entries(weights)) {
-        roll -= weight
-        if (roll <= 0) {
-          kind = name
-          break
-        }
-      }
-      this.spawnAt(x + 0.5, z + 0.5, kind, y)
+      this.spawnAt(x + 0.5, z + 0.5, this.#rollKind(weights, totalWeight), y)
       return
     }
+  }
+
+  // Weighted pick from a spawn table (shared by the land and aquatic rolls).
+  #rollKind(weights, totalWeight) {
+    let roll = Math.random() * totalWeight
+    for (const [name, weight] of Object.entries(weights)) {
+      roll -= weight
+      if (roll <= 0) return name
+    }
+    return 'zombie'
+  }
+
+  // Aquatic spawn attempt (deep-water sequel): one fluid-covered candidate
+  // column from the #spawnNear ring. Rolls profile.aquaticWeights (absent or
+  // zero-total = this world spawns nothing in fluid — the Nether) and places
+  // the mob at a random FULLY SUBMERGED cell of the column: feet and head
+  // both in water, above the seabed, under the waterline. Deep columns only
+  // (aquaticSpawn.minDepth) — nothing rises in ankle-deep shore water. The
+  // light gate is the land one (world.lightAt), but the sky term attenuates
+  // per block of water above the cell (aquaticSpawn.lightPerDepth): at night
+  // any deep column spawns, by day only the darkest basin floors do. Torch /
+  // glowstone falloff passes through unattenuated, so placed lights still
+  // suppress like they do on land.
+  #trySpawnAquatic(x, z, playerPos, profile, skyBrightness) {
+    const weights = profile.aquaticWeights
+    if (!weights) return false
+    const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0)
+    if (totalWeight <= 0) return false
+    const { minDepth, lightPerDepth } = COMBAT.mobs.aquaticSpawn
+    const fluid = this.world.fluid
+    const floor = this.world.topSolidY(x, z)
+    if (fluid.level - floor < minDepth) return false
+    // Random feet cell in [floor+1, fluid.level-1]; head cell y+1 is at most
+    // the waterline cell, so the whole body starts in water.
+    const y = floor + 1 + Math.floor(Math.random() * (fluid.level - 1 - floor))
+    if (this.world.blockAt(x, y, z) !== fluid.id) return false
+    if (this.world.blockAt(x, y + 1, z) !== fluid.id) return false
+    const d2 =
+      (x + 0.5 - playerPos.x) ** 2 + (y - playerPos.y) ** 2 + (z + 0.5 - playerPos.z) ** 2
+    if (d2 < COMBAT.mobs.spawnRadiusMin ** 2) return false
+    const sky = skyBrightness * Math.max(0, 1 - (fluid.level - y) * lightPerDepth)
+    if (this.world.lightAt(x, y, z, sky) > profile.maxLight) return false
+    this.spawnAt(x + 0.5, z + 0.5, this.#rollKind(weights, totalWeight), y)
+    return true
   }
 
   // Direct hostile spawn (also the browser-verification hook:
@@ -371,6 +418,7 @@ export class MobManager {
   // pre-existing caller byte-identical.
   spawnAt(x, z, kind = 'zombie', y = null) {
     const mob = HOSTILES[kind](this.world, x, z, this.projectiles)
+    mob.kind = kind // class names minify away — tests key off this
     if (y !== null) mob.group.position.y = y
     // Fuse-start hiss (creepers): wired here so mob AI stays sound-agnostic.
     if ('onHiss' in mob) mob.onHiss = () => this.fx.sounds?.play('fuse')

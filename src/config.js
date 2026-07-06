@@ -620,6 +620,20 @@ export const COMBAT = {
     spawnLight: { maxLight: 0.25, attempts: 6 },
     // Spawn mix (Phase 13): relative weights per hostile kind.
     hostileWeights: { zombie: 0.5, skeleton: 0.3, creeper: 0.2 },
+    // Aquatic spawn branch (deep-water sequel): fluid-covered columns — which
+    // the land picker skips outright — roll THIS table instead and place the
+    // mob submerged in the water column. Overworld-only by construction:
+    // World.spawnProfile carries it, the Nether profile doesn't (nothing may
+    // rise in the lava seas).
+    aquaticWeights: { drowned: 1 },
+    aquaticSpawn: {
+      minDepth: 3, // column depth below the waterline — no ankle-water spawns
+      // Sky brightness attenuates by this per block of water above the spawn
+      // cell before the lightAt gate: at night everything deep enough spawns,
+      // by DAY only basins 10+ blocks down are dark enough. Torch/glow terms
+      // are unattenuated — placed glowstone still carves a safe bubble.
+      lightPerDepth: 0.08,
+    },
     zombie: {
       health: 10,
       chaseSpeed: 2.8, // blocks/sec while chasing (player walks at 5)
@@ -666,6 +680,23 @@ export const COMBAT = {
         particles: 80,
         color: 0x9a9a9a,
       },
+    },
+    // Drowned (deep-water sequel): the aquatic undead. Spawns submerged in
+    // ocean columns (aquaticWeights/aquaticSpawn above) and swims at the
+    // player in 3D; out of the water it's a slow zombie shamble that burns
+    // at dawn like any hostile (the burn skips it only while submerged).
+    drowned: {
+      health: 10,
+      swimSpeed: 2.6, // horizontal blocks/sec submerged (player swims ~2.75)
+      verticalSwimSpeed: 2.4, // vertical closing cap while chasing
+      chaseSpeed: 1.6, // land shamble — slower than a zombie on purpose
+      wanderSpeed: 0.8,
+      wanderSeconds: 3,
+      aggroRange: 14, // open water hides nothing — notices a touch farther
+      attackRange: 1.8, // melee reach, 3D underwater (attacks from below too)
+      attackDamage: 3,
+      attackCooldownSeconds: 1.2,
+      drop: 'rotten_flesh', // undead — shares the zombie's table
     },
     // Zombified piglin (N5, Nether): a Zombie variant that spawns NEUTRAL —
     // it wanders forever and only chases once `angered` (set by taking a
