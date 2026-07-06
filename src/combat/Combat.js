@@ -69,6 +69,11 @@ export class Combat {
     }
 
     this.health.onDeath = () => this.#die()
+    // Death drops (mechanics report §6.5): an optional hook main.js attaches
+    // (the mobs.daynight pattern). It runs at the moment of death — before
+    // the death screen — and owns the whole spill decision (user setting,
+    // trial-arena exemption); bare runs stay keep-inventory.
+    this.deathSpillHook = null
   }
 
   #award(p, itemId, [min, max]) {
@@ -196,12 +201,14 @@ export class Combat {
     this.inventory.damageSelected() // the bow wears like any tool
   }
 
-  // Keep-inventory death: items and hotbar survive the respawn (dropping
-  // everything is authentic but brutal without ground items to recover).
+  // Death: the optional spill hook decides between Minecraft-style drops
+  // (inventory + armor + cursor spilled at the body as ground items) and
+  // keep-inventory — the persisted user setting, read at this moment.
   // NOTE: the fatal hit arrives from inside mobs.update(), so this must not
   // mutate the mob list — the population is cleared on respawn instead
   // (combat is frozen while dead, so the killers just stand there).
   #die() {
+    this.deathSpillHook?.()
     this.player.unlock() // the death screen (ui/hud.js) takes the pointer
   }
 

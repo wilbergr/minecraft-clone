@@ -30,6 +30,9 @@ import { bindGuidance } from './quest/guidance.js'
 import { bindBossHud } from './ui/bossHud.js'
 import { bindHelp } from './ui/help.js'
 import { bindMuteButton } from './ui/muteButton.js'
+import { bindDeathDropsButton } from './ui/settingsButton.js'
+import { Settings } from './settings.js'
+import { spillPlayerItems } from './combat/DeathDrops.js'
 import { SoundEngine } from './audio/SoundEngine.js'
 import { createFootsteps } from './audio/Footsteps.js'
 import { Particles } from './fx/Particles.js'
@@ -428,13 +431,41 @@ bindBackdropDrop(screen.root, cursor, drops, camera)
 bindBackdropDrop(furnaceScreen.root, cursor, drops, camera)
 bindBackdropDrop(chestScreen.root, cursor, drops, camera)
 bindHotbar(inventory, player)
-bindHud(combat.health, () => {
-  dims.travel('overworld') // death in the Nether respawns under the sky
-  combat.respawn()
-  hunger.reset() // fresh spawn, fresh appetite
-  breath.reset() // and fresh lungs — a drowning death can't respawn gasping
-  burning.reset() // and no lingering fire — a lava death can't respawn burning
-})
+// Death drops (mechanics report §6.5): the persisted user setting, read at
+// death time. The hook owns every exemption: OFF keeps the inventory (the
+// original behavior); trial siege/boss deaths always keep it (mobs.event —
+// the Trial is retry-friendly by captain decision, retry: 'free', and a
+// boss-arena death spilling the kit into quake craters cuts against that);
+// Nether deaths keep it (respawn travels home and dims.travel clears all
+// drops — a Nether spill would silently vanish); falling out of the world
+// keeps nothing recoverable, so the void consumes silently either way —
+// spilling there would strand items in the mined-open column.
+const settings = new Settings()
+let deathSpilled = false
+combat.deathSpillHook = () => {
+  deathSpilled = false
+  if (!settings.get('deathDrops')) return
+  if (combat.mobs.event) return // trial arena: free retries keep the kit
+  if (dims.current !== world) return // Nether: travel home would clear the drops
+  const feet = player.body.position
+  if (feet.y < 0) return // out of the world: the void consumes items
+  deathSpilled =
+    spillPlayerItems({ position: feet, inventory, armor: combat.armor, cursor, drops }) > 0
+}
+bindHud(
+  combat.health,
+  () => {
+    dims.travel('overworld') // death in the Nether respawns under the sky
+    combat.respawn()
+    hunger.reset() // fresh spawn, fresh appetite
+    breath.reset() // and fresh lungs — a drowning death can't respawn gasping
+    burning.reset() // and no lingering fire — a lava death can't respawn burning
+  },
+  () =>
+    deathSpilled
+      ? 'Your items dropped where you fell — go get them back.'
+      : 'Your items are safe.',
+)
 bindHungerHud(hunger)
 bindBreathHud(breath)
 bindArmorHud(combat.armor)
@@ -496,6 +527,7 @@ document.addEventListener('pointerdown', unlockAudio)
 document.addEventListener('keydown', unlockAudio)
 player.addEventListener('lock', unlockAudio)
 bindMuteButton(sounds)
+bindDeathDropsButton(settings)
 let lastHealth = combat.health.value
 combat.health.onChange((h) => {
   if (h.value < lastHealth) sounds.play('hurt')
@@ -762,6 +794,7 @@ window.__mc = {
   projectiles: combat.projectiles,
   sleep,
   cursor,
+  settings,
   // The live config module (headless-test seam): most tunables are read at
   // call time, so tests can shrink timings/radii — e.g.
   // config.COMBAT.mobs.spawnRadiusMax — without rebuilding.

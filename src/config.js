@@ -827,6 +827,11 @@ export const FEEDBACK = {
     collectRadius: 0.6, // absorbed into the inventory at this distance
     inventoryFullRetrySeconds: 1.5, // back-off when the drop didn't fit
     despawnSeconds: 120,
+    // Death spills (SETTINGS.defaults.deathDrops): the kit dropped on death
+    // gets a longer per-entity despawn window (the pickupDelay precedent) so
+    // the walk back to recover it isn't a race, plus exemption from the
+    // oldest-over-cap eviction (a busy site can't erase the kit).
+    deathSpill: { despawnSeconds: 300 },
   },
   consume: {
     // Bare-mode fallback (no hunger system attached): "eating" a consumable
@@ -1171,6 +1176,20 @@ export const LIGHTING = {
     decay: 2,
     maxTrackDistance: 40,
     faceTint: 0xff9a4a, // vertex-color floor for pool floors/walls
+  },
+}
+
+// User settings (the game's first): a tiny persisted store in its own
+// localStorage key (the mute-button precedent — preferences outlive saves
+// and world resets). Flat { key: value } over these defaults; new settings
+// add a default here plus a UI control (see src/ui/settingsButton.js).
+export const SETTINGS = {
+  storageKey: 'minecraft-clone-settings',
+  defaults: {
+    // Minecraft-style death drops: ON spills the whole kit (inventory +
+    // equipped armor + held cursor stack) as ground items where you died;
+    // OFF keeps the inventory through death (the game's original behavior).
+    deathDrops: true,
   },
 }
 

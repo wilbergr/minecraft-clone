@@ -1202,6 +1202,43 @@ This file is the project's committed home for project-intrinsic agent knowledge:
   squatting your strict port otherwise makes you test STALE code (the
   fetch-loop "wait for the port" pattern can't tell whose server answered).
 
+## Death drops & user settings
+
+- Minecraft-style death drops (mechanics report §6.5): `Combat.#die` calls
+  the optional `combat.deathSpillHook` (attached in main.js — the
+  mobs.daynight pattern, so bare runs stay keep-inventory). The hook owns the
+  WHOLE decision; when it spills, `spillPlayerItems`
+  (`src/combat/DeathDrops.js`) drops every inventory slot + each equipped
+  armor piece + the held cursor stack as ground items at the feet, then
+  empties them (one `setRange` emit; hotbar selection persists; durability
+  rides each drop). Spill entities carry `despawnSeconds:
+  FEEDBACK.drops.deathSpill.despawnSeconds` (300) and `noEvict: true` — the
+  over-cap eviction in `GroundItems.spawn` takes the oldest ORDINARY drop
+  first, so a busy site can't erase the kit. Per-entity `despawnSeconds` is
+  pinned only when the opt is passed; plain drops keep reading the LIVE
+  global (the read-at-call-time config seam — `tools/test-drops.mjs` shrinks
+  it on already-spawned entities and must keep passing).
+- Exemptions (all in the main.js hook, checked at death time): the setting
+  OFF; `mobs.event` true (siege/boss deaths keep the kit — the Trial is
+  retry-friendly by captain decision, `retry: 'free'`); a non-overworld
+  death (respawn travels home and `dims.travel` clears all drops, so a
+  Nether spill would silently vanish); feet below y 0 (the void consumes
+  items). The death-screen hint (`#death-hint`, `bindHud`'s third arg)
+  reports which way it went; to make that possible `Health.damage` now fires
+  `onDeath` BEFORE the fatal `onChange` emit, so death-screen renderers see
+  post-spill state.
+- The game's first persisted user setting: `Settings` (`src/settings.js`) —
+  its OWN localStorage key (`SETTINGS.storageKey` in config, the mute-button
+  precedent: preferences survive saves and world resets), flat values over
+  `SETTINGS.defaults` (`deathDrops: true`). UI is `#death-drops-btn` on the
+  start overlay (`src/ui/settingsButton.js`). A new setting = one default in
+  config + one control.
+- Headless: `__mc.settings` is exposed; drive a death with
+  `__mc.health.damage(999)` (works while pointer-locked — it bypasses the
+  Combat.update pause); spilled entities are recognizable by `e.noEvict`.
+  Suite: `node tools/test-death-drops.mjs` (build + `npm install --no-save
+  puppeteer-core` first).
+
 ## Sharp edges
 
 - three.js `PointerLockControls` dispatches its `lock`/`unlock` events BEFORE

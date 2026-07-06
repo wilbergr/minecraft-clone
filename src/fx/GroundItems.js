@@ -36,11 +36,18 @@ export class GroundItems {
   // the random pop velocity, `pickupDelay` overrides the global vacuum delay
   // (thrown items need a longer one or they boomerang straight back), and
   // `durability` preserves a dropped tool's remaining uses through re-pickup.
+  // Death spills add `despawnSeconds` (a longer per-entity window) and
+  // `noEvict` (skipped by the oldest-over-cap eviction below).
   spawn(x, y, z, itemId, count = 1, opts = {}) {
     const item = ITEMS[itemId]
     if (!item) return null
     const cfg = FEEDBACK.drops
-    if (this.items.length >= cfg.maxEntities) this.#remove(0)
+    if (this.items.length >= cfg.maxEntities) {
+      // Evict the oldest ordinary drop first; death spills (noEvict) only go
+      // when nothing else is left — the cap stays a hard draw-call bound.
+      const evict = this.items.findIndex((e) => !e.noEvict)
+      this.#remove(evict === -1 ? 0 : evict)
+    }
 
     const mesh = new THREE.Mesh(this.geometry, this.#materialFor(item))
     mesh.position.set(x, y, z)
@@ -55,6 +62,10 @@ export class GroundItems {
       age: 0,
       retryAt: 0, // backoff timestamp after a full-inventory pickup attempt
       pickupDelay: opts.pickupDelay ?? cfg.pickupDelaySeconds,
+      // undefined = follow the LIVE global (the read-at-call-time config
+      // seam tests rely on); only explicit overrides pin a per-entity value.
+      despawnSeconds: opts.despawnSeconds,
+      noEvict: opts.noEvict ?? false,
       landed: false,
       restY: 0,
       vx: opts.vx ?? Math.sin(angle) * cfg.pop.horizontal * pop,
@@ -96,7 +107,7 @@ export class GroundItems {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const e = this.items[i]
       e.age += delta
-      if (e.age > cfg.despawnSeconds) {
+      if (e.age > (e.despawnSeconds ?? cfg.despawnSeconds)) {
         this.#remove(i)
         continue
       }
