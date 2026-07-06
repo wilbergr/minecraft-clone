@@ -667,6 +667,39 @@ export const COMBAT = {
         color: 0x9a9a9a,
       },
     },
+    // Zombified piglin (N5, Nether): a Zombie variant that spawns NEUTRAL —
+    // it wanders forever and only chases once `angered` (set by taking a
+    // player hit; anger spreads to other piglins within angerRadius, so
+    // shooting one raises the patrol). Drops gold ore: the risk-farmable
+    // deep-mining prize.
+    zombifiedPiglin: {
+      health: 12,
+      chaseSpeed: 3.2, // angry piglins close faster than zombies
+      wanderSpeed: 1,
+      wanderSeconds: 3,
+      aggroRange: 14, // chase range ONCE angered — never before
+      angerRadius: 12, // hitting one angers every piglin this close to it
+      attackRange: 1.8,
+      attackDamage: 4, // 2 hearts — meaner than a zombie
+      attackCooldownSeconds: 1.2,
+      drop: 'gold_ore',
+    },
+    // Magma cube (N5, Nether): a single-box bouncer — periodically hops
+    // toward the player (the Mob.locomote hop on a timer, not hitWall),
+    // melees on contact, and is lavaProof (it lives in the seas). Drops
+    // nothing for now (the creeper precedent).
+    magmaCube: {
+      health: 8,
+      hopIntervalSeconds: 1.3, // between hops while chasing
+      idleHopIntervalSeconds: 3.5, // lazy ambient hops when nobody's close
+      hopVelocity: 7, // upward launch per hop (~0.77-block apex)
+      hopSpeed: 4.5, // horizontal drive while airborne
+      aggroRange: 12,
+      attackRange: 1.5,
+      attackDamage: 3,
+      attackCooldownSeconds: 1.0,
+      drop: null, // no magma-cream sink exists yet
+    },
   },
 }
 
@@ -905,11 +938,12 @@ export const NETHER = {
     ambientColor: 0xffd9c8, // warm — everything reads ember-lit
   },
   // Per-world hostile spawn profile (MobManager reads it off the world).
-  // Weights are EMPTY until Nether mobs ship (N5) — MobManager treats a
-  // zero-total table as "spawn nothing", so the dimension stays quiet
-  // without touching the spawner.
+  // The Nether's population (N5): zombified piglins in the majority, magma
+  // cubes for spice. The sky term is pinned to 0 (no sky), so these spawn
+  // broadly at any hour — torches, placed glowstone, and lava seas still
+  // carve safe bubbles through world.lightAt.
   spawn: {
-    weights: {},
+    weights: { zombified_piglin: 0.7, magma_cube: 0.3 },
     maxCount: 6,
     maxLight: 0.4, // sits above the visibility floor — darkness isn't the gate down here
   },

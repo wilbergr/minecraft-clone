@@ -312,9 +312,12 @@ export const BLOCKS = {
   22: {
     id: 22,
     name: 'Soul Sand',
-    // Basin-floor patches near the lava seas. The MC slowdown mechanic is
-    // deferred (N4 polish) — for now it is flavor terrain that drops itself.
+    // Basin-floor patches near the lava seas. `slow` (N4) is the generic
+    // walked-on speed factor: PlayerControls and Mob.locomote multiply their
+    // move speed by it when the block under the feet is this one — owner-side
+    // only, PhysicsBody never reads it.
     solid: true,
+    slow: 0.4,
     color: { top: 0x584434, side: 0x503d2f, bottom: 0x48372a },
     tex: { top: 'soul_sand', side: 'soul_sand', bottom: 'soul_sand' },
     drop: 'soul_sand',
@@ -381,6 +384,20 @@ export const BLOCKS = {
     solid: false,
     color: { top: 0x9a4dd8, side: 0x9a4dd8, bottom: 0x9a4dd8 },
     drop: null,
+  },
+  27: {
+    id: 27,
+    name: 'Quartz Block',
+    // The quartz gem's sink (N4): a clean decorative building block, crafted
+    // 4 quartz → 1 (see recipes.js). Purely cosmetic — the bright block in a
+    // dimension of dark red rock.
+    solid: true,
+    color: { top: 0xe8e4da, side: 0xe0dbd0, bottom: 0xd6d0c4 },
+    tex: { top: 'quartz_block', side: 'quartz_block', bottom: 'quartz_block' },
+    drop: 'quartz_block',
+    hardness: 1.5,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 1 },
   },
 }
 

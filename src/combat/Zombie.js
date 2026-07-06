@@ -23,15 +23,23 @@ const COLORS = { skin: 0x4f8a3d, shirt: 0x2e8a8a, pants: 0x35357a }
 export class Zombie extends Mob {
   #toPlayer = new THREE.Vector3()
 
-  constructor(world, x, z) {
-    super(world, COMBAT.mobs.zombie.health)
-    this.cfg = COMBAT.mobs.zombie
+  // cfg/colors are the variant seam (N5): the zombified piglin reuses this
+  // whole body and AI with its own tuning table and palette.
+  constructor(world, x, z, cfg = COMBAT.mobs.zombie, colors = COLORS) {
+    super(world, cfg.health)
+    this.cfg = cfg
     this.growls = true // Combat plays the attack growl for growling mobs
     this.wanderDir = null // unit XZ vector, or null while pausing
     this.wanderTimer = 0
     this.attackTimer = 0
-    this.makeMaterials(COLORS)
+    this.makeMaterials(colors)
     this.attachBody(this.#buildBody(), x, z, PHYSICS.mobAABB)
+  }
+
+  // Chase gate (N5 seam): the base zombie always wants the player; the
+  // zombified piglin overrides this to stay neutral until angered.
+  wantsToChase() {
+    return true
   }
 
   // Group origin sits at the feet; parts stack up from there. Arms reach
@@ -61,7 +69,7 @@ export class Zombie extends Mob {
     let moveDir = null
     let speed = 0
 
-    if (dist <= this.cfg.aggroRange) {
+    if (dist <= this.cfg.aggroRange && this.wantsToChase()) {
       // Chase: head straight for the player; stop and swing when in reach.
       this.group.rotation.y = Math.atan2(this.#toPlayer.x, this.#toPlayer.z)
       const nearPlayerY = Math.abs(pos.y - (playerPos.y - PLAYER.eyeHeight)) < 2.5

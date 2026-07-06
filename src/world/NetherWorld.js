@@ -68,8 +68,8 @@ export class NetherWorld extends World {
 
   // Hostile spawns read this live (MobManager): no sky term, a slightly
   // looser light gate (the visibility floor sits above the overworld gate),
-  // and the Nether's own weights/cap — EMPTY weights for now (no Nether
-  // mobs ship in this arc), which MobManager treats as "spawn nothing".
+  // and the Nether's own weights/cap — zombified piglins and magma cubes
+  // (N5), spawning in the dark at any hour since the sky term is zero.
   get spawnProfile() {
     return {
       weights: NETHER.spawn.weights,

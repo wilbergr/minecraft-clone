@@ -82,6 +82,8 @@ export const ITEMS = {
   soul_sand: blockItem('soul_sand', 22, 'Soul Sand'),
   glowstone: blockItem('glowstone', 23, 'Glowstone'),
   quartz: { id: 'quartz', name: 'Quartz', maxStack: INVENTORY.maxStack, glyph: '❖', tint: '#e8e4da' },
+  // The quartz sink (N4): a bright decorative block for the dark dimension.
+  quartz_block: blockItem('quartz_block', 27, 'Quartz Block'),
   // Flint & steel (N3): tool kind 'igniter' matches no block, so it can't
   // mine (the bow precedent) — its whole job is lighting portal frames
   // through interaction.useItemHook. Durability wears one per ignition.

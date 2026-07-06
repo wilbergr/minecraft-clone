@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { GRAPHICS, LAVA, PHYSICS, PLAYER, WATER } from '../config.js'
+import { BLOCKS } from '../world/blocks.js'
 import { PhysicsBody } from '../physics/PhysicsBody.js'
 import { isTouchDevice } from './TouchControls.js'
 
@@ -242,8 +243,18 @@ export class PlayerControls {
     // Liquid feel: lava is viscous (lava feature) — same swim scheme as
     // water, roughly half the speeds. One table pick covers all four reads.
     const liquid = this.body.inLava ? LAVA.physics : WATER.physics
+    // Walked-on slow factor (N4, soul sand): one blockAt at the feet cell —
+    // the block the player is standing IN the top face of. Owner-side (the
+    // Mob.locomote twin); PhysicsBody stays speed-agnostic. Airborne feet
+    // sit in an air cell, so jumps escape the slow automatically.
+    const feet = this.body.position
+    const slow =
+      BLOCKS[
+        this.world.blockAt(Math.floor(feet.x), Math.floor(feet.y - 0.05), Math.floor(feet.z))
+      ]?.slow ?? 1
     const speed =
       PLAYER.moveSpeed *
+      slow *
       (sprinting
         ? PLAYER.sprintMultiplier
         : sneaking

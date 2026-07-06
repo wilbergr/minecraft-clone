@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Headless-test screenshot artifacts (tools/test-*.mjs)
+tools/*.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

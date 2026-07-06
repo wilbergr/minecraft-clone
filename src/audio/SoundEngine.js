@@ -126,6 +126,10 @@ export class SoundEngine {
       case 'zombieAttack':
         this.#groan(130, 0.3, 0.5 * v)
         break
+      case 'piglin': // zombified piglin idle — a higher, shorter snort-groan
+        this.#groan(150, 0.28, 0.3 * v)
+        this.#burst({ type: 'bandpass', freq: 550, dur: 0.07, gain: 0.2 * v, when: 0.22 })
+        break
       case 'click': // UI buttons
         this.#tone({ type: 'square', from: 1250, to: 1100, dur: 0.035, gain: 0.15 * v })
         break
