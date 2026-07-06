@@ -432,6 +432,38 @@ export const BLOCKS = {
     material: 'stone',
     tool: { kind: 'pickaxe', minTier: 1 },
   },
+  30: {
+    id: 30,
+    name: 'End Portal Frame',
+    // The craftable gate to the End (obsidian + quartz block + diamond —
+    // see recipes.js): lay twelve as a flat 3×3-interior ring and it
+    // SELF-ACTIVATES (no eye-of-ender item exists — the flint-&-steel
+    // "no flint" divergence precedent). Detection/collapse live in
+    // src/world/EndPortal.js. Blast-resistant like obsidian; drops itself,
+    // so a mis-laid ring is recoverable.
+    solid: true,
+    blastResistant: true,
+    color: { top: 0x3a4a3e, side: 0x2e3a32, bottom: 0x27302a },
+    tex: { top: 'end_frame_top', side: 'end_frame_side', bottom: 'end_frame_side' },
+    drop: 'end_portal_frame',
+    hardness: 4,
+    material: 'stone',
+    tool: { kind: 'pickaxe', minTier: 3 },
+  },
+  31: {
+    id: 31,
+    name: 'End Portal',
+    // The End portal field: the block-26 archetype verbatim — non-solid,
+    // non-targetable, walked through, never mined (break the frame instead),
+    // and NEVER MESHED (the chunk mesher skips it; no tex). Rendered as
+    // horizontal translucent panels driven by the world.endPortals registry
+    // (src/fx/EndPortalPanels.js), which setBlock keeps in lockstep with the
+    // edit overlay exactly like nether-portal cells. No item — created by
+    // ring completion only.
+    solid: false,
+    color: { top: 0x140a24, side: 0x140a24, bottom: 0x140a24 },
+    drop: null,
+  },
 }
 
 export const BLOCK_WATER = 9
@@ -450,6 +482,8 @@ export const BLOCK_BEDROCK = 25
 export const BLOCK_PORTAL = 26
 export const BLOCK_GRAVEL = 28
 export const BLOCK_END_STONE = 29
+export const BLOCK_END_FRAME = 30
+export const BLOCK_END_PORTAL = 31
 
 export function isSolid(id) {
   const block = BLOCKS[id]

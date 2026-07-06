@@ -1114,6 +1114,20 @@ export const END = {
   // (surface y 62, clear of pillars); a 5×5 obsidian platform is stamped
   // there as edits on first arrival.
   arrival: { x: 0, z: 36 },
+  // The End portal (src/world/EndPortal.js): a flat 3×3-interior ring of 12
+  // craftable frame blocks (corners empty — MC's silhouette) that
+  // SELF-ACTIVATES on completion; standing on the field charges the timer.
+  // One-way: travel home only via death (keep-inventory, the free-retry
+  // economics) or the exit portal the dragon's death opens.
+  portal: {
+    frameBlockId: 30, // end portal frame
+    blockId: 31, // the field block (never meshed — registry-rendered)
+    interior: 3, // 3×3 interior inside the 12-frame ring
+    chargeSeconds: 3, // stand on the field this long (leaving decays it)
+    platformSize: 5, // obsidian arrival platform stamped on first arrival
+    panel: { color: 0x140a24, opacity: 0.85, drop: 0.2 }, // the horizontal field planes sit this far up the cell
+    shimmer: { intervalSeconds: 0.7, color: 0x9a6ae8, count: 2, radius: 24 },
+  },
   // Ambience: a sparse hollow-wind swell while the End is current (the
   // Nether-ambience timer pattern in main.js).
   ambience: { minSeconds: 18, maxSeconds: 30 },

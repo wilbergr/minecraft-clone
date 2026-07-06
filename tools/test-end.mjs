@@ -190,6 +190,139 @@ try {
     await page.evaluate(() => __mc.player.lock())
   }
 
+  console.log('E2: the End portal')
+  {
+    // Craft one frame through the real recipe row; the other 11 are given
+    // directly (the recipe math is the thing under test, not clicking 12x).
+    const crafted = await page.evaluate(() => {
+      __mc.inventory.add('obsidian', 2)
+      __mc.inventory.add('quartz_block', 2)
+      __mc.inventory.add('diamond', 1)
+      const row = __mc.screen.recipeEls.find((e) => e.recipe.id === 'end_portal_frame')
+      row.button.click()
+      return {
+        frames: __mc.inventory.countOf('end_portal_frame'),
+        leftovers:
+          __mc.inventory.countOf('obsidian') +
+          __mc.inventory.countOf('quartz_block') +
+          __mc.inventory.countOf('diamond'),
+      }
+    })
+    assert(crafted.frames === 1, 'frame crafts from 2 obsidian + 2 quartz block + 1 diamond')
+    assert(crafted.leftovers === 0, 'crafting consumed the exact inputs')
+
+    // Lay the ring floating at y 80 (guaranteed air): a 3×3 obsidian slab
+    // under the interior for footing, 11 frames via setBlock, and the 12th
+    // through the real placement path — the moment it lands, the ring must
+    // self-activate.
+    const ring = await page.evaluate(() => {
+      const w = __mc.world // the overworld
+      const p = __mc.player.body.position
+      const ax = Math.floor(p.x) + 6
+      const az = Math.floor(p.z) + 6
+      const y = 80
+      window.__ring = { ax, az, y }
+      for (let u = 0; u < 3; u++) {
+        for (let v = 0; v < 3; v++) w.setBlock(ax + u, y - 1, az + v, 20) // footing slab
+      }
+      const cells = []
+      for (let i = 0; i < 3; i++) {
+        cells.push([ax + i, az - 1], [ax + i, az + 3], [ax - 1, az + i], [ax + 3, az + i])
+      }
+      const last = cells.pop()
+      for (const [x, z] of cells) w.setBlock(x, y, z, 30)
+      const before = w.endPortals.size // must still be 0 — ring incomplete
+      // Support under the final frame, then place it for real.
+      w.setBlock(last[0], y - 1, last[1], 20)
+      const slot = __mc.inventory.slots.findIndex((s) => s?.id === 'end_portal_frame')
+      __mc.inventory.select(slot)
+      __mc.interaction.target = { x: last[0], y: y - 1, z: last[1], normal: [0, 1, 0] }
+      const placed = __mc.interaction.placeAtTargeted()
+      return { before, placed, fields: w.endPortals.size }
+    })
+    assert(ring.before === 0, 'incomplete ring stays inert')
+    assert(ring.placed, 'the 12th frame places through the normal path')
+    assert(ring.fields === 9, 'completed ring self-activates (9 field cells)')
+    const openSound = await page.evaluate(() => __mc.sounds.stats.byName.endPortalOpen ?? 0)
+    assert(openSound >= 1, 'endPortalOpen voice fired')
+    await page.waitForFunction(() => __mc.endPortalPanels.count === 9)
+    assert(true, '9 horizontal field panels render')
+
+    // Registry rebuild (load path): a serialize->deserialize round trip of
+    // the edit overlay recovers the field cells with no save key.
+    const rebuilt = await page.evaluate(() => {
+      const w = __mc.world
+      w.deserializeEdits(JSON.parse(JSON.stringify(w.serializeEdits())))
+      return w.endPortals.size
+    })
+    assert(rebuilt === 9, 'field registry rebuilds from the edit overlay')
+
+    // Stand on the field: the feet-cell charge loop travels to the End.
+    await page.evaluate(() => {
+      __mc.config.END.portal.chargeSeconds = 0.4
+      const { ax, az, y } = window.__ring
+      __mc.player.teleport(ax + 1.5, y, az + 1.5)
+    })
+    await page.waitForFunction(() => __mc.dims.name === 'end', { timeout: 60_000 })
+    assert(true, 'standing on the field travels to the End')
+    await page.waitForFunction(() => __mc.world.chunkReadyAt(0, 36))
+    const arrival = await page.evaluate(() => {
+      const a = __mc.config.END.arrival
+      const end = __mc.dims.end
+      const feet = __mc.player.body.position
+      return {
+        platform: end.blockAt(a.x, 61, a.z) === 20 && end.blockAt(a.x - 2, 61, a.z + 2) === 20,
+        nearArrival: Math.hypot(feet.x - (a.x + 0.5), feet.z - (a.z + 0.5)) < 2,
+        noReturnField: end.endPortals.size === 0,
+        charges: __mc.endPortal.travelCount,
+      }
+    })
+    assert(arrival.platform, '5×5 obsidian arrival platform stamped')
+    assert(arrival.nearArrival, 'feet land on the arrival platform')
+    assert(arrival.noReturnField, 'no End-side return field — one-way until victory')
+
+    // Direction keying: an End-side ring (standing in for E4's exit portal)
+    // routes HOME. Built via setBlock — the detector watches both worlds.
+    await page.evaluate(() => {
+      const end = __mc.dims.end
+      const ax = 8
+      const az = 30
+      const y = 70
+      for (let u = 0; u < 3; u++) {
+        for (let v = 0; v < 3; v++) end.setBlock(ax + u, y - 1, az + v, 20)
+      }
+      for (let i = 0; i < 3; i++) {
+        for (const [x, z] of [[ax + i, az - 1], [ax + i, az + 3], [ax - 1, az + i], [ax + 3, az + i]]) {
+          end.setBlock(x, y, z, 30)
+        }
+      }
+      window.__endRing = { ax, az, y }
+    })
+    const endField = await page.evaluate(() => __mc.dims.end.endPortals.size)
+    assert(endField === 9, 'End-side ring activates too (the exit-portal path)')
+    await page.evaluate(() => {
+      const { ax, az, y } = window.__endRing
+      __mc.player.teleport(ax + 1.5, y, az + 1.5)
+    })
+    await page.waitForFunction(() => __mc.dims.name === 'overworld', { timeout: 60_000 })
+    const home = await page.evaluate(() => {
+      const feet = __mc.player.body.position
+      const { x, z } = __mc.config.PLAYER.spawnPoint
+      return Math.hypot(feet.x - x, feet.z - z) < 2
+    })
+    assert(home, 'End-side field routes home to the world spawn')
+
+    // Frame-break collapse: breaking one ring frame drops the whole field.
+    const collapsed = await page.evaluate(() => {
+      const w = __mc.world
+      const { ax, az, y } = window.__ring
+      w.setBlock(ax, y, az - 1, 0) // a non-corner ring frame
+      return w.endPortals.size
+    })
+    assert(collapsed === 0, 'breaking a frame collapses the field')
+    await page.evaluate(() => __mc.player.lock())
+  }
+
   console.log(consoleErrors.length ? `console errors:\n${consoleErrors.join('\n')}` : 'no console errors')
   assert(consoleErrors.length === 0, 'zero console errors')
 } finally {

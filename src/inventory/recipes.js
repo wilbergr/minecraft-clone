@@ -43,6 +43,12 @@ export const RECIPES = [
   // Quartz block (N4): the mined gem's decorative sink — 4 gems compress
   // into one clean white building block.
   { id: 'quartz_block', input: [['quartz', 4]], output: ['quartz_block', 1] },
+  // End portal frame (the End): a deliberately steep post-Nether material
+  // gate — twelve frames cost 24 obsidian + 24 quartz blocks (96 quartz, the
+  // Nether mining arc) + 12 diamonds. The recipe IS the gate: a completed
+  // 3×3-interior ring self-activates, no activation item (no endermen ⇒ no
+  // pearls — the "no flint" divergence precedent).
+  { id: 'end_portal_frame', input: [['obsidian', 2], ['quartz_block', 2], ['diamond', 1]], output: ['end_portal_frame', 1] },
   // Armor (Phase 13): leather from cows, iron from smelted ingots. Right
   // click a piece to wear it.
   { id: 'leather_helmet', input: [['leather', 5]], output: ['leather_helmet', 1] },

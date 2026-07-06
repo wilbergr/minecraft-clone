@@ -226,6 +226,11 @@ export class SoundEngine {
         this.#tone({ type: 'sine', from: 55, to: 38, dur: 3.0, gain: 0.16 * v })
         this.#tone({ type: 'triangle', from: 82, to: 66, dur: 2.4, gain: 0.08 * v, when: 0.6 })
         break
+      case 'endPortalOpen': // the ring catches — a deep bloom under a rising chime
+        this.#burst({ type: 'lowpass', freq: 340, dur: 1.4, gain: 0.55 * v })
+        this.#tone({ type: 'sine', from: 90, to: 45, dur: 1.2, gain: 0.4 * v })
+        this.#tone({ type: 'sine', from: 660, to: 1320, dur: 0.9, gain: 0.14 * v, when: 0.2 })
+        break
       case 'endAmbience': // hollow wind over the void — airier and colder than the Nether's
         this.#burst({ type: 'bandpass', freq: 480, dur: 3.6, gain: 0.14 * v })
         this.#tone({ type: 'sine', from: 130, to: 96, dur: 3.2, gain: 0.08 * v })

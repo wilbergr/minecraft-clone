@@ -6,7 +6,9 @@ import { NetherWorld } from './world/NetherWorld.js'
 import { EndWorld } from './world/EndWorld.js'
 import { Dimensions } from './world/Dimensions.js'
 import { Portals } from './world/Portals.js'
+import { EndPortal } from './world/EndPortal.js'
 import { PortalPanels } from './fx/PortalPanels.js'
+import { EndPortalPanels } from './fx/EndPortalPanels.js'
 import { PlayerControls } from './player/PlayerControls.js'
 import { BlockInteraction } from './player/BlockInteraction.js'
 import { TouchControls } from './player/TouchControls.js'
@@ -329,6 +331,22 @@ portals.onIgnite = (ok, x, y, z) => {
     // The strike fizzles — a few sparks, no sound of catching.
     particles.burst(x + 0.5, y + 0.5, z + 0.5, 0xffc86e, 6)
   }
+}
+// The End portal (the End): a flat craftable frame ring that self-activates,
+// standing on the field charges, travel is keyed on the dimension you stand
+// in (overworld → the End; the End's exit portal → home). Reuses the nether
+// portal's vignette layer and charge/travel sounds; ring completion gets its
+// own bloom.
+const endPortal = new EndPortal(dims, player, camera)
+const endPortalPanels = new EndPortalPanels(scene, dims, particles)
+endPortal.onChargeStart = () => sounds.play('portalCharge')
+endPortal.onCharge = (fraction) => {
+  portalTint.style.opacity = fraction
+}
+endPortal.onTravel = () => sounds.play('portalTravel')
+endPortal.onOpen = (x, y, z) => {
+  sounds.play('endPortalOpen')
+  particles.burst(x + 0.5, y + 0.8, z + 0.5, config.END.portal.shimmer.color, 60)
 }
 // Load guard (lava feature): a save written before lava existed can restore
 // the player inside a newly-flooded cave bottom — burning from frame one is
@@ -764,6 +782,8 @@ renderer.setAnimationLoop(() => {
   lavaLights.update(camera.position)
   portals.update(delta)
   portalPanels.update(delta, camera.position)
+  endPortal.update(delta)
+  endPortalPanels.update(delta, camera.position)
   updateUnderwater()
   updateWaterShimmer(delta)
   updateWaterBubbles(delta)
@@ -789,6 +809,8 @@ window.__mc = {
   dims,
   portals,
   portalPanels,
+  endPortal,
+  endPortalPanels,
   interaction,
   renderer,
   inventory,
