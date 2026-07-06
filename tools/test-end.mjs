@@ -626,6 +626,74 @@ try {
     assert(landed.alive, 'the flare landing is survivable')
   }
 
+  console.log('save compatibility: pre-End v4 save + reload-into-End')
+  {
+    // Plant a minimal pre-End v4 save (no endEdits / end / End dimension —
+    // what a save from the Nether-era build looks like) and reload.
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'minecraft-clone-save',
+        JSON.stringify({
+          schemaVersion: 4,
+          seed: 1337,
+          player: { position: [0.5, 65, 8.5], pitch: 0, yaw: 0 },
+          health: 17,
+          inventory: { slots: [{ id: 'stone', count: 7 }], selectedSlot: 0 },
+          edits: {},
+          treasure: { found: [false, false, false], celebrated: false },
+        }),
+      )
+    })
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' })
+    await page.waitForFunction(() => window.__mc?.world?.chunkReadyAt(0, 0))
+    await page.evaluate(() => {
+      __mc.save.enabled = false
+      __mc.save.save = () => {}
+    })
+    const legacy = await page.evaluate(() => ({
+      dimension: __mc.dims.name,
+      health: __mc.health.value,
+      stone: __mc.inventory.countOf('stone'),
+      defeated: __mc.endProgress.dragonDefeated,
+      endEdits: __mc.dims.end.editCount(),
+    }))
+    assert(legacy.dimension === 'overworld', 'pre-End save loads into the overworld')
+    assert(legacy.health === 17 && legacy.stone === 7, 'pre-End save state restored intact')
+    assert(!legacy.defeated && legacy.endEdits === 0, 'End state starts fresh')
+
+    // And the other direction: a save written standing in the End restores
+    // onto the island.
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'minecraft-clone-save',
+        JSON.stringify({
+          schemaVersion: 4,
+          seed: 1337,
+          player: { position: [0.5, 63.7 + 1.7, 36.5], pitch: 0, yaw: 0 },
+          health: 20,
+          inventory: { slots: [], selectedSlot: 0 },
+          edits: {},
+          treasure: { found: [false, false, false], celebrated: false },
+          dimension: 'end',
+          end: { dragonDefeated: true, celebrated: true },
+        }),
+      )
+    })
+    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' })
+    await page.waitForFunction(() => window.__mc?.dims && window.__mc.world.chunkReadyAt(0, 36))
+    await page.evaluate(() => {
+      __mc.save.enabled = false
+      __mc.save.save = () => {}
+    })
+    const endSave = await page.evaluate(() => ({
+      dimension: __mc.dims.name,
+      defeated: __mc.endProgress.dragonDefeated,
+      revealClosed: !__mc.endReveal.isOpen, // celebrated — no replay
+    }))
+    assert(endSave.dimension === 'end', "dimension: 'end' restores onto the island")
+    assert(endSave.defeated && endSave.revealClosed, 'latched dragon progress honored, reveal not replayed')
+  }
+
   console.log(consoleErrors.length ? `console errors:\n${consoleErrors.join('\n')}` : 'no console errors')
   assert(consoleErrors.length === 0, 'zero console errors')
 } finally {
