@@ -22,7 +22,7 @@ export class Drowned extends Zombie {
   #toPlayer3D = new THREE.Vector3()
 
   constructor(world, x, z) {
-    super(world, x, z, COMBAT.mobs.drowned, COLORS)
+    super(world, x, z, COMBAT.mobs.drowned, COLORS, 'drowned')
   }
 
   update(delta, playerPos, damagePlayer) {

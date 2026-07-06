@@ -23,16 +23,17 @@ const COLORS = { skin: 0x4f8a3d, shirt: 0x2e8a8a, pants: 0x35357a }
 export class Zombie extends Mob {
   #toPlayer = new THREE.Vector3()
 
-  // cfg/colors are the variant seam (N5): the zombified piglin reuses this
-  // whole body and AI with its own tuning table and palette.
-  constructor(world, x, z, cfg = COMBAT.mobs.zombie, colors = COLORS) {
+  // cfg/colors/skinType are the variant seam (N5, textured in the mob-skins
+  // PR): the zombified piglin and the drowned reuse this whole body and AI
+  // with their own tuning table, fallback palette, and skin sheet.
+  constructor(world, x, z, cfg = COMBAT.mobs.zombie, colors = COLORS, skinType = 'zombie') {
     super(world, cfg.health)
     this.cfg = cfg
     this.growls = true // Combat plays the attack growl for growling mobs
     this.wanderDir = null // unit XZ vector, or null while pausing
     this.wanderTimer = 0
     this.attackTimer = 0
-    this.makeMaterials(colors)
+    this.makeSkin(skinType, colors)
     this.attachBody(this.#buildBody(), x, z, PHYSICS.mobAABB)
   }
 
@@ -45,8 +46,21 @@ export class Zombie extends Mob {
   // Group origin sits at the feet; parts stack up from there. Arms reach
   // forward (+z, the facing direction) in the classic zombie pose.
   #buildBody() {
-    const m = this.materials
     const group = new THREE.Group()
+    if (this.skinDef) {
+      // Textured path: shared per-type material, UV-mapped part geometries
+      // (same dims as GEOM — cosmetics only).
+      group.add(
+        this.skinnedPart('head', 0, 1.75, 0),
+        this.skinnedPart('body', 0, 1.125, 0),
+        this.skinnedPart('limb', -0.14, 0.375, 0),
+        this.skinnedPart('limb', 0.14, 0.375, 0),
+        this.skinnedPart('arm', -0.34, 1.38, 0.3),
+        this.skinnedPart('arm', 0.34, 1.38, 0.3),
+      )
+      return group
+    }
+    const m = this.materials
     group.add(
       this.part(GEOM.head, m.skin, 0, 1.75, 0),
       this.part(GEOM.body, m.shirt, 0, 1.125, 0),

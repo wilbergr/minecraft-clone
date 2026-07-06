@@ -30,7 +30,7 @@ export class PassiveMob extends Mob {
     this.wanderTimer = 0
     this.panicTimer = 0
     this.panicDir = new THREE.Vector3()
-    this.makeMaterials(this.cfg.colors)
+    this.makeSkin(kind, this.cfg.colors) // pig/cow/sheep each have a sheet
     const { width, height } = PASSIVE_MOBS.aabb
     this.attachBody(this.#buildBody(this.cfg.scale), x, z, {
       width: width * this.cfg.scale,
@@ -40,8 +40,20 @@ export class PassiveMob extends Mob {
 
   // Group origin at the feet, like the hostiles; head faces +z.
   #buildBody(scale) {
-    const m = this.materials
     const group = new THREE.Group()
+    if (this.skinDef) {
+      group.add(
+        this.skinnedPart('body', 0, 0.7, 0),
+        this.skinnedPart('head', 0, 0.85, 0.58),
+        this.skinnedPart('leg', -0.2, 0.225, 0.32),
+        this.skinnedPart('leg', 0.2, 0.225, 0.32),
+        this.skinnedPart('leg', -0.2, 0.225, -0.32),
+        this.skinnedPart('leg', 0.2, 0.225, -0.32),
+      )
+      group.scale.setScalar(scale)
+      return group
+    }
+    const m = this.materials
     group.add(
       this.part(GEOM.body, m.body, 0, 0.7, 0),
       this.part(GEOM.head, m.head, 0, 0.85, 0.58),

@@ -30,14 +30,20 @@ export class MagmaCube extends Mob {
     this.hopDir = null // unit XZ launch direction, held through the airtime
     this.hopTimer = this.cfg.idleHopIntervalSeconds * Math.random()
     this.attackTimer = 0
-    this.makeMaterials(COLORS)
+    this.makeSkin('magma_cube', COLORS)
     this.attachBody(this.#buildBody(), x, z, AABB)
   }
 
-  // One lava-rock cube with two ember eyes so the facing reads.
+  // One lava-rock cube with two ember eyes so the facing reads. The textured
+  // skin bakes the eyes into the front tile — one mesh, one draw call; the
+  // flat-color fallback keeps the two eye meshes.
   #buildBody() {
-    const m = this.materials
     const group = new THREE.Group()
+    if (this.skinDef) {
+      group.add(this.skinnedPart('body', 0, 0.375, 0))
+      return group
+    }
+    const m = this.materials
     group.add(
       this.part(GEOM.body, m.rock, 0, 0.375, 0),
       this.part(GEOM.eye, m.glow, -0.2, 0.5, 0.46),
