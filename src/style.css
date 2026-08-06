@@ -1400,6 +1400,17 @@ body.touch-mode .help-touch {
   line-height: 1.5;
 }
 
+#challenge-reveal-riddle {
+  margin: 1rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 176, 102, 0.35);
+  font-size: 1rem;
+  line-height: 1.6;
+  font-style: italic;
+  color: #ffe9c2;
+  white-space: pre-line;
+}
+
 #challenge-continue-btn {
   font: inherit;
   font-size: 1rem;

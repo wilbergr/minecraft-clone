@@ -17,6 +17,24 @@ export const CHALLENGE_MESSAGE =
   'The Hollow King has fallen. The realm is yours, champion!'
 
 // ---------------------------------------------------------------------------
+// CHALLENGE_RIDDLE — a parting riddle shown beneath CHALLENGE_MESSAGE on the
+// Trial-completion reveal (src/ui/challengeReveal.js). Its answer is an
+// unambiguous four-digit number (1337). Each line fixes exactly one digit:
+//   "one true king"           → 1  (thousands)
+//   "twin towers ... trinity" → 3, 3 (hundreds, tens)
+//   "days a week can hold"    → 7  (units)
+// The answer is deliberately NOT displayed — it is the player's to solve
+// (this game has no reveal-answer convention). Captain: keep any rewrite
+// resolving to a single four-digit value if the vault code depends on it.
+// ---------------------------------------------------------------------------
+export const CHALLENGE_RIDDLE =
+  'A final riddle guards the crown-vault. Name the four figures in order:\n' +
+  'A lone throne seats but one true king.\n' +
+  'Two twin towers rise beside it, each raised from a trinity.\n' +
+  'The last is the days a single week can hold.\n' +
+  'String them together — what four-digit number opens the vault?'
+
+// ---------------------------------------------------------------------------
 // END_MESSAGE — the payoff revealed when the Ender Dragon falls (the End).
 // Captain: personalize this text before release. Plain string; the End
 // reveal modal (src/ui/endReveal.js) renders it verbatim.
