@@ -1,4 +1,4 @@
-import { CHALLENGE_MESSAGE } from '../config.js'
+import { CHALLENGE_MESSAGE, CHALLENGE_RIDDLE } from '../config.js'
 
 // The Trial's completion reveal — bindTreasureReveal's sibling, rendering
 // CHALLENGE_MESSAGE (the captain-editable constant at the top of config.js)
@@ -15,9 +15,11 @@ export function bindChallengeReveal(challenge, player) {
       <div id="challenge-crown" aria-hidden="true">♛</div>
       <h1>The Trial is complete!</h1>
       <p id="challenge-reveal-message"></p>
+      <p id="challenge-reveal-riddle"></p>
       <button id="challenge-continue-btn">Claim your realm</button>
     </div>`
   root.querySelector('#challenge-reveal-message').textContent = CHALLENGE_MESSAGE
+  root.querySelector('#challenge-reveal-riddle').textContent = CHALLENGE_RIDDLE
 
   const api = { isOpen: false, onToggle: null, show: null }
 
