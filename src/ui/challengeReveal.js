@@ -16,6 +16,10 @@ export function bindChallengeReveal(challenge, player) {
       <h1>The Trial is complete!</h1>
       <p id="challenge-reveal-message"></p>
       <p id="challenge-reveal-riddle"></p>
+      <p id="challenge-padlock-hint">
+        <span id="challenge-padlock" aria-hidden="true">🔒&#xFE0E;</span>
+        <span id="challenge-padlock-label">Purple padlock</span>
+      </p>
       <button id="challenge-continue-btn">Claim your realm</button>
     </div>`
   root.querySelector('#challenge-reveal-message').textContent = CHALLENGE_MESSAGE

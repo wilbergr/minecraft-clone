@@ -1411,6 +1411,22 @@ body.touch-mode .help-touch {
   white-space: pre-line;
 }
 
+#challenge-padlock-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  color: #c99bff;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+}
+
+#challenge-padlock {
+  color: #b06cf0;
+  font-size: 1.2rem;
+}
+
 #challenge-continue-btn {
   font: inherit;
   font-size: 1rem;
